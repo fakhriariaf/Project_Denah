@@ -1,0 +1,1102 @@
+"use client";
+
+import React, { useState, useEffect } from "react";
+import { 
+  Briefcase, 
+  Home, 
+  Clock, 
+  AlertTriangle, 
+  FileText, 
+  Plus, 
+  Upload, 
+  Loader2, 
+  CheckCircle,
+  FileCheck,
+  AlertCircle,
+  MapPin,
+  Calendar,
+  Layers,
+  ChevronRight
+} from "lucide-react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogDescription, 
+  DialogFooter, 
+  DialogHeader, 
+  DialogTitle 
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { 
+  inputProgress, 
+  uploadProgressPhotoAttachment, 
+  uploadBastAttachment, 
+  createVendorComplaint,
+  getSpkDetails 
+} from "@/server/actions/production";
+import { useRouter } from "next/navigation";
+
+interface VendorDashboardShellProps {
+  data: {
+    vendorProfile: any;
+    metrics: {
+      activeSpks: number;
+      unitsBuilding: number;
+      needUpdate: number;
+      overdueSpks: number;
+      readyBast: number;
+    };
+    spks: Array<{
+      id: string;
+      spkNumber: string;
+      title: string;
+      projectName: string;
+      unitId: string;
+      unitCode: string;
+      currentCustomerId: string | null;
+      progressPct: number;
+      startDate: Date;
+      targetEndDate: Date;
+      status: string;
+    }>;
+    recentLogs: Array<{
+      id: string;
+      spkNumber: string;
+      workItemName: string;
+      percentageAdded: number;
+      currentTotalPct: number;
+      progressDate: Date;
+      notes: string | null;
+      creatorName: string;
+    }>;
+    complaints: Array<{
+      id: string;
+      complaintNumber: string;
+      customerName: string;
+      unitCode: string;
+      projectName: string;
+      category: string;
+      description: string;
+      status: string;
+      createdAt: Date;
+    }>;
+    basts: Array<{
+      spkId: string;
+      spkNumber: string;
+      unitCode: string;
+      projectName: string;
+      statusText: string;
+      statusCode: string;
+      attachmentUrl: string | null;
+      attachmentName: string | null;
+      uploadedAt: Date | null;
+    }>;
+  };
+  userName: string;
+}
+
+export function VendorDashboardShell({ data, userName }: VendorDashboardShellProps) {
+  const router = useRouter();
+  const { metrics, spks, recentLogs, complaints, basts, vendorProfile } = data;
+
+  const complaintsByProject = React.useMemo(() => {
+    const groups: Record<string, typeof complaints> = {};
+    for (const c of complaints) {
+      const projName = c.projectName || "Lain-Lain";
+      if (!groups[projName]) {
+        groups[projName] = [];
+      }
+      groups[projName].push(c);
+    }
+    return groups;
+  }, [complaints]);
+
+  // Active Dialog States
+  const [activeDialog, setActiveDialog] = useState<"progress" | "complaint" | "bast" | null>(null);
+  
+  // Loading states
+  const [submitting, setSubmitting] = useState(false);
+  const [loadingSpkDetails, setLoadingSpkDetails] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  // Form States - Progress
+  const [progSpkId, setProgSpkId] = useState("");
+  const [progWorkItems, setProgWorkItems] = useState<any[]>([]);
+  const [progWorkItemId, setProgWorkItemId] = useState("");
+  const [progPctAdded, setProgPctAdded] = useState(5);
+  const [progDate, setProgDate] = useState(new Date().toISOString().split("T")[0]);
+  const [progNotes, setProgNotes] = useState("");
+  const [progFile, setProgFile] = useState<File | null>(null);
+  const [uploadingProgressPhoto, setUploadingProgressPhoto] = useState(false);
+
+  // Form States - Complaint
+  const [compSpkIndex, setCompSpkIndex] = useState("");
+  const [compTitle, setCompTitle] = useState("");
+  const [compCategory, setCompCategory] = useState("material");
+  const [compDescription, setCompDescription] = useState("");
+
+  // Form States - BAST
+  const [bastSpkId, setBastSpkId] = useState("");
+  const [bastFile, setBastFile] = useState<File | null>(null);
+  const [uploadingBastPdf, setUploadingBastPdf] = useState(false);
+
+  // Fetch SPK details when SPK selection changes in Progress form
+  useEffect(() => {
+    if (!progSpkId) {
+      setProgWorkItems([]);
+      return;
+    }
+
+    async function fetchWorkItems() {
+      setLoadingSpkDetails(true);
+      setErrorMsg(null);
+      try {
+        const details = await getSpkDetails(progSpkId);
+        if (details && details.weights) {
+          // weights structure is { weight: spkWorkItemWeights, workItem: workItems }
+          setProgWorkItems(details.weights.map((w: any) => ({
+            id: w.workItem.id,
+            name: w.workItem.name,
+            code: w.workItem.code,
+            weight: w.weight.weightPct
+          })));
+        }
+      } catch (err: any) {
+        setErrorMsg("Gagal memuat item pekerjaan untuk SPK ini.");
+      } finally {
+        setLoadingSpkDetails(false);
+      }
+    }
+
+    fetchWorkItems();
+  }, [progSpkId]);
+
+  if (!vendorProfile || !vendorProfile.vendorId) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 text-center px-4 bg-[#F7F8F3] rounded-2xl border border-[#DDE8D8] m-4">
+        <div className="h-16 w-16 rounded-full bg-amber-50 text-amber-500 flex items-center justify-center border border-amber-200">
+          <AlertTriangle className="h-8 w-8" />
+        </div>
+        <div className="space-y-1">
+          <h2 className="text-lg font-black text-[#243028]">Akun Belum Terhubung</h2>
+          <p className="text-sm text-[#66736A] mt-2 max-w-sm leading-relaxed">
+            Akun Anda belum terhubung dengan data vendor. Silakan hubungi Admin Kantor
+            untuk menghubungkan akun Anda dengan master data vendor.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Handle progress file upload
+  const handleProgressSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    setErrorMsg(null);
+    setSuccessMsg(null);
+
+    try {
+      let photoAttachmentId: string | null = null;
+      if (progFile) {
+        setUploadingProgressPhoto(true);
+        const formData = new FormData();
+        formData.append("file", progFile);
+        
+        const uploadRes = await fetch("/api/upload", {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!uploadRes.ok) throw new Error("Gagal mengunggah foto progress.");
+        const uploadData = await uploadRes.json();
+        
+        // Save attachment
+        const attRes = await uploadProgressPhotoAttachment(progSpkId, {
+          fileName: progFile.name,
+          fileUrl: uploadData.url,
+          mimeType: progFile.type,
+          fileSize: progFile.size
+        });
+        photoAttachmentId = attRes.attachmentId;
+        setUploadingProgressPhoto(false);
+      }
+
+      await inputProgress({
+        spkId: progSpkId,
+        workItemId: progWorkItemId,
+        percentageAdded: progPctAdded,
+        progressDate: new Date(progDate),
+        photoAttachmentId,
+        notes: progNotes || null
+      });
+
+      setSuccessMsg("Progress pekerjaan berhasil diperbarui!");
+      // Reset form
+      setProgSpkId("");
+      setProgWorkItemId("");
+      setProgPctAdded(5);
+      setProgNotes("");
+      setProgFile(null);
+      
+      setTimeout(() => {
+        setActiveDialog(null);
+        setSuccessMsg(null);
+        router.refresh();
+      }, 1500);
+
+    } catch (err: any) {
+      setErrorMsg(err.message || "Gagal menyimpan progress pekerjaan.");
+      setUploadingProgressPhoto(false);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Handle complaint submit
+  const handleComplaintSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    setErrorMsg(null);
+    setSuccessMsg(null);
+
+    if (!compTitle.trim()) {
+      setErrorMsg("Judul kendala wajib diisi.");
+      setSubmitting(false);
+      return;
+    }
+
+    try {
+      const selectedSpk = spks[parseInt(compSpkIndex)];
+      if (!selectedSpk) throw new Error("SPK tidak valid");
+
+      await createVendorComplaint({
+        spkId: selectedSpk.id,
+        title: compTitle,
+        category: compCategory as any,
+        description: compDescription
+      });
+
+      setSuccessMsg("Kendala pekerjaan berhasil dilaporkan!");
+      setCompSpkIndex("");
+      setCompTitle("");
+      setCompDescription("");
+      
+      setTimeout(() => {
+        setActiveDialog(null);
+        setSuccessMsg(null);
+        router.refresh();
+      }, 1500);
+
+    } catch (err: any) {
+      setErrorMsg(err.message || "Gagal melaporkan kendala pekerjaan.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Handle BAST PDF upload
+  const handleBastSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!bastFile) {
+      setErrorMsg("Berkas PDF BAST wajib diunggah.");
+      return;
+    }
+    setSubmitting(true);
+    setErrorMsg(null);
+    setSuccessMsg(null);
+
+    try {
+      setUploadingBastPdf(true);
+      const formData = new FormData();
+      formData.append("file", bastFile);
+      
+      const uploadRes = await fetch("/api/upload-attachment", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!uploadRes.ok) throw new Error("Gagal mengunggah berkas PDF BAST.");
+      const uploadData = await uploadRes.json();
+      
+      // Save BAST attachment
+      await uploadBastAttachment(bastSpkId, {
+        fileName: bastFile.name,
+        fileUrl: uploadData.url,
+        mimeType: bastFile.type,
+        fileSize: bastFile.size
+      });
+
+      setUploadingBastPdf(false);
+      setSuccessMsg("BAST Vendor berhasil diajukan!");
+      setBastSpkId("");
+      setBastFile(null);
+      
+      setTimeout(() => {
+        setActiveDialog(null);
+        setSuccessMsg(null);
+        router.refresh();
+      }, 1500);
+
+    } catch (err: any) {
+      setErrorMsg(err.message || "Gagal mengajukan BAST.");
+      setUploadingBastPdf(false);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case "active":
+        return <Badge className="bg-[#8FAF9A] text-white">Aktif</Badge>;
+      case "overdue":
+        return <Badge className="bg-[#C87A7A] text-white">Terlambat</Badge>;
+      case "completed":
+        return <Badge className="bg-[#4F6F52] text-white">Selesai</Badge>;
+      case "cancelled":
+        return <Badge variant="outline" className="text-gray-500 border-gray-300">Batal</Badge>;
+      default:
+        return <Badge variant="outline">{status}</Badge>;
+    }
+  };
+
+  const activeSpksList = spks.filter(s => s.status === "active" || s.status === "overdue");
+  const overdueSpksList = spks.filter(s => s.status === "overdue" || (s.status === "active" && new Date(s.targetEndDate) < new Date()));
+  
+  // Need progress update list (no update in last 7 days)
+  const spkIdsWithRecentLogs = new Set(recentLogs.map(l => l.spkNumber));
+  const needUpdateList = activeSpksList.filter(s => s.progressPct < 100 && !spkIdsWithRecentLogs.has(s.spkNumber));
+
+  return (
+    <div className="space-y-6 bg-[#F7F8F3] min-h-screen p-1 md:p-4">
+      {/* 1. Header Banner */}
+      <div className="rounded-2xl bg-white/70 backdrop-blur-md border border-[#DDE8D8] p-6 flex flex-col md:flex-row items-center justify-between gap-4 shadow-sm">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-bold text-[#2C3E2D]">Portal Vendor & Kontraktor</h1>
+          <p className="text-sm text-[#5C6E5D]">
+            Selamat datang, <span className="font-semibold text-[#4F6F52]">{userName}</span> (Perusahaan: {vendorProfile?.companyName || "Vendor Kontraktor"})
+          </p>
+        </div>
+        
+        {/* Quick Action Buttons */}
+        <div className="flex flex-wrap gap-2">
+          <Button 
+            onClick={() => { setErrorMsg(null); setActiveDialog("progress"); }}
+            className="bg-[#8FAF9A] hover:bg-[#7da089] text-white text-xs h-9 px-4 rounded-xl flex items-center gap-1.5 transition-all shadow-sm"
+          >
+            <Plus className="w-4 h-4" /> Update Progress
+          </Button>
+          <Button 
+            onClick={() => { setErrorMsg(null); setActiveDialog("complaint"); }}
+            className="bg-white hover:bg-slate-50 text-[#4F6F52] border border-[#DDE8D8] text-xs h-9 px-4 rounded-xl flex items-center gap-1.5 transition-all shadow-sm"
+          >
+            <AlertTriangle className="w-4 h-4" /> Laporkan Kendala
+          </Button>
+          <Button 
+            onClick={() => { setErrorMsg(null); setActiveDialog("bast"); }}
+            className="bg-[#4F6F52] hover:bg-[#3a523c] text-white text-xs h-9 px-4 rounded-xl flex items-center gap-1.5 transition-all shadow-sm"
+          >
+            <FileText className="w-4 h-4" /> Ajukan BAST Vendor
+          </Button>
+        </div>
+      </div>
+
+      {/* 2. Five Summary Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <Card className="border-[#DDE8D8] bg-white/60 backdrop-blur-md rounded-xl hover:shadow-md transition-all">
+          <CardHeader className="p-4 pb-2">
+            <CardDescription className="text-xs text-[#5C6E5D] font-medium flex items-center gap-1">
+              <Briefcase className="w-3.5 h-3.5 text-[#8FAF9A]" /> SPK Aktif
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-4 pt-0">
+            <div className="text-2xl font-bold text-[#2C3E2D]">{metrics.activeSpks}</div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-[#DDE8D8] bg-white/60 backdrop-blur-md rounded-xl hover:shadow-md transition-all">
+          <CardHeader className="p-4 pb-2">
+            <CardDescription className="text-xs text-[#5C6E5D] font-medium flex items-center gap-1">
+              <Home className="w-3.5 h-3.5 text-[#8FAF9A]" /> Unit Pembangunan
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-4 pt-0">
+            <div className="text-2xl font-bold text-[#2C3E2D]">{metrics.unitsBuilding}</div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-[#DDE8D8] bg-white/60 backdrop-blur-md rounded-xl hover:shadow-md transition-all">
+          <CardHeader className="p-4 pb-2">
+            <CardDescription className="text-xs text-[#5C6E5D] font-medium flex items-center gap-1">
+              <Clock className="w-3.5 h-3.5 text-amber-600" /> Perlu Update
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-4 pt-0">
+            <div className="text-2xl font-bold text-amber-600">{metrics.needUpdate}</div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-[#DDE8D8] bg-white/60 backdrop-blur-md rounded-xl hover:shadow-md transition-all">
+          <CardHeader className="p-4 pb-2">
+            <CardDescription className="text-xs text-[#5C6E5D] font-medium flex items-center gap-1">
+              <AlertTriangle className="w-3.5 h-3.5 text-rose-600" /> SPK Terlambat
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-4 pt-0">
+            <div className="text-2xl font-bold text-rose-600">{metrics.overdueSpks}</div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-[#DDE8D8] bg-white/60 backdrop-blur-md rounded-xl hover:shadow-md transition-all">
+          <CardHeader className="p-4 pb-2">
+            <CardDescription className="text-xs text-[#5C6E5D] font-medium flex items-center gap-1">
+              <FileCheck className="w-3.5 h-3.5 text-[#4F6F52]" /> Siap BAST
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-4 pt-0">
+            <div className="text-2xl font-bold text-[#4F6F52]">{metrics.readyBast}</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* 3. Main Sections */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* Section 1: SPK / Pekerjaan Aktif */}
+        <div className="lg:col-span-2 space-y-6">
+          <Card className="border-[#DDE8D8] bg-white/80 rounded-2xl shadow-sm overflow-hidden">
+            <CardHeader className="border-b border-[#DDE8D8]/50 p-5 bg-[#DDE8D8]/20">
+              <CardTitle className="text-base font-bold text-[#2C3E2D] flex items-center gap-2">
+                <Briefcase className="w-5 h-5 text-[#4F6F52]" /> SPK & Pekerjaan Aktif
+              </CardTitle>
+              <CardDescription className="text-xs text-[#5C6E5D]">Daftar seluruh pekerjaan fisik konstruksi aktif Anda.</CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              {activeSpksList.length === 0 ? (
+                <div className="p-8 text-center text-sm text-[#5C6E5D] italic">Tidak ada SPK aktif saat ini.</div>
+              ) : (
+                <div className="divide-y divide-[#DDE8D8]/40">
+                  {activeSpksList.map((spk) => (
+                    <div key={spk.id} className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-slate-50/50 transition-colors">
+                      <div className="space-y-1 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-mono text-xs font-bold text-[#4F6F52] bg-[#DDE8D8]/40 px-2 py-0.5 rounded">
+                            {spk.spkNumber}
+                          </span>
+                          <span className="text-xs font-semibold text-[#2C3E2D] flex items-center gap-1">
+                            <MapPin className="w-3 h-3 text-slate-400" /> {spk.projectName} &bull; Kav. {spk.unitCode}
+                          </span>
+                          {getStatusBadge(spk.status)}
+                        </div>
+                        <h4 className="text-sm font-bold text-[#2C3E2D] pt-0.5">{spk.title}</h4>
+                        <div className="text-xs text-muted-foreground flex items-center gap-3 pt-1">
+                          <span>Target Selesai: {new Date(spk.targetEndDate).toLocaleDateString("id-ID", { dateStyle: "medium" })}</span>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-4 min-w-[150px]">
+                        <div className="w-full space-y-1">
+                          <div className="flex justify-between text-xs font-bold text-[#2C3E2D]">
+                            <span>Progres</span>
+                            <span>{spk.progressPct}%</span>
+                          </div>
+                          <Progress value={spk.progressPct} className="h-2 bg-slate-100" />
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            setErrorMsg(null);
+                            setProgSpkId(spk.id);
+                            setActiveDialog("progress");
+                          }}
+                          className="text-[#4F6F52] hover:text-[#3a523c] hover:bg-[#DDE8D8]/30 rounded-xl"
+                        >
+                          <ChevronRight className="w-5 h-5" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Section 2: Progress Perlu Update */}
+          {needUpdateList.length > 0 && (
+            <Card className="border-[#DDE8D8] bg-[#FFFBF0] rounded-2xl shadow-sm overflow-hidden">
+              <CardHeader className="border-b border-amber-100 p-5 bg-amber-50/50">
+                <CardTitle className="text-base font-bold text-[#8A5A00] flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-amber-600" /> Progress Perlu Update
+                </CardTitle>
+                <CardDescription className="text-xs text-amber-700">SPK yang tidak memiliki aktivitas pembaruan progress dalam 7 hari terakhir.</CardDescription>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="divide-y divide-amber-100/50">
+                  {needUpdateList.map((spk) => (
+                    <div key={spk.id} className="p-4 flex items-center justify-between gap-4">
+                      <div className="space-y-0.5">
+                        <span className="font-mono text-[10px] font-bold text-amber-800 bg-amber-100/60 px-1.5 py-0.5 rounded">
+                          {spk.spkNumber}
+                        </span>
+                        <h4 className="text-sm font-bold text-[#2C3E2D]">{spk.title}</h4>
+                        <p className="text-xs text-amber-700">Kavling {spk.unitCode} &bull; Progress saat ini: {spk.progressPct}%</p>
+                      </div>
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          setErrorMsg(null);
+                          setProgSpkId(spk.id);
+                          setActiveDialog("progress");
+                        }}
+                        className="bg-amber-600 hover:bg-amber-700 text-white text-xs h-8 px-3 rounded-lg"
+                      >
+                        Update
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Section 3: Dokumentasi Lapangan */}
+          <Card className="border-[#DDE8D8] bg-white/80 rounded-2xl shadow-sm overflow-hidden">
+            <CardHeader className="border-b border-[#DDE8D8]/50 p-5 bg-[#DDE8D8]/20">
+              <CardTitle className="text-base font-bold text-[#2C3E2D] flex items-center gap-2">
+                <Layers className="w-5 h-5 text-[#4F6F52]" /> Aktivitas Update Terakhir
+              </CardTitle>
+              <CardDescription className="text-xs text-[#5C6E5D]">Daftar 10 aktivitas progres terakhir yang Anda laporkan.</CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              {recentLogs.length === 0 ? (
+                <div className="p-8 text-center text-sm text-[#5C6E5D] italic">Belum ada riwayat aktivitas progres.</div>
+              ) : (
+                <div className="divide-y divide-[#DDE8D8]/40">
+                  {recentLogs.map((log) => (
+                    <div key={log.id} className="p-4 hover:bg-slate-50/50 transition-colors flex items-start justify-between gap-4">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-[#2C3E2D]">{log.workItemName}</span>
+                          <span className="text-[10px] text-muted-foreground font-mono">({log.spkNumber})</span>
+                        </div>
+                        {log.notes && <p className="text-xs text-[#5C6E5D] italic">"{log.notes}"</p>}
+                        <div className="text-[10px] text-muted-foreground flex items-center gap-2">
+                          <span>Dilaporkan oleh: {log.creatorName}</span>
+                          <span>&bull;</span>
+                          <span>{new Date(log.progressDate).toLocaleDateString("id-ID", { dateStyle: "short" })}</span>
+                        </div>
+                      </div>
+                      <Badge className="bg-[#DDE8D8] text-[#2C3E2D] hover:bg-[#DDE8D8]/80 text-[10px] font-bold">
+                        +{log.percentageAdded}% ({log.currentTotalPct}%)
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Column Right: Kendala & BAST */}
+        <div className="space-y-6">
+          
+          {/* Section 4: Kendala Pekerjaan */}
+          <Card className="border-[#DDE8D8] bg-white/80 rounded-2xl shadow-sm overflow-hidden">
+            <CardHeader className="border-b border-[#DDE8D8]/50 p-5 bg-rose-50/30">
+              <CardTitle className="text-base font-bold text-[#A94A4A] flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-rose-600" /> Kendala Aktif
+              </CardTitle>
+              <CardDescription className="text-xs text-[#5C6E5D]">Daftar kendala konstruksi aktif di unit Anda.</CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              {complaints.length === 0 ? (
+                <div className="p-6 text-center text-xs text-[#5C6E5D] italic">Tidak ada kendala aktif saat ini. Aman!</div>
+              ) : (
+                <div className="divide-y divide-[#DDE8D8]/30">
+                  {Object.entries(complaintsByProject).map(([projName, items]) => (
+                    <div key={projName} className="p-4 space-y-3 first:pt-4">
+                      <div className="flex items-center gap-2 pb-1 border-b border-[#DDE8D8]/40">
+                        <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                        <h4 className="text-xs font-bold text-[#2C3E2D] uppercase tracking-wider">{projName}</h4>
+                        <span className="text-[10px] font-medium text-[#5C6E5D] bg-[#DDE8D8]/30 px-2 py-0.5 rounded-full">
+                          {items.length} Masalah
+                        </span>
+                      </div>
+                      
+                      <div className="space-y-3 pl-2">
+                        {items.map((c) => (
+                          <div key={c.id} className="space-y-2 border-b border-dashed border-[#DDE8D8]/20 last:border-b-0 pb-3 last:pb-0">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-mono text-[10px] font-bold text-rose-800 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100">
+                                {c.complaintNumber}
+                              </span>
+                              <Badge variant="outline" className="text-[10px] font-semibold py-0 px-2 border-amber-300 text-amber-700 bg-amber-50">
+                                {c.status.replace("_", " ")}
+                              </Badge>
+                            </div>
+                            <div>
+                              <h5 className="text-xs font-bold text-[#2C3E2D]">
+                                Kavling {c.unitCode} &bull; <span className="text-primary">{c.category === "quality" ? "Kualitas" : c.category === "delay" ? "Keterlambatan" : c.category === "document" ? "Dokumen" : c.category === "payment" ? "Keuangan" : "Lainnya"}</span>
+                              </h5>
+                              <p className="text-xs text-[#5C6E5D] leading-relaxed pt-0.5">{c.description}</p>
+                            </div>
+                            <div className="text-[10px] text-muted-foreground flex justify-between items-center pt-1">
+                              <span>Konsumen: <span className="font-semibold text-slate-700">{c.customerName}</span></span>
+                              <span>{new Date(c.createdAt).toLocaleDateString("id-ID")}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Section 5: BAST Vendor */}
+          <Card className="border-[#DDE8D8] bg-white/80 rounded-2xl shadow-sm overflow-hidden">
+            <CardHeader className="border-b border-[#DDE8D8]/50 p-5 bg-[#DDE8D8]/20">
+              <CardTitle className="text-base font-bold text-[#2C3E2D] flex items-center gap-2">
+                <FileCheck className="w-5 h-5 text-[#4F6F52]" /> Status Pengajuan BAST
+              </CardTitle>
+              <CardDescription className="text-xs text-[#5C6E5D]">Pemantauan pengajuan BAST untuk SPK yang telah mencapai 100%.</CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              {basts.length === 0 ? (
+                <div className="p-6 text-center text-xs text-[#5C6E5D] italic">Belum ada unit yang siap diajukan BAST.</div>
+              ) : (
+                <div className="divide-y divide-[#DDE8D8]/40">
+                  {basts.map((b) => (
+                    <div key={b.spkId} className="p-4 space-y-3">
+                      <div className="flex justify-between items-start gap-2 flex-wrap">
+                        <div>
+                          <h5 className="text-xs font-bold text-[#2C3E2D]">{b.projectName} &bull; Kav. {b.unitCode}</h5>
+                          <span className="font-mono text-[10px] text-muted-foreground">{b.spkNumber}</span>
+                        </div>
+                        {b.statusCode === "approved" ? (
+                          <Badge className="bg-[#4F6F52] text-white">Disetujui</Badge>
+                        ) : b.statusCode === "pending" ? (
+                          <Badge className="bg-amber-600 text-white">Menunggu Approval</Badge>
+                        ) : (
+                          <Badge className="bg-gray-400 text-white">Belum Diajukan</Badge>
+                        )}
+                      </div>
+
+                      {b.statusCode === "not_submitted" ? (
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            setErrorMsg(null);
+                            setBastSpkId(b.spkId);
+                            setActiveDialog("bast");
+                          }}
+                          className="w-full bg-[#8FAF9A] hover:bg-[#7da089] text-white text-xs h-8 rounded-lg flex items-center justify-center gap-1"
+                        >
+                          <Upload className="w-3.5 h-3.5" /> Ajukan BAST PDF
+                        </Button>
+                      ) : (
+                        <div className="bg-slate-50 rounded-lg p-2 border border-slate-100 flex items-center justify-between gap-2">
+                          <span className="text-[10px] text-[#5C6E5D] font-medium truncate max-w-[150px]">
+                            {b.attachmentName || "BAST_Vendor.pdf"}
+                          </span>
+                          <a
+                            href={b.attachmentUrl || "#"}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[10px] font-bold text-[#4F6F52] hover:underline"
+                          >
+                            Buka PDF
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      {/* ============================================================== */}
+      {/* 4. DIALOG MODALS */}
+      {/* ============================================================== */}
+
+      {/* Modal 1: Update Progress */}
+      <Dialog open={activeDialog === "progress"} onOpenChange={(open) => !open && setActiveDialog(null)}>
+        <DialogContent className="w-[95vw] sm:max-w-lg rounded-3xl bg-white border border-[#D6DED2] p-0 overflow-hidden font-sans">
+          <div className="bg-gradient-to-r from-[#DDE8D8]/70 via-white/80 to-transparent p-6 border-b border-[#D6DED2]">
+            <DialogHeader>
+              <DialogTitle className="text-[#2C3E2D] font-black tracking-tight text-lg">Input Progress Konstruksi</DialogTitle>
+              <DialogDescription className="text-xs text-[#66736A] mt-1">Laporkan progres harian pekerjaan fisik lapangan.</DialogDescription>
+            </DialogHeader>
+          </div>
+          <form onSubmit={handleProgressSubmit} className="p-6 space-y-4">
+              {errorMsg && (
+                <div className="p-3 bg-rose-50 text-rose-700 border border-rose-100 rounded-xl flex items-center gap-2 text-xs font-medium">
+                  <AlertCircle className="w-4 h-4 shrink-0" /> {errorMsg}
+                </div>
+              )}
+              {successMsg && (
+                <div className="p-3 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-xl flex items-center gap-2 text-xs font-medium">
+                  <CheckCircle className="w-4 h-4 shrink-0" /> {successMsg}
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <Label htmlFor="progSpkId">Pilih SPK Pekerjaan</Label>
+                <Select value={progSpkId} onValueChange={(val) => setProgSpkId(val || "")} disabled={submitting}>
+                  <SelectTrigger id="progSpkId" className="w-full! h-10 rounded-xl border-[#DDE8D8] text-xs bg-white flex items-center justify-between">
+                    <SelectValue placeholder="Pilih SPK aktif...">
+                      {progSpkId ? (() => {
+                        const selectedSpk = spks.find(s => s.id === progSpkId);
+                        return selectedSpk ? `${selectedSpk.spkNumber} - Kav. ${selectedSpk.unitCode} (${selectedSpk.progressPct}%)` : progSpkId;
+                      })() : undefined}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent className="bg-white/95 border-[#DDE8D8]">
+                    {activeSpksList.map((spk) => (
+                      <SelectItem key={spk.id} value={spk.id} className="text-xs">
+                        {spk.spkNumber} - Kav. {spk.unitCode} ({spk.progressPct}%)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {loadingSpkDetails ? (
+                <div className="py-4 flex justify-center items-center gap-2 text-xs text-[#5C6E5D]">
+                  <Loader2 className="w-4 h-4 animate-spin text-[#4F6F52]" /> Memuat item pekerjaan...
+                </div>
+              ) : (
+                progSpkId && (
+                  <div className="space-y-4">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="progWorkItemId">Item Pekerjaan</Label>
+                      <Select value={progWorkItemId} onValueChange={(val) => setProgWorkItemId(val || "")} disabled={submitting}>
+                        <SelectTrigger id="progWorkItemId" className="w-full! h-10 rounded-xl border-[#DDE8D8] text-xs bg-white flex items-center justify-between">
+                          <SelectValue placeholder="Pilih item pekerjaan...">
+                            {progWorkItemId ? (() => {
+                              const selectedItem = progWorkItems.find(item => item.id === progWorkItemId);
+                              return selectedItem ? `${selectedItem.name} (Bobot: ${selectedItem.weight}%)` : progWorkItemId;
+                            })() : undefined}
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent className="bg-white/95 border-[#DDE8D8]">
+                          {progWorkItems.map((item) => (
+                            <SelectItem key={item.id} value={item.id} className="text-xs">
+                              {item.name} (Bobot: {item.weight}%)
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="progPctAdded">Persentase Tambahan</Label>
+                        <Input
+                          id="progPctAdded"
+                          type="number"
+                          min="1"
+                          max="100"
+                          value={progPctAdded}
+                          onChange={(e) => setProgPctAdded(parseInt(e.target.value) || 0)}
+                          disabled={submitting}
+                          className="h-10 rounded-xl border-[#DDE8D8] text-xs"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="progDate">Tanggal Laporan</Label>
+                        <Input
+                          id="progDate"
+                          type="date"
+                          value={progDate}
+                          onChange={(e) => setProgDate(e.target.value)}
+                          disabled={submitting}
+                          className="h-10 rounded-xl border-[#DDE8D8] text-xs"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor="progFile">Foto Lampiran Lapangan</Label>
+                      <Input
+                        id="progFile"
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => setProgFile(e.target.files?.[0] || null)}
+                        disabled={submitting}
+                        className="rounded-xl border-[#DDE8D8] text-xs bg-white file:mr-2 file:py-0 file:px-2 file:rounded-md file:border-0 file:text-[10px] file:font-bold file:bg-[#DDE8D8] file:text-[#4F6F52] file:cursor-pointer hover:file:bg-[#DDE8D8]/80 transition-all h-10 flex items-center pr-2"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor="progNotes">Catatan Tambahan</Label>
+                      <Textarea
+                        id="progNotes"
+                        placeholder="Detail progress pekerjaan di lapangan..."
+                        value={progNotes}
+                        onChange={(e) => setProgNotes(e.target.value)}
+                        disabled={submitting}
+                        className="rounded-xl border-[#DDE8D8] text-xs min-h-[60px]"
+                      />
+                    </div>
+                  </div>
+                )
+              )}
+            
+            <DialogFooter className="pt-4 border-t border-[#D6DED2] gap-2 mt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setActiveDialog(null)}
+                disabled={submitting}
+                className="rounded-xl border-[#D6DED2] text-xs h-10 hover:bg-[#F7F8F3]/50 transition-premium cursor-pointer"
+              >
+                Batal
+              </Button>
+              <Button
+                type="submit"
+                disabled={submitting || !progSpkId || !progWorkItemId || loadingSpkDetails}
+                className="bg-[#4F6F52] hover:bg-[#3D563F] text-white active:scale-95 shadow-[0_4px_14px_rgba(79,111,82,0.25)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 h-10 rounded-xl font-bold text-xs px-4 gap-2 cursor-pointer"
+              >
+                {submitting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                    {uploadingProgressPhoto ? "Mengunggah Foto..." : "Menyimpan..."}
+                  </>
+                ) : (
+                  "Kirim Progress"
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal 2: Tambah Kendala */}
+      <Dialog open={activeDialog === "complaint"} onOpenChange={(open) => !open && setActiveDialog(null)}>
+        <DialogContent className="sm:max-w-md rounded-3xl bg-white border border-[#D6DED2] p-0 overflow-hidden font-sans">
+          <div className="bg-gradient-to-r from-[#DDE8D8]/70 via-white/80 to-transparent p-6 border-b border-[#D6DED2]">
+            <DialogHeader>
+              <DialogTitle className="text-[#2C3E2D] font-black tracking-tight text-lg">Laporkan Kendala Pekerjaan</DialogTitle>
+              <DialogDescription className="text-xs text-[#66736A] mt-1">Laporkan kendala fisik atau material yang menghambat pembangunan.</DialogDescription>
+            </DialogHeader>
+          </div>
+          <form onSubmit={handleComplaintSubmit} className="p-6 space-y-4">
+              {errorMsg && (
+                <div className="p-3 bg-rose-50 text-rose-700 border border-rose-100 rounded-xl flex items-center gap-2 text-xs font-medium">
+                  <AlertCircle className="w-4 h-4 shrink-0" /> {errorMsg}
+                </div>
+              )}
+              {successMsg && (
+                <div className="p-3 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-xl flex items-center gap-2 text-xs font-medium">
+                  <CheckCircle className="w-4 h-4 shrink-0" /> {successMsg}
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <Label htmlFor="compSpkIndex">Pilih SPK Unit</Label>
+                <Select value={compSpkIndex} onValueChange={(val) => setCompSpkIndex(val || "")} disabled={submitting}>
+                  <SelectTrigger id="compSpkIndex" className="rounded-xl border-[#DDE8D8] text-xs w-full flex items-center justify-between">
+                    <SelectValue placeholder="Pilih unit SPK terkait...">
+                      {compSpkIndex ? (() => {
+                        const selectedSpk = spks[parseInt(compSpkIndex)];
+                        return selectedSpk ? `${selectedSpk.spkNumber} - Kav. ${selectedSpk.unitCode} (${selectedSpk.projectName})` : compSpkIndex;
+                      })() : undefined}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent className="bg-white/95 border-[#DDE8D8]">
+                    {spks.map((spk, idx) => (
+                      <SelectItem key={spk.id} value={idx.toString()} className="text-xs">
+                        {spk.spkNumber} - Kav. {spk.unitCode} ({spk.projectName})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="compTitle">Judul Kendala</Label>
+                <Input
+                  id="compTitle"
+                  type="text"
+                  placeholder="Contoh: Keterlambatan pengiriman semen..."
+                  value={compTitle}
+                  onChange={(e) => setCompTitle(e.target.value)}
+                  disabled={submitting}
+                  className="rounded-xl border-[#DDE8D8] text-xs h-9"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="compCategory">Kategori Kendala</Label>
+                <Select value={compCategory} onValueChange={(val: any) => setCompCategory(val || "material")} disabled={submitting}>
+                  <SelectTrigger id="compCategory" className="rounded-xl border-[#DDE8D8] text-xs w-full flex items-center justify-between">
+                    <SelectValue placeholder="Kategori kendala...">
+                      {compCategory === "material" && "Kekurangan Material"}
+                      {compCategory === "cuaca" && "Cuaca Buruk"}
+                      {compCategory === "tenaga_kerja" && "Kekurangan Pekerja"}
+                      {compCategory === "akses_lokasi" && "Akses Lokasi Terhambat"}
+                      {compCategory === "revisi_desain" && "Revisi Gambar / Desain"}
+                      {compCategory === "menunggu_instruksi" && "Menunggu Instruksi"}
+                      {compCategory === "kendala_teknis" && "Kendala Teknis Lapangan"}
+                      {compCategory === "lainnya" && "Kendala Lain-Lain"}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent className="bg-white/95 border-[#DDE8D8]">
+                    <SelectItem value="material" className="text-xs">Kekurangan Material</SelectItem>
+                    <SelectItem value="cuaca" className="text-xs">Cuaca Buruk</SelectItem>
+                    <SelectItem value="tenaga_kerja" className="text-xs">Kekurangan Pekerja</SelectItem>
+                    <SelectItem value="akses_lokasi" className="text-xs">Akses Lokasi Terhambat</SelectItem>
+                    <SelectItem value="revisi_desain" className="text-xs">Revisi Gambar / Desain</SelectItem>
+                    <SelectItem value="menunggu_instruksi" className="text-xs">Menunggu Instruksi</SelectItem>
+                    <SelectItem value="kendala_teknis" className="text-xs">Kendala Teknis Lapangan</SelectItem>
+                    <SelectItem value="lainnya" className="text-xs">Kendala Lain-Lain</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="compDescription">Deskripsi Kendala</Label>
+                <Textarea
+                  id="compDescription"
+                  placeholder="Detail kendala yang dihadapi di lapangan..."
+                  value={compDescription}
+                  onChange={(e) => setCompDescription(e.target.value)}
+                  disabled={submitting}
+                  className="rounded-xl border-[#DDE8D8] text-xs min-h-[80px]"
+                />
+              </div>
+            
+            <DialogFooter className="pt-4 border-t border-[#D6DED2] gap-2 mt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setActiveDialog(null)}
+                disabled={submitting}
+                className="rounded-xl border-[#D6DED2] text-xs h-9 hover:bg-[#F7F8F3]/50 transition-premium cursor-pointer"
+              >
+                Batal
+              </Button>
+              <Button
+                type="submit"
+                disabled={submitting || !compSpkIndex || !compDescription}
+                className="bg-[#A94A4A] hover:bg-[#8A3B3B] text-white active:scale-95 shadow-[0_4px_14px_rgba(169,74,74,0.25)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 h-9 rounded-xl font-bold text-xs px-4 gap-2 cursor-pointer"
+              >
+                {submitting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                    Melaporkan...
+                  </>
+                ) : (
+                  "Kirim Laporan"
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal 3: Ajukan BAST */}
+      <Dialog open={activeDialog === "bast"} onOpenChange={(open) => !open && setActiveDialog(null)}>
+        <DialogContent className="sm:max-w-md rounded-3xl bg-white border border-[#D6DED2] p-0 overflow-hidden font-sans">
+          <div className="bg-gradient-to-r from-[#DDE8D8]/70 via-white/80 to-transparent p-6 border-b border-[#D6DED2]">
+            <DialogHeader>
+              <DialogTitle className="text-[#2C3E2D] font-black tracking-tight text-lg">Ajukan BAST Vendor</DialogTitle>
+              <DialogDescription className="text-xs text-[#66736A] mt-1">Unggah dokumen Berita Acara Serah Terima (BAST) untuk disetujui Pengawas.</DialogDescription>
+            </DialogHeader>
+          </div>
+          <form onSubmit={handleBastSubmit} className="p-6 space-y-4">
+              {errorMsg && (
+                <div className="p-3 bg-rose-50 text-rose-700 border border-rose-100 rounded-xl flex items-center gap-2 text-xs font-medium">
+                  <AlertCircle className="w-4 h-4 shrink-0" /> {errorMsg}
+                </div>
+              )}
+              {successMsg && (
+                <div className="p-3 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-xl flex items-center gap-2 text-xs font-medium">
+                  <CheckCircle className="w-4 h-4 shrink-0" /> {successMsg}
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <Label htmlFor="bastSpkId">Pilih SPK Unit Selesai</Label>
+                <Select value={bastSpkId} onValueChange={(val) => setBastSpkId(val || "")} disabled={submitting}>
+                  <SelectTrigger id="bastSpkId" className="rounded-xl border-[#DDE8D8] text-xs w-full flex items-center justify-between">
+                    <SelectValue placeholder="Pilih SPK dengan progress 100%...">
+                      {bastSpkId ? (() => {
+                        const selectedBast = basts.find(b => b.spkId === bastSpkId);
+                        return selectedBast ? `${selectedBast.spkNumber} - Kav. ${selectedBast.unitCode} (${selectedBast.projectName})` : bastSpkId;
+                      })() : undefined}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent className="bg-white/95 border-[#DDE8D8]">
+                    {basts
+                      .filter(b => b.statusCode === "not_submitted")
+                      .map((b) => (
+                        <SelectItem key={b.spkId} value={b.spkId} className="text-xs">
+                          {b.spkNumber} - Kav. {b.unitCode} ({b.projectName})
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+                {basts.filter(b => b.statusCode === "not_submitted").length === 0 && (
+                  <p className="text-[10px] text-amber-600">Tidak ada unit selesai (100%) yang belum diajukan BAST.</p>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="bastFile">Unggah Berkas PDF BAST</Label>
+                <Input
+                  id="bastFile"
+                  type="file"
+                  accept="application/pdf"
+                  onChange={(e) => setBastFile(e.target.files?.[0] || null)}
+                  disabled={submitting}
+                  className="rounded-xl border-[#DDE8D8] text-xs bg-white file:mr-2 file:py-0 file:px-2 file:rounded-md file:border-0 file:text-[10px] file:font-bold file:bg-[#DDE8D8] file:text-[#4F6F52] file:cursor-pointer hover:file:bg-[#DDE8D8]/80 transition-all h-9 flex items-center pr-2"
+                />
+              </div>
+            
+            <DialogFooter className="pt-4 border-t border-[#D6DED2] gap-2 mt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setActiveDialog(null)}
+                disabled={submitting}
+                className="rounded-xl border-[#D6DED2] text-xs h-9 hover:bg-[#F7F8F3]/50 transition-premium cursor-pointer"
+              >
+                Batal
+              </Button>
+              <Button
+                type="submit"
+                disabled={submitting || !bastSpkId || !bastFile}
+                className="bg-[#4F6F52] hover:bg-[#3D563F] text-white active:scale-95 shadow-[0_4px_14px_rgba(79,111,82,0.25)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 h-9 rounded-xl font-bold text-xs px-5 gap-2 cursor-pointer"
+              >
+                {submitting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                    {uploadingBastPdf ? "Mengunggah PDF..." : "Mengirim..."}
+                  </>
+                ) : (
+                  "Kirim Pengajuan"
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+    </div>
+  );
+}

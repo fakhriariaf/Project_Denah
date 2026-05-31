@@ -1,0 +1,171 @@
+"use client";
+
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { createMarketingTarget } from "@/server/actions/waiting-list";
+import { PlusCircle, Target, AlertCircle, Loader2 } from "lucide-react";
+import { parseServerError } from "@/lib/error-parser";
+import { useI18n } from "@/lib/i18n";
+import { Translate } from "@/components/translate";
+
+const schema = z.object({
+  marketingId: z.string().min(1, "targets_form.val_marketing"),
+  projectId: z.string().min(1, "targets_form.val_project"),
+  periodMonth: z.coerce.number().int().min(1).max(12),
+  periodYear: z.coerce.number().int().min(2020).max(2099),
+  targetUnits: z.coerce.number().int().min(0).default(0),
+  targetAmount: z.coerce.number().min(0).default(0),
+});
+type FormValues = z.infer<typeof schema>;
+
+const MONTHS = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
+
+interface Props {
+  projects: { id: string; name: string }[];
+  marketings: { id: string; name: string }[];
+}
+
+export function AddMarketingTargetDialog({ projects, marketings }: Props) {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const currentYear = new Date().getFullYear();
+
+  const form = useForm<any>({
+    resolver: zodResolver(schema),
+    defaultValues: {
+      marketingId: "", projectId: "",
+      periodMonth: new Date().getMonth() + 1,
+      periodYear: currentYear,
+      targetUnits: 0, targetAmount: 0,
+    },
+  });
+
+  const mktVal  = form.watch("marketingId") as string;
+  const projVal = form.watch("projectId") as string;
+  const monthVal= String(form.watch("periodMonth") ?? 1);
+
+  async function onSubmit(values: FormValues) {
+    setLoading(true);
+    setErrorMsg(null);
+    try {
+      await createMarketingTarget(values);
+      alert("Target marketing berhasil disimpan!");
+      setOpen(false);
+      form.reset();
+      window.location.reload();
+    } catch (err: unknown) {
+      setErrorMsg(parseServerError(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <>
+      <Button onClick={() => setOpen(true)} className="btn-premium bg-[#4F6F52] hover:bg-[#3D563F] text-white gap-2 shrink-0">
+        <PlusCircle className="h-4 w-4" /> {t("targets_form.btn_add")}
+      </Button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-lg rounded-3xl bg-white/98 backdrop-blur-md border border-[#D6DED2] shadow-[0_8px_30px_rgb(143,175,154,0.15)] p-0 overflow-hidden font-sans">
+          <div className="bg-gradient-to-r from-[#DDE8D8]/70 via-white/80 to-transparent p-6 border-b border-[#D6DED2]">
+            <DialogHeader>
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-[#DDE8D8] flex items-center justify-center shadow-inner">
+                  <Target className="h-5 w-5 text-[#4F6F52]" />
+                </div>
+                <div>
+                  <DialogTitle className="text-xl font-black text-[#243028] tracking-tight">{t("targets_form.title")}</DialogTitle>
+                  <DialogDescription className="text-xs text-[#66736A] mt-1 leading-relaxed">{t("targets_form.desc")}</DialogDescription>
+                </div>
+              </div>
+            </DialogHeader>
+          </div>
+
+          <form onSubmit={form.handleSubmit(onSubmit)} className="p-6 space-y-4 pt-3 overflow-y-auto max-h-[75vh]">
+            {errorMsg && (
+              <div className="flex items-start gap-2 p-3 bg-rose-50 border border-rose-100 text-rose-700 text-xs font-semibold rounded-xl">
+                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />{errorMsg.startsWith("targets_form.") ? t(errorMsg as any) : errorMsg}
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium text-[#243028]">{t("targets_form.marketing")} <span className="text-rose-500">*</span></Label>
+              <Select value={mktVal} onValueChange={(v: string | null) => form.setValue("marketingId", v ?? "")}>
+                <SelectTrigger className="border-[#D6DED2] focus:ring-[#8FAF9A]/50">
+                  <SelectValue placeholder={t("targets_form.marketing_ph")}>
+                    {mktVal ? marketings.find(m => m.id === mktVal)?.name : undefined}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent className="rounded-xl border-[#D6DED2] bg-white/95 backdrop-blur-md">
+                  {marketings.map(m => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium text-[#243028]">{t("targets_form.project")} <span className="text-rose-500">*</span></Label>
+              <Select value={projVal} onValueChange={(v: string | null) => form.setValue("projectId", v ?? "")}>
+                <SelectTrigger className="border-[#D6DED2] focus:ring-[#8FAF9A]/50">
+                  <SelectValue placeholder={t("targets_form.project_ph")}>
+                    {projVal ? projects.find(p => p.id === projVal)?.name : undefined}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent className="rounded-xl border-[#D6DED2] bg-white/95 backdrop-blur-md">
+                  {projects.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium text-[#243028]">{t("targets_form.month")}</Label>
+                <Select value={monthVal} onValueChange={(v: string | null) => form.setValue("periodMonth", parseInt(v ?? "1"))}>
+                  <SelectTrigger className="border-[#D6DED2] focus:ring-[#8FAF9A]/50">
+                    <SelectValue>
+                      {monthVal ? MONTHS[parseInt(monthVal) - 1] : undefined}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl border-[#D6DED2] bg-white/95 backdrop-blur-md">
+                    {MONTHS.map((m, i) => <SelectItem key={i+1} value={String(i+1)}>{m}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium text-[#243028]">{t("targets_form.year")}</Label>
+                <Input type="number" {...form.register("periodYear")} className="border-[#D6DED2] font-mono" />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium text-[#243028]">{t("targets_form.target_unit")} <span className="text-red-500">*</span></Label>
+                <Input type="number" required min={0} {...form.register("targetUnits")} className="border-[#D6DED2] font-mono" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium text-[#243028]">{t("targets_form.target_amount")} <span className="text-red-500">*</span></Label>
+                <Input type="number" required step="1000000" min={0} {...form.register("targetAmount")} placeholder="0" className="border-[#D6DED2] font-mono placeholder:text-[#A8B0AA]" />
+              </div>
+            </div>
+
+            <DialogFooter className="pt-2 gap-2">
+              <Button type="button" variant="outline" onClick={() => setOpen(false)} className="border-[#D6DED2]">{t("action.cancel")}</Button>
+              <Button type="submit" disabled={loading} className="btn-premium bg-[#4F6F52] hover:bg-[#3D563F] text-white gap-2">
+                {loading && <Loader2 className="h-4 w-4 animate-spin" />}{t("targets_form.btn_submit")}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
