@@ -30,17 +30,17 @@ export async function POST(req: NextRequest) {
     // Validate magic bytes (binary signatures) to prevent file type spoofing
     let detectedType = "";
     if (buffer.length >= 4) {
-      const hex = buffer.slice(0, 4).toString("hex").toUpperCase();
+      const hex = buffer.subarray(0, 4).toString("hex").toUpperCase();
       if (hex.startsWith("89504E47")) {
         detectedType = "image/png";
       } else if (hex.startsWith("FFD8FF")) {
         detectedType = "image/jpeg"; // jpeg & jpg
       } else if (hex.startsWith("25504446")) {
         detectedType = "application/pdf"; // pdf
-      } else if (hex.startsWith("52494646") && buffer.length >= 12 && buffer.slice(8, 12).toString("hex").toUpperCase() === "57454250") {
+      } else if (hex.startsWith("52494646") && buffer.length >= 12 && buffer.subarray(8, 12).toString("hex").toUpperCase() === "57454250") {
         detectedType = "image/webp";
       } else {
-        const sampleText = buffer.slice(0, Math.min(100, buffer.length)).toString("utf-8").toLowerCase();
+        const sampleText = buffer.subarray(0, Math.min(100, buffer.length)).toString("utf-8").toLowerCase();
         if (sampleText.includes("<svg") || sampleText.includes("<?xml")) {
           detectedType = "image/svg+xml";
         }

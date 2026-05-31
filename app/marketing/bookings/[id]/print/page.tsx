@@ -28,7 +28,7 @@ export async function generateMetadata({ params }: PrintPageProps) {
     .from(bookingsTable)
     .leftJoin(customersTable, eq(bookingsTable.customerId, customersTable.id))
     .where(eq(bookingsTable.id, id))
-    .then(r => r[0]);
+    .then(r => r?.[0] || null);
 
   const safeCustomer = (row?.customerName || "Konsumen")
     .replace(/[^a-zA-Z0-9\s]/g, "")
@@ -71,7 +71,7 @@ export default async function PrintBookingPage({ params }: PrintPageProps) {
     .leftJoin(customersTable, eq(bookingsTable.customerId, customersTable.id))
     .leftJoin(userTable, eq(bookingsTable.marketingId, userTable.id))
     .where(eq(bookingsTable.id, id))
-    .then((rows) => rows[0]);
+    .then((rows) => rows?.[0] || null);
 
   if (!booking) {
     notFound();
