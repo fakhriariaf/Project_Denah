@@ -2,14 +2,25 @@ import { AppSidebar } from "@/components/app-sidebar"
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { NotificationDropdown } from "@/components/dashboard/notification-dropdown"
 import { UserIdentityDropdown } from "@/components/dashboard/user-identity-dropdown"
-
+import { requireAuth, getSessionRole } from "@/server/permissions"
+import { redirect } from "next/navigation"
 import { Translate } from "@/components/translate"
 
-export default function SiteplanLayout({
+export default async function SiteplanLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  // RBAC: Siteplan accessible by all internal roles except Viewer-only external accounts
+  // Vendor (Kontraktor) and pure Viewers do NOT get access to siteplan management
+  const activeUser = await requireAuth();
+  const { isSuperAdmin, isAdminKantor, isMarketing, isMarketingManager, isDireksi, isPengawas, isKeuangan } = await getSessionRole(activeUser.id);
+
+  const hasAccess = isSuperAdmin || isAdminKantor || isMarketing || isMarketingManager || isDireksi || isPengawas || isKeuangan;
+  if (!hasAccess) {
+    redirect("/unauthorized");
+  }
+
   return (
     <SidebarProvider>
       <AppSidebar />

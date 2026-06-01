@@ -20,18 +20,24 @@ export function UnitForm({
   initialData, 
   id,
   projects,
-  vendors
+  vendors,
+  triggerButton,
+  onSuccess
 
 }: { 
   initialData?: UnitInput; 
   id?: string;
   projects: { id: string; name: string }[];
   vendors: { id: string; name: string }[];
+  triggerButton?: React.ReactElement;
+  onSuccess?: (createdUnitId: string) => Promise<void> | void;
 }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+
+  const isWorkflowStatus = !!id && !["available", "belum_siap", "cancelled"].includes(initialData?.status || "");
 
   const form = useForm<UnitInput>({
     resolver: zodResolver(unitSchema) as unknown as import("react-hook-form").Resolver<UnitInput>,
@@ -60,12 +66,16 @@ export function UnitForm({
     startTransition(async () => {
       setError(null);
       try {
+        let res;
         if (id) {
-          await updateUnit(id, data);
+          res = await updateUnit(id, data);
           alert("Data unit/kavling berhasil diperbarui!");
         } else {
-          await createUnit(data);
+          res = await createUnit(data);
           alert("Data unit/kavling berhasil disimpan!");
+        }
+        if (onSuccess && (res as any)?.id) {
+          await onSuccess((res as any).id);
         }
         setOpen(false);
         if (!id) reset();
@@ -79,7 +89,9 @@ export function UnitForm({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger nativeButton={true} render={
-        id ? (
+        triggerButton ? (
+          triggerButton
+        ) : id ? (
           <Button variant="outline" size="sm" className="h-7 text-xs border-[#D6DED2] rounded-lg hover:bg-[#F7F8F3]/50">{t("unit_form.edit_btn")}</Button>
         ) : (
           <Button className="bg-[#4F6F52] hover:bg-[#3D563F] text-white active:scale-95 shadow-[0_4px_14px_rgba(79,111,82,0.25)] transition-all duration-300 h-9 rounded-xl font-bold text-xs px-4">
@@ -175,8 +187,9 @@ export function UnitForm({
               value={watch("status") ?? ""} 
               onValueChange={(val) => setValue("status", val as UnitInput["status"])}
               required
+              disabled={isWorkflowStatus}
             >
-              <SelectTrigger className="w-full text-xs rounded-xl border border-[#D6DED2] bg-white hover:bg-[#F7F8F3]/50 focus:ring-2 focus:ring-[#8FAF9A]/20 h-9 px-3 transition-premium">
+              <SelectTrigger className="w-full text-xs rounded-xl border border-[#D6DED2] bg-white hover:bg-[#F7F8F3]/50 focus:ring-2 focus:ring-[#8FAF9A]/20 h-9 px-3 transition-premium disabled:opacity-75 disabled:bg-muted/40">
                 <SelectValue placeholder={t("unit_form.status_placeholder")}>
                   {watch("status") ? (t(`timeline.${watch("status")}`) || watch("status")) : undefined}
                 </SelectValue>
@@ -194,6 +207,11 @@ export function UnitForm({
                 <SelectItem value="cancelled" className="text-xs">{t("timeline.cancelled")}</SelectItem>
               </SelectContent>
             </Select>
+            {isWorkflowStatus && (
+              <p className="text-[10px] font-semibold text-amber-600 mt-1">
+                ⚠️ Status dikunci karena unit ini memiliki transaksi aktif atau sedang dibangun.
+              </p>
+            )}
           </div>
 
           <div className="space-y-1.5">

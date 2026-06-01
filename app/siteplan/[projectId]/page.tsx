@@ -369,6 +369,7 @@ export default async function SiteplanProjectPage({
                 <ImageUploadForm
                   siteplanId={activeSiteplan.id}
                   currentImageUrl={activeSiteplan.imageUrl}
+                  currentPublicEnabled={activeSiteplan.publicEnabled}
                 />
               </TabsContent>
             </>

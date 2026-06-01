@@ -22,7 +22,7 @@ import { bookings } from "@/db/schema/marketing";
 import { checkAndTransitionToConstruction } from "./marketing";
 import { attachments, notifications } from "@/db/schema/system";
 import { getCurrentUser, requireAuth, hasRole, getSessionRole } from "@/server/permissions";
-import { eq, and, desc, sum, sql, inArray } from "drizzle-orm";
+import { eq, and, desc, sum, sql, inArray, lte, isNotNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { writeAuditLog } from "./audit";
 import { createNotification, notifyUsersWithRoles } from "./notification";
@@ -289,7 +289,7 @@ export async function verifyPayment(
     const newStatus = isApproved ? "verified" : "rejected";
 
     // 2. Update payment status
-    tx
+    await tx
       .update(payments)
       .set({
         status: newStatus,
@@ -405,7 +405,7 @@ export async function verifyPayment(
             newInvoiceStatus = "partial";
           }
 
-          tx
+          await tx
             .update(invoices)
             .set({
               status: newInvoiceStatus,
@@ -1394,7 +1394,8 @@ export async function checkPaymentReminders() {
     .where(
       and(
         inArray(invoices.status, ["unpaid", "partial"]),
-        sql`${invoices.dueDate} < ${now.getTime()}`
+        isNotNull(invoices.dueDate),
+        lte(invoices.dueDate, now)
       )
     );
 
@@ -1495,3 +1496,202 @@ export async function deleteInvoice(invoiceId: string) {
   return { success: true };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Shared page data loader — used by finance/page.tsx and finance/approvals/page.tsx
+// Centralizes all DB queries + in-memory enrichment in one place.
+// ─────────────────────────────────────────────────────────────────────────────
+export async function getFinancePageData() {
+  const [
+    projectsList,
+    unitsList,
+    customersList,
+    accountsList,
+    categoriesList,
+    invoicesList,
+    paymentsList,
+    transactionsList,
+    budgetsList,
+    usersList,
+  ] = await Promise.all([
+    db.select().from(projects),
+    db.select().from(units),
+    db.select().from(customers),
+    db.select().from(financeAccounts),
+    db.select().from(financeCategories),
+
+    // Invoices with project and customer joins
+    db
+      .select({
+        id: invoices.id,
+        invoiceNumber: invoices.invoiceNumber,
+        projectId: invoices.projectId,
+        unitId: invoices.unitId,
+        customerId: invoices.customerId,
+        bookingId: invoices.bookingId,
+        type: invoices.type,
+        amount: invoices.amount,
+        dueDate: invoices.dueDate,
+        status: invoices.status,
+        notes: invoices.notes,
+        createdAt: invoices.createdAt,
+        projectName: projects.name,
+        customerName: customers.name,
+        unitCode: units.code,
+      })
+      .from(invoices)
+      .innerJoin(projects, eq(invoices.projectId, projects.id))
+      .leftJoin(customers, eq(invoices.customerId, customers.id))
+      .leftJoin(units, eq(invoices.unitId, units.id))
+      .orderBy(desc(invoices.createdAt)),
+
+    // Payments with joined details
+    db
+      .select({
+        id: payments.id,
+        invoiceId: payments.invoiceId,
+        paymentNumber: payments.paymentNumber,
+        projectId: payments.projectId,
+        unitId: payments.unitId,
+        customerId: payments.customerId,
+        amount: payments.amount,
+        paymentDate: payments.paymentDate,
+        paymentMethod: payments.paymentMethod,
+        proofAttachmentId: payments.proofAttachmentId,
+        proofFileUrl: attachments.fileUrl,
+        status: payments.status,
+        verifiedBy: payments.verifiedBy,
+        verifiedAt: payments.verifiedAt,
+        createdAt: payments.createdAt,
+        projectName: projects.name,
+        customerName: customers.name,
+        unitCode: units.code,
+        invoiceNumber: invoices.invoiceNumber,
+      })
+      .from(payments)
+      .innerJoin(projects, eq(payments.projectId, projects.id))
+      .leftJoin(customers, eq(payments.customerId, customers.id))
+      .leftJoin(units, eq(payments.unitId, units.id))
+      .leftJoin(invoices, eq(payments.invoiceId, invoices.id))
+      .leftJoin(attachments, eq(payments.proofAttachmentId, attachments.id))
+      .orderBy(desc(payments.createdAt)),
+
+    // Ledger Transactions
+    db
+      .select({
+        id: transactions.id,
+        transactionNumber: transactions.transactionNumber,
+        projectId: transactions.projectId,
+        unitId: transactions.unitId,
+        customerId: transactions.customerId,
+        paymentId: transactions.paymentId,
+        accountId: transactions.accountId,
+        categoryId: transactions.categoryId,
+        type: transactions.type,
+        description: transactions.description,
+        amount: transactions.amount,
+        transactionDate: transactions.transactionDate,
+        paymentMethod: transactions.paymentMethod,
+        approvalStatus: transactions.approvalStatus,
+        approvedBy: transactions.approvedBy,
+        approvalNotes: transactions.approvalNotes,
+        attachmentId: transactions.attachmentId,
+        createdBy: transactions.createdBy,
+        createdAt: transactions.createdAt,
+        projectName: projects.name,
+        accountName: financeAccounts.name,
+        categoryName: financeCategories.name,
+        unitCode: units.code,
+        customerName: customers.name,
+      })
+      .from(transactions)
+      .innerJoin(projects, eq(transactions.projectId, projects.id))
+      .innerJoin(financeAccounts, eq(transactions.accountId, financeAccounts.id))
+      .innerJoin(financeCategories, eq(transactions.categoryId, financeCategories.id))
+      .leftJoin(units, eq(transactions.unitId, units.id))
+      .leftJoin(customers, eq(transactions.customerId, customers.id))
+      .orderBy(desc(transactions.createdAt)),
+
+    // Budgets
+    db
+      .select({
+        id: budgets.id,
+        projectId: budgets.projectId,
+        name: budgets.name,
+        periodStart: budgets.periodStart,
+        periodEnd: budgets.periodEnd,
+        totalAmount: budgets.totalAmount,
+        status: budgets.status,
+        createdAt: budgets.createdAt,
+        projectName: projects.name,
+      })
+      .from(budgets)
+      .innerJoin(projects, eq(budgets.projectId, projects.id))
+      .orderBy(desc(budgets.createdAt)),
+
+    // Users
+    db.select({ id: userTable.id, name: userTable.name }).from(userTable),
+  ]);
+
+  // Enrich transactions: resolve approver/verifier names + link to invoice
+  const enrichedTransactions = transactionsList.map((trx) => {
+    let resolvedApproverName = null;
+
+    if (trx.type === "income" && trx.paymentId) {
+      const payment = paymentsList.find((p) => p.id === trx.paymentId);
+      if (payment?.verifiedBy) {
+        const verifier = usersList.find((u) => u.id === payment.verifiedBy);
+        if (verifier) resolvedApproverName = verifier.name;
+      }
+    }
+    if (trx.type === "expense" && trx.approvedBy) {
+      const approver = usersList.find((u) => u.id === trx.approvedBy);
+      if (approver) resolvedApproverName = approver.name;
+    }
+
+    let invoiceNumber = null;
+    let invoiceId = null;
+    if (trx.paymentId) {
+      const payment = paymentsList.find((p) => p.id === trx.paymentId);
+      if (payment?.invoiceId) {
+        const invoice = invoicesList.find((i) => i.id === payment.invoiceId);
+        if (invoice) { invoiceNumber = invoice.invoiceNumber; invoiceId = invoice.id; }
+      }
+    } else {
+      const matchInvoice = invoicesList.find((i) => i.notes === `trxId:${trx.id}`);
+      if (matchInvoice) { invoiceNumber = matchInvoice.invoiceNumber; invoiceId = matchInvoice.id; }
+    }
+
+    return { ...trx, invoiceNumber, invoiceId, resolvedApproverName };
+  });
+
+  // Compute balance per account — only approved transactions count
+  const balanceMap: Record<string, number> = {};
+  for (const acc of accountsList) {
+    balanceMap[acc.id] = acc.openingBalance ?? 0;
+  }
+  for (const trx of transactionsList) {
+    if (!(trx.accountId in balanceMap)) balanceMap[trx.accountId] = 0;
+    if (trx.type === "income" && trx.approvalStatus === "approved") {
+      balanceMap[trx.accountId] += trx.amount;
+    } else if (trx.type === "expense" && trx.approvalStatus === "approved") {
+      balanceMap[trx.accountId] -= trx.amount;
+    }
+  }
+
+  const enrichedAccounts = accountsList.map((acc) => ({
+    ...acc,
+    currentBalance: balanceMap[acc.id] ?? acc.openingBalance ?? 0,
+  }));
+
+  return {
+    projects: projectsList,
+    units: unitsList,
+    customers: customersList,
+    accounts: enrichedAccounts,
+    categories: categoriesList,
+    invoices: invoicesList,
+    payments: paymentsList,
+    transactions: enrichedTransactions,
+    budgets: budgetsList,
+  };
+}

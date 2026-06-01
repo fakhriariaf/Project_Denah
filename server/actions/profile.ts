@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { user as userTable, userProfiles, userEmployments, vendorProfiles } from "@/db/schema/auth";
 import { auditLogs } from "@/db/schema/system";
 import { roles } from "@/db/schema/access";
-import { vendors } from "@/db/schema/master";
+import { vendors, projectUsers } from "@/db/schema/master";
 import { getCurrentUser, hasPermission } from "@/server/permissions";
 import { eq, and, ne, desc, or } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
@@ -126,6 +126,14 @@ export async function getUserProfileData(targetUserId: string) {
       .orderBy(userTable.name)
   ]);
 
+  // Query assigned project IDs for this user
+  const assignedProjects = await db
+    .select({ projectId: projectUsers.projectId })
+    .from(projectUsers)
+    .where(eq(projectUsers.userId, targetUserId));
+  
+  const assignedProjectIds = assignedProjects.map(ap => ap.projectId);
+
   return {
     user: userDetails[0],
     profile: profile[0] || null,
@@ -133,6 +141,7 @@ export async function getUserProfileData(targetUserId: string) {
     vendor: vendor[0] || null,
     auditLogs: targetAuditLogs,
     usersList: internalUsersList,
+    assignedProjectIds,
   };
 }
 

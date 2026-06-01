@@ -14,6 +14,8 @@ export const projects = pgTable("projects", {
   status: text("status").default("active").notNull().$type<"active" | "inactive" | "completed">(), // 'active', 'inactive', 'completed'
   startDate: timestamp("start_date", { mode: "date" }),
   targetEndDate: timestamp("target_end_date", { mode: "date" }),
+  publicEnabled: boolean("public_enabled").default(false).notNull(),
+  isFeaturedPublic: boolean("is_featured_public").default(false).notNull(),
   createdBy: text("created_by").references(() => user.id).notNull(),
   createdAt: defaultCreatedAt(),
   updatedAt: defaultUpdatedAt(),
@@ -37,6 +39,7 @@ export const siteplans = pgTable("siteplans", {
   height: integer("height"),
   version: integer("version").default(1).notNull(),
   isActive: boolean("is_active").default(true).notNull(),
+  publicEnabled: boolean("public_enabled").default(false).notNull(),
   createdAt: defaultCreatedAt(),
 });
 

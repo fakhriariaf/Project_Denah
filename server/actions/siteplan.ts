@@ -3,7 +3,7 @@
 import { db } from "@/db";
 import { siteplans, siteplanShapes, units } from "@/db/schema/master";
 import { siteplanSchema, siteplanShapeSchema } from "../validators/siteplan";
-import { requireRole } from "../permissions";
+import { requireRole, requireAnyRole } from "../permissions";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
@@ -124,7 +124,7 @@ export async function saveMultipleShapes(data: unknown) {
 }
 
 export async function updateShape(shapeId: string, data: unknown) {
-  await requireRole("Super Admin");
+  await requireAnyRole(["Super Admin", "Admin Kantor"]);
 
   const parsed = siteplanShapeSchema.partial().parse(data);
 
@@ -164,5 +164,16 @@ export async function deleteSiteplan(siteplanId: string) {
 
   revalidatePath(`/siteplan/${siteplan.projectId}`);
   revalidatePath("/siteplan");
+  return { success: true };
+}
+
+export async function updateSiteplanPublicStatus(siteplanId: string, publicEnabled: boolean) {
+  await requireAnyRole(["Super Admin", "Admin Kantor"]);
+
+  await db.update(siteplans)
+    .set({ publicEnabled })
+    .where(eq(siteplans.id, siteplanId));
+
+  revalidatePath(`/siteplan`);
   return { success: true };
 }

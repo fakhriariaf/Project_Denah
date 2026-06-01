@@ -88,9 +88,9 @@ export async function getExecutiveOverviewData() {
   const spkMap: Record<string, number> = {};
   for (const row of spkStatusRows) spkMap[row.status] = row.cnt;
   const totalSpks = Object.values(spkMap).reduce((a, b) => a + b, 0);
-  const activeSpks = spkMap["active"] ?? 0;
+  const activeSpks = (spkMap["active"] ?? 0) + (spkMap["proses_konstruksi"] ?? 0);
   const overdueSpks = spkMap["overdue"] ?? 0;
-  const completedSpks = spkMap["completed"] ?? 0;
+  const completedSpks = (spkMap["completed"] ?? 0) + (spkMap["selesai_konstruksi"] ?? 0);
 
   // 4. Pending approvals via SQL COUNT — no full-table fetch
   const [pendingTrxRow] = await db
@@ -344,7 +344,7 @@ export async function getProductionReportsData(projectId?: string, status?: stri
     conditions.push(eq(spks.projectId, projectId));
   }
   if (status) {
-    conditions.push(eq(spks.status, status as "draft" | "active" | "completed" | "overdue" | "cancelled"));
+    conditions.push(eq(spks.status, status as any));
   }
 
   const query = db
@@ -373,7 +373,7 @@ export async function getProductionReportsData(projectId?: string, status?: stri
     progressPct: r.spk.progressPct,
     startDate: r.spk.startDate.toLocaleDateString("id-ID"),
     targetEndDate: r.spk.targetEndDate.toLocaleDateString("id-ID"),
-    status: r.spk.status === "draft" ? "Draft" : r.spk.status === "active" ? "Aktif" : r.spk.status === "completed" ? "Selesai" : r.spk.status === "overdue" ? "Overdue / Terlambat" : "Batal",
+    status: r.spk.status === "draft" ? "Draft" : r.spk.status === "active" ? "Aktif" : r.spk.status === "proses_konstruksi" ? "Proses Konstruksi" : r.spk.status === "selesai_konstruksi" || r.spk.status === "completed" ? "Selesai Konstruksi" : r.spk.status === "overdue" ? "Overdue / Terlambat" : "Batal",
   }));
 }
 
@@ -555,8 +555,8 @@ export async function getVendorDashboardData() {
       let statusCode = "not_submitted";
       
       if (attachment) {
-        if (vs.unit.status === "available" || vs.spk.status === "completed") {
-          statusText = "Approved (Ready Stock)";
+        if (vs.unit.status === "available" || vs.spk.status === "completed" || vs.unit.isReadyStock) {
+          statusText = vs.unit.currentCustomerId ? "Approved" : "Approved (Ready Stock)";
           statusCode = "approved";
         } else {
           statusText = "Menunggu Approval";
@@ -711,11 +711,13 @@ export async function getFieldSupervisorDashboardData() {
         projectName: projects.name,
         workItemName: workItems.name,
         creatorName: userTable.name,
+        vendorName: vendors.name,
       })
       .from(spkProgressLogs)
       .innerJoin(spks, eq(spkProgressLogs.spkId, spks.id))
       .innerJoin(units, eq(spks.unitId, units.id))
       .innerJoin(projects, eq(spks.projectId, projects.id))
+      .leftJoin(vendors, eq(spks.vendorId, vendors.id))
       .leftJoin(workItems, eq(spkProgressLogs.workItemId, workItems.id))
       .leftJoin(userTable, eq(spkProgressLogs.createdBy, userTable.id))
       .where(inArray(spkProgressLogs.spkId, spkIds))
@@ -775,8 +777,8 @@ export async function getFieldSupervisorDashboardData() {
       let statusCode = "not_submitted";
       
       if (attachment) {
-        if (vs.unit.status === "available" || vs.spk.status === "completed") {
-          statusText = "Approved (Ready Stock)";
+        if (vs.unit.status === "available" || vs.spk.status === "completed" || vs.unit.isReadyStock) {
+          statusText = vs.unit.currentCustomerId ? "Approved" : "Approved (Ready Stock)";
           statusCode = "approved";
         } else {
           statusText = "Menunggu Approval";
@@ -797,6 +799,7 @@ export async function getFieldSupervisorDashboardData() {
         attachmentUrl: attachment?.fileUrl || null,
         attachmentName: attachment?.fileName || null,
         uploadedAt: attachment?.createdAt || null,
+        currentCustomerId: vs.unit.currentCustomerId,
       };
     });
 
@@ -888,6 +891,7 @@ export async function getFieldSupervisorDashboardData() {
       progressDate: rl.log.progressDate,
       notes: rl.log.notes,
       creatorName: rl.creatorName || "Staff",
+      vendorName: rl.vendorName || "Kontraktor",
     })),
     vendorComplaints: vendorComplaints.map(ac => ({
       id: ac.complaint.id,

@@ -16,8 +16,15 @@ import {
   MapPin,
   Calendar,
   Layers,
-  ChevronRight
+  ChevronRight,
+  ClipboardList,
+  TrendingUp,
+  Camera,
+  MessageSquare,
+  HardHat,
+  XCircle
 } from "lucide-react";
+import Image from "next/image";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -34,6 +41,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Slider } from "@/components/ui/slider";
+import { 
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger
+} from "@/components/ui/tabs";
 import { 
   inputProgress, 
   uploadProgressPhotoAttachment, 
@@ -42,6 +56,16 @@ import {
   getSpkDetails 
 } from "@/server/actions/production";
 import { useRouter } from "next/navigation";
+
+const SPK_STATUS_LABELS: Record<string, string> = {
+  active: "Aktif",
+  proses_konstruksi: "Proses Konstruksi",
+  selesai_konstruksi: "Selesai Konstruksi",
+  overdue: "Terlambat",
+  completed: "Selesai",
+  cancelled: "Batal",
+  draft: "Draft",
+};
 
 interface VendorDashboardShellProps {
   data: {
@@ -134,7 +158,9 @@ export function VendorDashboardShell({ data, userName }: VendorDashboardShellPro
   const [progPctAdded, setProgPctAdded] = useState(5);
   const [progDate, setProgDate] = useState(new Date().toISOString().split("T")[0]);
   const [progNotes, setProgNotes] = useState("");
-  const [progFile, setProgFile] = useState<File | null>(null);
+  const [progFiles, setProgFiles] = useState<File[]>([]);
+  const [progUploadedPhotos, setProgUploadedPhotos] = useState<string[]>([]);
+  const [progLogs, setProgLogs] = useState<any[]>([]);
   const [uploadingProgressPhoto, setUploadingProgressPhoto] = useState(false);
 
   // Form States - Complaint
@@ -152,6 +178,7 @@ export function VendorDashboardShell({ data, userName }: VendorDashboardShellPro
   useEffect(() => {
     if (!progSpkId) {
       setProgWorkItems([]);
+      setProgLogs([]);
       return;
     }
 
@@ -160,14 +187,24 @@ export function VendorDashboardShell({ data, userName }: VendorDashboardShellPro
       setErrorMsg(null);
       try {
         const details = await getSpkDetails(progSpkId);
-        if (details && details.weights) {
-          // weights structure is { weight: spkWorkItemWeights, workItem: workItems }
-          setProgWorkItems(details.weights.map((w: any) => ({
-            id: w.workItem.id,
-            name: w.workItem.name,
-            code: w.workItem.code,
-            weight: w.weight.weightPct
-          })));
+        if (details) {
+          setProgLogs(details.logs || []);
+          if (details.weights) {
+            // weights structure is { weight: spkWorkItemWeights, workItem: workItems }
+            setProgWorkItems(details.weights.map((w: any) => {
+              const totalProgress = (details.logs || [])
+                .filter((l: any) => l.log.workItemId === w.weight.workItemId)
+                .reduce((sum: number, l: any) => sum + l.log.percentageAdded, 0);
+
+              return {
+                id: w.workItem.id,
+                name: w.workItem.name,
+                code: w.workItem.code,
+                weight: w.weight.weightPct,
+                currentProgress: Math.min(100, totalProgress)
+              };
+            }));
+          }
         }
       } catch (err: any) {
         setErrorMsg("Gagal memuat item pekerjaan untuk SPK ini.");
@@ -202,56 +239,66 @@ export function VendorDashboardShell({ data, userName }: VendorDashboardShellPro
     setSubmitting(true);
     setErrorMsg(null);
     setSuccessMsg(null);
-
+ 
     try {
       let photoAttachmentId: string | null = null;
-      if (progFile) {
+      const photoAttachmentIds: string[] = [];
+      if (progFiles.length > 0) {
         setUploadingProgressPhoto(true);
-        const formData = new FormData();
-        formData.append("file", progFile);
-        
-        const uploadRes = await fetch("/api/upload", {
-          method: "POST",
-          body: formData,
-        });
-
-        if (!uploadRes.ok) throw new Error("Gagal mengunggah foto progress.");
-        const uploadData = await uploadRes.json();
-        
-        // Save attachment
-        const attRes = await uploadProgressPhotoAttachment(progSpkId, {
-          fileName: progFile.name,
-          fileUrl: uploadData.url,
-          mimeType: progFile.type,
-          fileSize: progFile.size
-        });
-        photoAttachmentId = attRes.attachmentId;
+        for (const file of progFiles) {
+          const formData = new FormData();
+          formData.append("file", file);
+          
+          const uploadRes = await fetch("/api/upload", {
+            method: "POST",
+            body: formData,
+          });
+ 
+          if (!uploadRes.ok) throw new Error("Gagal mengunggah foto progress.");
+          const uploadData = await uploadRes.json();
+          
+          // Save attachment
+          const attRes = await uploadProgressPhotoAttachment(progSpkId, {
+            fileName: file.name,
+            fileUrl: uploadData.url,
+            mimeType: file.type,
+            fileSize: file.size
+          });
+          if (attRes.success) {
+            photoAttachmentIds.push(attRes.attachmentId);
+          }
+        }
+        if (photoAttachmentIds.length > 0) {
+          photoAttachmentId = photoAttachmentIds[0];
+        }
         setUploadingProgressPhoto(false);
       }
-
+ 
       await inputProgress({
         spkId: progSpkId,
         workItemId: progWorkItemId,
         percentageAdded: progPctAdded,
         progressDate: new Date(progDate),
         photoAttachmentId,
+        photoAttachmentIds: photoAttachmentIds.length > 0 ? photoAttachmentIds : null,
         notes: progNotes || null
       });
-
+ 
       setSuccessMsg("Progress pekerjaan berhasil diperbarui!");
       // Reset form
       setProgSpkId("");
       setProgWorkItemId("");
       setProgPctAdded(5);
       setProgNotes("");
-      setProgFile(null);
+      setProgFiles([]);
+      setProgUploadedPhotos([]);
       
       setTimeout(() => {
         setActiveDialog(null);
         setSuccessMsg(null);
         router.refresh();
       }, 1500);
-
+ 
     } catch (err: any) {
       setErrorMsg(err.message || "Gagal menyimpan progress pekerjaan.");
       setUploadingProgressPhoto(false);
@@ -356,7 +403,11 @@ export function VendorDashboardShell({ data, userName }: VendorDashboardShellPro
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "active":
-        return <Badge className="bg-[#8FAF9A] text-white">Aktif</Badge>;
+        return <Badge className="bg-blue-500 text-white">Aktif</Badge>;
+      case "proses_konstruksi":
+        return <Badge className="bg-purple-500 text-white">Proses Konstruksi</Badge>;
+      case "selesai_konstruksi":
+        return <Badge className="bg-[#4F6F52] text-white">Selesai Konstruksi</Badge>;
       case "overdue":
         return <Badge className="bg-[#C87A7A] text-white">Terlambat</Badge>;
       case "completed":
@@ -368,8 +419,8 @@ export function VendorDashboardShell({ data, userName }: VendorDashboardShellPro
     }
   };
 
-  const activeSpksList = spks.filter(s => s.status === "active" || s.status === "overdue");
-  const overdueSpksList = spks.filter(s => s.status === "overdue" || (s.status === "active" && new Date(s.targetEndDate) < new Date()));
+  const activeSpksList = spks.filter(s => s.status === "proses_konstruksi" || s.status === "overdue");
+  const overdueSpksList = spks.filter(s => s.status === "overdue" || (s.status === "proses_konstruksi" && new Date(s.targetEndDate) < new Date()));
   
   // Need progress update list (no update in last 7 days)
   const spkIdsWithRecentLogs = new Set(recentLogs.map(l => l.spkNumber));
@@ -733,155 +784,464 @@ export function VendorDashboardShell({ data, userName }: VendorDashboardShellPro
       {/* ============================================================== */}
 
       {/* Modal 1: Update Progress */}
-      <Dialog open={activeDialog === "progress"} onOpenChange={(open) => !open && setActiveDialog(null)}>
-        <DialogContent className="w-[95vw] sm:max-w-lg rounded-3xl bg-white border border-[#D6DED2] p-0 overflow-hidden font-sans">
+      <Dialog open={activeDialog === "progress"} onOpenChange={(open) => {
+        if (!open) {
+          setActiveDialog(null);
+          setProgUploadedPhotos([]);
+          setProgFiles([]);
+        }
+      }}>
+        <DialogContent className="w-[95vw] sm:max-w-xl rounded-3xl bg-white border border-[#D6DED2] shadow-[0_8px_30px_rgb(143,175,154,0.15)] p-0 overflow-hidden font-sans">
           <div className="bg-gradient-to-r from-[#DDE8D8]/70 via-white/80 to-transparent p-6 border-b border-[#D6DED2]">
             <DialogHeader>
-              <DialogTitle className="text-[#2C3E2D] font-black tracking-tight text-lg">Input Progress Konstruksi</DialogTitle>
+              <DialogTitle className="text-[#2C3E2D] font-black tracking-tight text-lg flex items-center gap-2">
+                <HardHat className="h-5 w-5 text-[#8FAF9A]" />
+                Input Progress Konstruksi
+              </DialogTitle>
               <DialogDescription className="text-xs text-[#66736A] mt-1">Laporkan progres harian pekerjaan fisik lapangan.</DialogDescription>
             </DialogHeader>
           </div>
-          <form onSubmit={handleProgressSubmit} className="p-6 space-y-4">
-              {errorMsg && (
-                <div className="p-3 bg-rose-50 text-rose-700 border border-rose-100 rounded-xl flex items-center gap-2 text-xs font-medium">
-                  <AlertCircle className="w-4 h-4 shrink-0" /> {errorMsg}
-                </div>
-              )}
-              {successMsg && (
-                <div className="p-3 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-xl flex items-center gap-2 text-xs font-medium">
-                  <CheckCircle className="w-4 h-4 shrink-0" /> {successMsg}
-                </div>
-              )}
 
-              <div className="space-y-1.5">
-                <Label htmlFor="progSpkId">Pilih SPK Pekerjaan</Label>
-                <Select value={progSpkId} onValueChange={(val) => setProgSpkId(val || "")} disabled={submitting}>
-                  <SelectTrigger id="progSpkId" className="w-full! h-10 rounded-xl border-[#DDE8D8] text-xs bg-white flex items-center justify-between">
-                    <SelectValue placeholder="Pilih SPK aktif...">
-                      {progSpkId ? (() => {
-                        const selectedSpk = spks.find(s => s.id === progSpkId);
-                        return selectedSpk ? `${selectedSpk.spkNumber} - Kav. ${selectedSpk.unitCode} (${selectedSpk.progressPct}%)` : progSpkId;
-                      })() : undefined}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent className="bg-white/95 border-[#DDE8D8]">
-                    {activeSpksList.map((spk) => (
-                      <SelectItem key={spk.id} value={spk.id} className="text-xs">
-                        {spk.spkNumber} - Kav. {spk.unitCode} ({spk.progressPct}%)
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+          <Tabs defaultValue="form" className="w-full">
+            <div className="px-6 pt-3 border-b border-border bg-[#F7F8F3]/50">
+              <TabsList className="grid grid-cols-2 w-full h-9 bg-muted/60 p-0.5 rounded-lg border border-[#D6DED2]">
+                <TabsTrigger value="form" className="text-xs font-semibold rounded-md py-1.5 data-[state=active]:bg-white data-[state=active]:text-primary data-[state=active]:shadow-sm">
+                  Catat Progres
+                </TabsTrigger>
+                <TabsTrigger value="history" className="text-xs font-semibold rounded-md py-1.5 data-[state=active]:bg-white data-[state=active]:text-primary data-[state=active]:shadow-sm">
+                  Riwayat & Galeri Foto
+                </TabsTrigger>
+              </TabsList>
+            </div>
+
+            {/* TAB 1: FORM */}
+            <TabsContent value="form" className="m-0 focus-visible:outline-none">
+              {(() => {
+                const currentSpk = spks.find(s => s.id === progSpkId);
+                return (
+                  <>
+                    {currentSpk && (
+                      <div className="mx-6 mt-4 p-4 bg-gradient-to-r from-[#DDE8D8]/60 via-white/80 to-[#DDE8D8]/30 border border-[#D6DED2] rounded-2xl flex items-center justify-between text-xs shadow-sm animate-scale-in border-l-4 border-l-[#4F6F52]">
+                        <div className="space-y-1">
+                          <p className="text-[10px] font-bold text-[#66736A] uppercase tracking-wider">Nomor SPK Kerja</p>
+                          <p className="font-mono font-bold text-[#4F6F52] text-sm">{currentSpk.spkNumber}</p>
+                        </div>
+                        <div className="text-right space-y-1">
+                          <p className="text-[10px] font-bold text-[#66736A] uppercase tracking-wider">Unit / Kavling</p>
+                          <p className="font-black text-[#243028] text-sm">{currentSpk.projectName} &bull; Kav. {currentSpk.unitCode}</p>
+                          <p className="text-[10px] text-muted-foreground font-medium">Status SPK: <span className="capitalize font-bold text-amber-600">{SPK_STATUS_LABELS[currentSpk.status] || currentSpk.status.replace("_", " ")}</span></p>
+                        </div>
+                      </div>
+                    )}
+
+                    <form onSubmit={handleProgressSubmit} className="p-6 space-y-5 pt-4 max-h-[60vh] overflow-y-auto">
+                      {errorMsg && (
+                        <div className="p-3 bg-rose-50 text-rose-700 border border-rose-100 rounded-xl flex items-center gap-2 text-xs font-medium">
+                          <AlertCircle className="w-4 h-4 shrink-0" /> {errorMsg}
+                        </div>
+                      )}
+                      {successMsg && (
+                        <div className="p-3 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-xl flex items-center gap-2 text-xs font-medium">
+                          <CheckCircle className="w-4 h-4 shrink-0" /> {successMsg}
+                        </div>
+                      )}
+
+                      <div className="space-y-1.5">
+                        <Label htmlFor="progSpkId" className="font-bold text-[#243028] text-xs">Pilih SPK Pekerjaan</Label>
+                        <Select value={progSpkId} onValueChange={(val) => { setProgSpkId(val || ""); setProgWorkItemId(""); }} disabled={submitting}>
+                          <SelectTrigger id="progSpkId" className="w-full h-11 border-[#D6DED2] focus:ring-2 focus:ring-[#4F6F52]/20 rounded-xl bg-white/80 backdrop-blur-sm text-xs font-semibold">
+                            <SelectValue placeholder="Pilih SPK aktif...">
+                              {progSpkId ? (() => {
+                                const selectedSpk = spks.find(s => s.id === progSpkId);
+                                return selectedSpk ? `${selectedSpk.spkNumber} - Kav. ${selectedSpk.unitCode} (${selectedSpk.progressPct}%)` : progSpkId;
+                              })() : undefined}
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent className="bg-white/95 border-[#DDE8D8] rounded-xl">
+                            {activeSpksList.map((spk) => (
+                              <SelectItem key={spk.id} value={spk.id} className="text-xs font-semibold">
+                                {spk.spkNumber} - Kav. {spk.unitCode} ({spk.progressPct}%)
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {loadingSpkDetails ? (
+                        <div className="py-8 flex justify-center items-center gap-2 text-xs text-[#5C6E5D]">
+                          <Loader2 className="w-4 h-4 animate-spin text-[#4F6F52]" /> Memuat item pekerjaan...
+                        </div>
+                      ) : (
+                        progSpkId && (
+                          <div className="space-y-4">
+                            <div className="space-y-1.5">
+                              <Label htmlFor="progWorkItemId" className="font-bold text-[#243028] text-xs flex items-center gap-1.5">
+                                <ClipboardList className="h-4 w-4 text-[#8FAF9A]" />
+                                Item Pekerjaan
+                              </Label>
+                              <Select value={progWorkItemId} onValueChange={(val) => setProgWorkItemId(val || "")} disabled={submitting}>
+                                <SelectTrigger id="progWorkItemId" className="w-full h-11 border-[#D6DED2] focus:ring-2 focus:ring-[#4F6F52]/20 rounded-xl bg-white/80 backdrop-blur-sm text-xs font-semibold">
+                                  <SelectValue placeholder="Pilih item pekerjaan...">
+                                    {progWorkItemId ? (() => {
+                                      const selectedItem = progWorkItems.find(item => item.id === progWorkItemId);
+                                      return selectedItem ? `${selectedItem.name} — Bobot ${selectedItem.weight}% (Progres: ${selectedItem.currentProgress}%)` : progWorkItemId;
+                                    })() : undefined}
+                                  </SelectValue>
+                                </SelectTrigger>
+                                <SelectContent className="bg-white/95 border-[#DDE8D8] rounded-xl">
+                                  {progWorkItems.map((item) => (
+                                    <SelectItem key={item.id} value={item.id} className="text-xs font-semibold">
+                                      {item.name} &mdash; Bobot {item.weight}% (Progres: {item.currentProgress}%)
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+
+                            {progWorkItemId && (() => {
+                              const selectedComponent = progWorkItems.find(c => c.id === progWorkItemId);
+                              const currentProgressPct = selectedComponent ? selectedComponent.currentProgress : 0;
+                              const componentWeightPct = selectedComponent ? selectedComponent.weight : 0;
+                              const newTotalProgress = Math.min(100, currentProgressPct + (progPctAdded || 0));
+                              const isOverLimit = (currentProgressPct + (progPctAdded || 0)) > 100;
+
+                              return (
+                                <div className="space-y-4">
+                                  {/* Dynamic Cumulative Progress Visual Indicator */}
+                                  <div className="p-4 bg-gradient-to-br from-[#8FAF9A]/5 via-white/40 to-[#8FAF9A]/10 border border-[#8FAF9A]/20 rounded-2xl space-y-3 text-xs shadow-sm animate-scale-in">
+                                    <div className="flex justify-between items-center font-bold text-foreground">
+                                      <span className="text-[#66736A] font-bold">Status Kemajuan Fisik:</span>
+                                      <span className={`font-black text-xs px-2.5 py-0.5 rounded-full ${
+                                        isOverLimit 
+                                          ? "bg-rose-50 text-rose-600 border border-rose-200 animate-pulse" 
+                                          : "bg-[#DDE8D8] text-[#4F6F52] border border-[#8FAF9A]/25"
+                                      }`}>
+                                        {isOverLimit 
+                                          ? `⚠️ Melebihi Batas! (${currentProgressPct}% + ${progPctAdded}% = ${currentProgressPct + progPctAdded}%)` 
+                                          : `${currentProgressPct}% → ${newTotalProgress}%`}
+                                      </span>
+                                    </div>
+                                    
+                                    {/* Premium Segmented/Stacked Progress Bar */}
+                                    <div className="relative w-full h-3 bg-slate-100 rounded-full overflow-hidden flex border border-[#D6DED2]/40 shadow-inner">
+                                      {/* Current Progress Segment */}
+                                      <div 
+                                        className="h-full bg-gradient-to-r from-[#4F6F52] to-[#608764] transition-all duration-500 rounded-l-full"
+                                        style={{ width: `${currentProgressPct}%` }}
+                                      />
+                                      {/* New Added Progress Segment */}
+                                      <div 
+                                        className={`h-full transition-all duration-500 ${isOverLimit ? "bg-red-400 animate-pulse" : "bg-gradient-to-r from-[#8FAF9A] to-[#A3C1AD]"} ${currentProgressPct === 0 ? "rounded-l-full" : ""}`}
+                                        style={{ width: `${isOverLimit ? 100 - currentProgressPct : progPctAdded}%` }}
+                                      />
+                                    </div>
+                                    
+                                    <div className="flex justify-between text-[10px] text-slate-500 font-bold tracking-wide uppercase">
+                                      <span>Progres Terakhir: {currentProgressPct}%</span>
+                                      <span>Bobot Relatif: {componentWeightPct}%</span>
+                                    </div>
+                                  </div>
+
+                                  {/* Range Slider & Presets Card */}
+                                  {currentProgressPct === 100 ? (
+                                    <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-start gap-3 text-xs text-emerald-800 shadow-sm animate-scale-in">
+                                      <CheckCircle className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
+                                      <div className="space-y-1">
+                                        <p className="font-bold">Item Pekerjaan Selesai (100%)</p>
+                                        <p className="text-emerald-700/90 font-medium">Komponen pekerjaan ini telah mencapai progress fisik 100% dan telah selesai. Tidak memerlukan tambahan laporan progress lapangan.</p>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="space-y-4">
+                                      <div className="p-4 bg-white/80 backdrop-blur-sm border border-[#D6DED2] rounded-2xl shadow-sm space-y-3.5">
+                                        <div className="flex items-center justify-between text-xs font-bold text-[#243028]">
+                                          <span className="flex items-center gap-1.5"><TrendingUp className="h-4 w-4 text-[#8FAF9A]" /> Tambahan Kemajuan Fisik</span>
+                                          <div className="flex items-baseline gap-1.5">
+                                            {componentWeightPct > 0 && (
+                                              <span className="text-[10px] text-[#66736A] font-semibold">
+                                                (Dampak Unit: +{((progPctAdded || 0) * componentWeightPct / 100).toFixed(1)}%)
+                                              </span>
+                                            )}
+                                            <span className="text-[#4F6F52] font-black text-base tracking-tight">+{progPctAdded}%</span>
+                                          </div>
+                                        </div>
+                                        <Slider
+                                          min={1}
+                                          max={Math.max(1, 100 - currentProgressPct)}
+                                          step={1}
+                                          value={[progPctAdded]}
+                                          onValueChange={(val: number[]) => setProgPctAdded(val[0])}
+                                          className="py-2 cursor-pointer"
+                                        />
+                                        
+                                        {/* Visual Preset Tap-Friendly Buttons */}
+                                        <div className="flex items-center justify-between gap-2 pt-1 flex-wrap">
+                                          <div className="flex gap-1.5">
+                                            {[10, 25, 50].map((preset) => {
+                                              const disabled = preset > (100 - currentProgressPct);
+                                              return (
+                                                <Button
+                                                  key={preset}
+                                                  type="button"
+                                                  variant="outline"
+                                                  disabled={disabled}
+                                                  className={`text-[10px] font-bold px-3 py-1 h-7 rounded-full transition-all duration-200 hover:scale-105 active:scale-95 disabled:opacity-30 disabled:pointer-events-none ${
+                                                    progPctAdded === preset
+                                                      ? "bg-[#4F6F52] text-white border-[#4F6F52] shadow-sm"
+                                                      : "border-[#D6DED2] text-[#4F6F52] hover:bg-[#8FAF9A]/10 hover:border-[#8FAF9A]/40 bg-white"
+                                                  }`}
+                                                  onClick={() => setProgPctAdded(preset)}
+                                                >
+                                                  +{preset}%
+                                                </Button>
+                                              );
+                                            })}
+                                            <Button
+                                              type="button"
+                                              variant="outline"
+                                              className={`text-[10px] font-black px-3.5 py-1 h-7 rounded-full transition-all duration-200 hover:scale-105 active:scale-95 ${
+                                                progPctAdded === Math.max(1, 100 - currentProgressPct)
+                                                  ? "bg-[#4F6F52] text-white border-[#4F6F52] shadow-sm"
+                                                  : "border-[#4F6F52]/50 text-[#4F6F52] hover:bg-[#4F6F52]/10 bg-white"
+                                              }`}
+                                              onClick={() => setProgPctAdded(Math.max(1, 100 - currentProgressPct))}
+                                            >
+                                              Set 100%
+                                            </Button>
+                                          </div>
+                                          
+                                          <Button
+                                            type="button"
+                                            variant="outline"
+                                            className="text-[10px] font-bold px-3 py-1 h-7 rounded-full border-rose-200 text-rose-600 hover:bg-rose-50 hover:border-rose-400 bg-white transition-all duration-200 hover:scale-105 active:scale-95 ml-auto"
+                                            onClick={() => setProgPctAdded(1)}
+                                          >
+                                            Reset (1%)
+                                          </Button>
+                                        </div>
+                                      </div>
+
+                                      {/* Tanggal Laporan */}
+                                      <div className="space-y-1.5">
+                                        <Label htmlFor="progDate" className="font-bold text-[#243028] text-xs flex items-center gap-1.5">
+                                          <Calendar className="h-4 w-4 text-[#8FAF9A]" />
+                                          Tanggal Laporan
+                                        </Label>
+                                        <Input
+                                          id="progDate"
+                                          type="date"
+                                          required
+                                          className="border-[#D6DED2] focus-visible:ring-2 focus-visible:ring-[#4F6F52]/20 h-10 text-xs rounded-xl bg-white/80 font-medium"
+                                          value={progDate}
+                                          onChange={(e) => setProgDate(e.target.value)}
+                                          disabled={submitting}
+                                        />
+                                      </div>
+
+                                      {/* Photo Upload Dropzone with Instant Preview */}
+                                      <div className="space-y-1.5">
+                                        <label className="font-bold text-[#243028] text-xs flex items-center gap-1.5">
+                                          <Camera className="h-4 w-4 text-[#8FAF9A]" />
+                                          Foto Dokumentasi Progres Lapangan
+                                        </label>
+                                        <div 
+                                          onClick={() => document.getElementById('prog-photo-upload')?.click()}
+                                          className="border-2 border-dashed border-[#8FAF9A]/40 hover:border-[#4F6F52]/60 bg-[#F7F8F3]/40 hover:bg-[#8FAF9A]/5 rounded-2xl p-6 text-center cursor-pointer transition-all duration-200 group"
+                                        >
+                                          <input
+                                            id="prog-photo-upload"
+                                            type="file"
+                                            accept="image/*"
+                                            multiple
+                                            className="hidden"
+                                            onChange={(e) => {
+                                              if (e.target.files) {
+                                                const filesArray = Array.from(e.target.files);
+                                                setProgFiles(prev => [...prev, ...filesArray]);
+                                                const newUrls = filesArray.map(file => URL.createObjectURL(file));
+                                                setProgUploadedPhotos(prev => [...prev, ...newUrls]);
+                                              }
+                                            }}
+                                            disabled={submitting}
+                                          />
+                                          <div className="flex flex-col items-center justify-center space-y-2">
+                                            <div className="p-2.5 bg-white rounded-full shadow-md text-[#4F6F52] group-hover:scale-110 transition-transform duration-300 border border-[#D6DED2]">
+                                              <Plus className="h-4 w-4" />
+                                            </div>
+                                            <span className="text-xs font-bold text-[#243028]">Klik atau seret foto ke sini untuk mengunggah</span>
+                                            <span className="text-[10px] text-slate-500 font-medium">Maksimal 4 foto, format JPG/PNG/WebP, max 5MB</span>
+                                          </div>
+                                        </div>
+
+                                        {progUploadedPhotos.length > 0 && (
+                                          <div className="grid grid-cols-4 gap-3.5 pt-2">
+                                            {progUploadedPhotos.map((photo, index) => (
+                                              <div key={index} className="relative group aspect-square rounded-xl overflow-hidden border border-[#8FAF9A]/30 shadow-sm animate-scale-in">
+                                                <Image src={photo} alt={`Preview ${index}`} fill className="object-cover" />
+                                                <button
+                                                  type="button"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setProgFiles(prev => prev.filter((_, i) => i !== index));
+                                                    setProgUploadedPhotos(prev => prev.filter((_, i) => i !== index));
+                                                  }}
+                                                  className="absolute top-1 right-1 p-1 bg-black/60 hover:bg-rose-600 rounded-full text-white transition-all duration-200 hover:scale-110 shadow-sm"
+                                                >
+                                                  <XCircle className="h-4 w-4" />
+                                                </button>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+
+                                      {/* Catatan Tambahan */}
+                                      <div className="space-y-1.5">
+                                        <Label htmlFor="progNotes" className="font-bold text-[#243028] text-xs flex items-center gap-1.5">
+                                          <MessageSquare className="h-4 w-4 text-[#8FAF9A]" />
+                                          Catatan Lapangan / Keterangan
+                                        </Label>
+                                        <Textarea
+                                          id="progNotes"
+                                          placeholder="Contoh: Pemasangan keramik lantai utama selesai dengan rapi..."
+                                          className="border-[#D6DED2] focus-visible:ring-2 focus-visible:ring-[#4F6F52]/20 text-xs rounded-xl min-h-[80px] bg-white/80"
+                                          value={progNotes}
+                                          onChange={(e) => setProgNotes(e.target.value)}
+                                          disabled={submitting}
+                                        />
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        )
+                      )}
+
+                      <DialogFooter className="pt-4 border-t border-[#D6DED2]/40 mt-4 gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setActiveDialog(null)}
+                          disabled={submitting}
+                          className="rounded-xl border-[#D6DED2] text-xs h-10 hover:bg-[#F7F8F3]/50 transition-premium cursor-pointer"
+                        >
+                          Batal
+                        </Button>
+                        <Button
+                          type="submit"
+                          disabled={submitting || !progSpkId || !progWorkItemId || loadingSpkDetails || !!(progWorkItemId && progWorkItems.find(c => c.id === progWorkItemId)?.currentProgress === 100)}
+                          className="bg-[#4F6F52] hover:bg-[#3D563F] text-white active:scale-95 shadow-[0_4px_14px_rgba(79,111,82,0.25)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 h-10 rounded-xl font-bold text-xs px-4 gap-2 cursor-pointer"
+                        >
+                          {submitting ? (
+                            <>
+                              <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                              {uploadingProgressPhoto ? "Mengunggah Foto..." : "Menyimpan..."}
+                            </>
+                          ) : (
+                            "Kirim Progress"
+                          )}
+                        </Button>
+                      </DialogFooter>
+                    </form>
+                  </>
+                );
+              })()}
+            </TabsContent>
+
+            {/* TAB 2: HISTORY */}
+            <TabsContent value="history" className="m-0 focus-visible:outline-none p-6 pt-4 max-h-[60vh] overflow-y-auto space-y-4">
+              <div className="space-y-1">
+                <h4 className="text-sm font-bold text-foreground">Dokumentasi Log Progres</h4>
+                <p className="text-xs text-muted-foreground">Riwayat progres pembangunan dan unggahan foto lapangan untuk unit ini.</p>
               </div>
 
-              {loadingSpkDetails ? (
-                <div className="py-4 flex justify-center items-center gap-2 text-xs text-[#5C6E5D]">
-                  <Loader2 className="w-4 h-4 animate-spin text-[#4F6F52]" /> Memuat item pekerjaan...
-                </div>
+              {progLogs && progLogs.length > 0 ? (
+                (() => {
+                  const filteredLogs = progWorkItemId 
+                    ? progLogs.filter(l => l.log.workItemId === progWorkItemId)
+                    : progLogs;
+
+                  if (filteredLogs.length === 0) {
+                    return (
+                      <div className="text-center py-10 border border-dashed border-[#8FAF9A]/30 rounded-2xl text-xs text-muted-foreground">
+                        Belum ada riwayat progres tercatat untuk komponen pekerjaan yang dipilih.
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-3 pt-1">
+                      {filteredLogs.map((item: any) => {
+                        return (
+                          <div key={item.log.id} className="p-3.5 bg-[#8FAF9A]/5 border border-[#8FAF9A]/20 rounded-xl space-y-2 text-xs">
+                            <div className="flex justify-between items-center font-bold text-foreground">
+                              <span className="text-[#4F6F52]">{item.workItem?.name || "Komponen Pekerjaan"}</span>
+                              <Badge className="bg-[#DDE8D8] text-[#4F6F52] font-semibold border border-[#8FAF9A]/25 rounded-md hover:bg-[#DDE8D8]">
+                                +{item.log.percentageAdded}% &rarr; {item.log.currentTotalPct}%
+                              </Badge>
+                            </div>
+                            <div className="text-muted-foreground leading-relaxed">
+                              {item.log.notes ? `"${item.log.notes}"` : <span className="italic">Tidak ada catatan lapangan.</span>}
+                            </div>
+
+                            {/* Linked Progress Photos */}
+                            {((item.attachments && item.attachments.length > 0) || (item.attachment && item.attachment.fileUrl)) && (
+                              <div className="pt-1.5">
+                                <span className="text-[10px] font-bold text-[#66736A] uppercase tracking-wider block mb-1.5">Bukti Foto Fisik</span>
+                                <div className="flex flex-wrap gap-2">
+                                  {item.attachments && item.attachments.length > 0 ? (
+                                    item.attachments.map((att: any, idx: number) => (
+                                      <div key={att.id || idx} className="relative h-24 w-36 rounded-lg overflow-hidden border border-[#8FAF9A]/30 group shadow-sm bg-white cursor-zoom-in">
+                                        <a href={att.fileUrl} target="_blank" rel="noopener noreferrer">
+                                          <Image 
+                                            src={att.fileUrl} 
+                                            alt={`Bukti Progress ${idx + 1}`} 
+                                            fill 
+                                            className="object-cover group-hover:scale-105 transition-transform duration-200"
+                                          />
+                                          <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white text-[9px] font-bold">
+                                            Buka Foto {idx + 1}
+                                          </div>
+                                        </a>
+                                      </div>
+                                    ))
+                                  ) : (
+                                    <div className="relative h-24 w-36 rounded-lg overflow-hidden border border-[#8FAF9A]/30 group shadow-sm bg-white cursor-zoom-in">
+                                      <a href={item.attachment.fileUrl} target="_blank" rel="noopener noreferrer">
+                                        <Image 
+                                          src={item.attachment.fileUrl} 
+                                          alt="Bukti Progress" 
+                                          fill 
+                                          className="object-cover group-hover:scale-105 transition-transform duration-200"
+                                        />
+                                        <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white text-[9px] font-bold">
+                                          Buka Foto
+                                        </div>
+                                      </a>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
+                            <div className="text-[10px] text-muted-foreground pt-1 text-right font-medium">
+                              Dicatat tanggal: {new Date(item.log.progressDate).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()
               ) : (
-                progSpkId && (
-                  <div className="space-y-4">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="progWorkItemId">Item Pekerjaan</Label>
-                      <Select value={progWorkItemId} onValueChange={(val) => setProgWorkItemId(val || "")} disabled={submitting}>
-                        <SelectTrigger id="progWorkItemId" className="w-full! h-10 rounded-xl border-[#DDE8D8] text-xs bg-white flex items-center justify-between">
-                          <SelectValue placeholder="Pilih item pekerjaan...">
-                            {progWorkItemId ? (() => {
-                              const selectedItem = progWorkItems.find(item => item.id === progWorkItemId);
-                              return selectedItem ? `${selectedItem.name} (Bobot: ${selectedItem.weight}%)` : progWorkItemId;
-                            })() : undefined}
-                          </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent className="bg-white/95 border-[#DDE8D8]">
-                          {progWorkItems.map((item) => (
-                            <SelectItem key={item.id} value={item.id} className="text-xs">
-                              {item.name} (Bobot: {item.weight}%)
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-1.5">
-                        <Label htmlFor="progPctAdded">Persentase Tambahan</Label>
-                        <Input
-                          id="progPctAdded"
-                          type="number"
-                          min="1"
-                          max="100"
-                          value={progPctAdded}
-                          onChange={(e) => setProgPctAdded(parseInt(e.target.value) || 0)}
-                          disabled={submitting}
-                          className="h-10 rounded-xl border-[#DDE8D8] text-xs"
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label htmlFor="progDate">Tanggal Laporan</Label>
-                        <Input
-                          id="progDate"
-                          type="date"
-                          value={progDate}
-                          onChange={(e) => setProgDate(e.target.value)}
-                          disabled={submitting}
-                          className="h-10 rounded-xl border-[#DDE8D8] text-xs"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <Label htmlFor="progFile">Foto Lampiran Lapangan</Label>
-                      <Input
-                        id="progFile"
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => setProgFile(e.target.files?.[0] || null)}
-                        disabled={submitting}
-                        className="rounded-xl border-[#DDE8D8] text-xs bg-white file:mr-2 file:py-0 file:px-2 file:rounded-md file:border-0 file:text-[10px] file:font-bold file:bg-[#DDE8D8] file:text-[#4F6F52] file:cursor-pointer hover:file:bg-[#DDE8D8]/80 transition-all h-10 flex items-center pr-2"
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <Label htmlFor="progNotes">Catatan Tambahan</Label>
-                      <Textarea
-                        id="progNotes"
-                        placeholder="Detail progress pekerjaan di lapangan..."
-                        value={progNotes}
-                        onChange={(e) => setProgNotes(e.target.value)}
-                        disabled={submitting}
-                        className="rounded-xl border-[#DDE8D8] text-xs min-h-[60px]"
-                      />
-                    </div>
-                  </div>
-                )
+                <div className="text-center py-10 border border-dashed border-[#8FAF9A]/30 rounded-2xl text-xs text-muted-foreground">
+                  Belum ada log progres pembangunan tercatat untuk unit SPK ini.
+                </div>
               )}
-            
-            <DialogFooter className="pt-4 border-t border-[#D6DED2] gap-2 mt-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setActiveDialog(null)}
-                disabled={submitting}
-                className="rounded-xl border-[#D6DED2] text-xs h-10 hover:bg-[#F7F8F3]/50 transition-premium cursor-pointer"
-              >
-                Batal
-              </Button>
-              <Button
-                type="submit"
-                disabled={submitting || !progSpkId || !progWorkItemId || loadingSpkDetails}
-                className="bg-[#4F6F52] hover:bg-[#3D563F] text-white active:scale-95 shadow-[0_4px_14px_rgba(79,111,82,0.25)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 h-10 rounded-xl font-bold text-xs px-4 gap-2 cursor-pointer"
-              >
-                {submitting ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
-                    {uploadingProgressPhoto ? "Mengunggah Foto..." : "Menyimpan..."}
-                  </>
-                ) : (
-                  "Kirim Progress"
-                )}
-              </Button>
-            </DialogFooter>
-          </form>
+            </TabsContent>
+          </Tabs>
         </DialogContent>
       </Dialog>
 

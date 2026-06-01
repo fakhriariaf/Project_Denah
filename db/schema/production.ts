@@ -34,7 +34,7 @@ export const spks = pgTable("spks", {
   startDate: timestamp("start_date", { mode: "date" }).notNull(),
   targetEndDate: timestamp("target_end_date", { mode: "date" }).notNull(),
   actualEndDate: timestamp("actual_end_date", { mode: "date" }),
-  status: text("status").default("draft").notNull().$type<"draft" | "active" | "completed" | "overdue" | "cancelled">(), // 'draft', 'active', 'completed', 'overdue', 'cancelled'
+  status: text("status").default("active").notNull().$type<"draft" | "active" | "proses_konstruksi" | "selesai_konstruksi" | "completed" | "overdue" | "cancelled">(), // 'draft', 'active', 'proses_konstruksi', 'selesai_konstruksi', 'completed', 'overdue', 'cancelled'
   progressPct: integer("progress_pct").default(0).notNull(), // 0-100% total progress
   createdBy: text("created_by").references(() => user.id).notNull(),
   createdAt: defaultCreatedAt(),

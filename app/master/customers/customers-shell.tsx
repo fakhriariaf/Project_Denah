@@ -25,15 +25,18 @@ interface Customer {
   createdAt: Date | null;
   updatedAt: Date | null;
   unitCode?: string | null;
+  paymentScheme?: string | null;
+  originalStatus?: string | null;
 }
 
 const STATUS_MAP: Record<string, { label: string; className: string }> = {
-  prospect:    { label: "Prospek",     className: "bg-[#DCECF7] text-[#33627A] border-[#33627A]/20" },
-  booking:     { label: "Booking",     className: "bg-[#FFF2C2] text-[#8A6D1D] border-[#8A6D1D]/20" },
-  kpr_process: { label: "Proses KPR",  className: "bg-[#E9DDF7] text-[#5D4382] border-[#5D4382]/20" },
-  akad:        { label: "Akad",        className: "bg-[#DDE8D8] text-[#4F6F52] border-[#4F6F52]/20" },
-  buyer:       { label: "Pembeli",     className: "bg-[#D4EEE7] text-[#3F7568] border-[#3F7568]/20" },
-  cancelled:   { label: "Batal",       className: "bg-[#E7E9E7] text-[#5F6861] border-[#5F6861]/20" },
+  prospect:          { label: "Prospek",     className: "bg-[#DCECF7] text-[#33627A] border-[#33627A]/20" },
+  booking:           { label: "Booking",     className: "bg-[#FFF2C2] text-[#8A6D1D] border-[#8A6D1D]/20" },
+  kpr_process:       { label: "Proses KPR",  className: "bg-[#DCECF7] text-[#33627A] border-[#33627A]/20" },
+  akad:              { label: "Akad",        className: "bg-[#DDE8D8] text-[#4F6F52] border-[#4F6F52]/20" },
+  buyer:             { label: "Pembeli",     className: "bg-[#D4EEE7] text-[#3F7568] border-[#3F7568]/20" },
+  under_constructor: { label: "Pembangunan", className: "bg-[#E9DDF7] text-[#5D4382] border-[#5D4382]/20" },
+  cancelled:         { label: "Batal",       className: "bg-[#E7E9E7] text-[#5F6861] border-[#5F6861]/20" },
 };
 
 export function CustomersShell({
@@ -51,13 +54,36 @@ export function CustomersShell({
   const [copied, setCopied] = useState(false);
   const { t } = useI18n();
 
+  const getDynamicStatusLabel = (c: Customer) => {
+    const isKpr = c.paymentScheme === "kpr";
+    if (c.status === "under_constructor") {
+      return isKpr ? "Pembeli KPR - Unit Sedang Pembangunan" : "Pembeli - Unit Sedang Pembangunan";
+    }
+    if (c.status === "buyer") {
+      return isKpr ? "Pembeli KPR - Sukses" : "Pembeli - Sukses";
+    }
+    if (c.status === "akad") {
+      return isKpr ? "Pembeli KPR - Proses Akad" : "Pembeli - Akad";
+    }
+    if (c.status === "kpr_process") {
+      return "Proses KPR";
+    }
+    if (c.status === "booking") {
+      return "Booking";
+    }
+    return STATUS_MAP[c.status]?.label || c.status;
+  };
+
   const filteredCustomers = initialCustomers.filter((c) => {
     const matchQ =
       !searchQuery ||
       c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       c.phone.includes(searchQuery) ||
       (c.email ?? "").toLowerCase().includes(searchQuery.toLowerCase());
-    const matchStatus = !statusFilter || c.status === statusFilter;
+    const matchStatus =
+      !statusFilter ||
+      c.status === statusFilter ||
+      (statusFilter === "buyer" && c.status === "under_constructor");
     return matchQ && matchStatus;
   });
 
@@ -192,7 +218,7 @@ export function CustomersShell({
                             </TableCell>
                             <TableCell className="py-4">
                               <Badge variant="outline" className={`text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-full ${st?.className}`}>
-                                {t(`cust_form.status_${c.status}` as any) || st?.label || c.status}
+                                {getDynamicStatusLabel(c)}
                               </Badge>
                             </TableCell>
                           </TableRow>
@@ -223,7 +249,7 @@ export function CustomersShell({
                   <h3 className="text-lg font-bold tracking-tight text-white truncate mt-1">{selectedCustomer.name}</h3>
                   <div className="flex items-center gap-1.5 mt-1.5">
                     <Badge variant="outline" className={`border-white/30 text-white bg-white/15 px-2 py-0 rounded text-[9px] font-semibold uppercase tracking-wider`}>
-                      {STATUS_MAP[selectedCustomer.status]?.label || selectedCustomer.status}
+                      {getDynamicStatusLabel(selectedCustomer)}
                     </Badge>
                   </div>
                 </div>
@@ -332,6 +358,8 @@ export function CustomersShell({
                       <CustomerForm
                         key={selectedCustomer.id}
                         id={selectedCustomer.id}
+                        originalStatus={selectedCustomer.originalStatus}
+                        paymentScheme={selectedCustomer.paymentScheme}
                         initialData={{
                           name: selectedCustomer.name,
                           nik: selectedCustomer.nik || "",

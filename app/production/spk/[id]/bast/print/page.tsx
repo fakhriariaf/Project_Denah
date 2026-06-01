@@ -87,8 +87,8 @@ export default async function PrintBastPage({ params }: Props) {
   const supervisorName = supervisor?.name || spk.createdByName || "Pengawas Lapangan";
   
   // Enforce BAST can only be issued for completed SPKs (100% progress)
-  if (spk.status !== "completed") {
-    throw new Error("⚠️ Dokumen BAST (Berita Acara Serah Terima) hanya dapat diterbitkan untuk pembangunan yang sudah selesai 100% (Status: Completed).");
+  if (spk.status !== "completed" && spk.status !== "selesai_konstruksi") {
+    throw new Error("⚠️ Dokumen BAST (Berita Acara Serah Terima) hanya dapat diterbitkan untuk pembangunan yang sudah selesai 100% (Status: Selesai Konstruksi).");
   }
 
   // Get completed work items

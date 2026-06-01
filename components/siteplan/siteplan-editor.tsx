@@ -878,7 +878,11 @@ export function SiteplanEditor({
                 <div className="text-[10px] text-[#66736A] space-y-1 bg-[#F7F8F3] p-2.5 rounded-xl border border-[#D6DED2]/40">
                   <div className="flex justify-between">
                     <span>{t("siteplan_editor.poly_id")}</span>
-                    <span className="font-mono font-bold truncate max-w-[120px]">{selectedShape.id}</span>
+                    <span className="font-mono font-bold truncate max-w-[120px]">
+                      {selectedShape.id.startsWith("detected_")
+                        ? `Scan #${selectedShape.id.split("_").pop()}`
+                        : selectedShape.id.substring(0, 8).toUpperCase()}
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span>{t("siteplan_editor.linked_lot")}</span>

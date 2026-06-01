@@ -85,10 +85,13 @@ export default async function KprPipelinePage() {
   .from(documentsTable)
   .innerJoin(attachments, eq(documentsTable.attachmentId, attachments.id));
 
-  // SLA Warnings background checker (non-blocking)
+  // SLA Warnings background checker — intentional fire-and-forget.
+  // NOTE: This may not complete if the server response is sent before the async finishes.
+  // For production reliability, consider moving this to the /api/cron/overdue-scanner endpoint.
   runKprSlaChecks(allKpr).catch(err => {
     console.error(JSON.stringify({ event: "bg_scan_error", type: "kpr_sla", error: err instanceof Error ? err.message : String(err) }));
   });
+
 
   return (
     <KprShell

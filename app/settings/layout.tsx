@@ -4,6 +4,7 @@ import { NotificationDropdown } from "@/components/dashboard/notification-dropdo
 import { UserIdentityDropdown } from "@/components/dashboard/user-identity-dropdown"
 import { requireAuth, getSessionRole } from "@/server/permissions"
 import { redirect } from "next/navigation"
+import { Translate } from "@/components/translate"
 
 export default async function SettingsLayout({
   children,
@@ -25,7 +26,7 @@ export default async function SettingsLayout({
         <header className="flex h-14 lg:h-[60px] items-center justify-between border-b bg-muted/40 px-6 gap-4">
           <div className="flex items-center gap-4 flex-1">
             <SidebarTrigger />
-            <h1 className="font-semibold text-lg font-inter">Pengaturan</h1>
+            <h1 className="font-semibold text-lg font-inter"><Translate namespace="settings" translationKey="title" /></h1>
           </div>
           <div className="flex items-center gap-2">
             <NotificationDropdown />

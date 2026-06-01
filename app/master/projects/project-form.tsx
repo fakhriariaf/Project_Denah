@@ -8,6 +8,7 @@ import { createProject, updateProject } from "@/server/actions/master";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Building2, Loader2, AlertCircle } from "lucide-react";
@@ -40,6 +41,8 @@ export function ProjectForm({
       location: "",
       description: "",
       status: "active",
+      publicEnabled: false,
+      isFeaturedPublic: false,
     },
   });
   
@@ -113,8 +116,13 @@ export function ProjectForm({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="location" className="text-xs font-semibold text-[#243028]">{t("proj_form.location")} <span className="text-[#8FAF9A] font-normal">(Opsional)</span></Label>
+            <Label htmlFor="location" className="text-xs font-semibold text-[#243028]">{t("proj_form.location")}</Label>
             <Input id="location" {...register("location")} placeholder={t("proj_form.loc_placeholder")} className="bg-white border-[#D6DED2] rounded-xl text-xs h-9 focus:ring-[#8FAF9A] focus:ring-2 focus:border-transparent transition-all" />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="description" className="text-xs font-semibold text-[#243028]">{t("proj_form.description")}</Label>
+            <Textarea id="description" {...register("description")} placeholder={t("proj_form.desc_placeholder")} className="bg-white border-[#D6DED2] rounded-xl text-xs min-h-[80px] focus:ring-[#8FAF9A] focus:ring-2 focus:border-transparent transition-all resize-none" />
           </div>
 
           <div className="space-y-1.5">
@@ -138,6 +146,42 @@ export function ProjectForm({
                 <SelectItem value="completed" className="text-xs">{t("proj.status_completed")}</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="flex flex-col gap-3 pt-2">
+            <div className="flex items-center justify-between p-3 bg-[#F7F8F3] rounded-2xl border border-[#D6DED2]/60">
+              <div className="space-y-0.5">
+                <Label htmlFor="publicEnabled" className="text-xs font-bold text-[#243028] cursor-pointer">
+                  Tampilkan Publik
+                </Label>
+                <p className="text-[10px] text-[#66736A] font-medium leading-tight">
+                  Izinkan calon konsumen melihat siteplan proyek ini tanpa login.
+                </p>
+              </div>
+              <input
+                id="publicEnabled"
+                type="checkbox"
+                {...register("publicEnabled")}
+                className="w-5 h-5 rounded-lg border-[#D6DED2] text-[#4F6F52] focus:ring-[#8FAF9A] rounded cursor-pointer accent-[#4F6F52]"
+              />
+            </div>
+
+            <div className="flex items-center justify-between p-3 bg-[#F7F8F3] rounded-2xl border border-[#D6DED2]/60">
+              <div className="space-y-0.5">
+                <Label htmlFor="isFeaturedPublic" className="text-xs font-bold text-[#243028] cursor-pointer">
+                  Unggulan Publik (Featured)
+                </Label>
+                <p className="text-[10px] text-[#66736A] font-medium leading-tight">
+                  Tampilkan proyek ini sebagai default saat membuka halaman public view.
+                </p>
+              </div>
+              <input
+                id="isFeaturedPublic"
+                type="checkbox"
+                {...register("isFeaturedPublic")}
+                className="w-5 h-5 rounded-lg border-[#D6DED2] text-[#4F6F52] focus:ring-[#8FAF9A] rounded cursor-pointer accent-[#4F6F52]"
+              />
+            </div>
           </div>
 
           <DialogFooter className="pt-4 gap-2 border-t border-[#D6DED2] mt-2">

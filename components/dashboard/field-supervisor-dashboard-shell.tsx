@@ -16,7 +16,11 @@ import {
   MapPin,
   Eye,
   Layers,
-  Map
+  Map,
+  ChevronDown,
+  ChevronUp,
+  ChevronRight,
+  Search
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -77,6 +81,7 @@ interface FieldSupervisorDashboardShellProps {
       progressDate: Date;
       notes: string | null;
       creatorName: string;
+      vendorName: string;
     }>;
     vendorComplaints: Array<{
       id: string;
@@ -117,6 +122,7 @@ interface FieldSupervisorDashboardShellProps {
       attachmentUrl: string | null;
       attachmentName: string | null;
       uploadedAt: Date | null;
+      currentCustomerId: string | null;
     }>;
     projects: Array<{
       id: string;
@@ -140,6 +146,89 @@ export function FieldSupervisorDashboardShell({ data, userName }: FieldSuperviso
   const [selectedComplaint, setSelectedComplaint] = useState<any | null>(null);
   const [openVendorDialog, setOpenVendorDialog] = useState(false);
   const [openCustomerDialog, setOpenCustomerDialog] = useState(false);
+
+  // Collapsible state for Recent Logs (Grouped by Project -> Unit)
+  const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({});
+  const [expandedUnits, setExpandedUnits] = useState<Record<string, boolean>>({});
+  const [logSearchQuery, setLogSearchQuery] = useState("");
+
+  const toggleProject = (projectName: string) => {
+    setExpandedProjects(prev => ({
+      ...prev,
+      [projectName]: prev[projectName] === false
+    }));
+  };
+
+  const toggleUnit = (projectUnitKey: string) => {
+    setExpandedUnits(prev => ({
+      ...prev,
+      [projectUnitKey]: prev[projectUnitKey] === false
+    }));
+  };
+
+  // Filter logs based on search query
+  const filteredLogs = React.useMemo(() => {
+    if (!logSearchQuery.trim()) return recentLogs;
+    const q = logSearchQuery.toLowerCase();
+    return recentLogs.filter(log => 
+      (log.projectName || "").toLowerCase().includes(q) ||
+      (log.unitCode || "").toLowerCase().includes(q) ||
+      (log.workItemName || "").toLowerCase().includes(q) ||
+      (log.notes && log.notes.toLowerCase().includes(q)) ||
+      (log.creatorName || "").toLowerCase().includes(q) ||
+      (log.vendorName || "").toLowerCase().includes(q)
+    );
+  }, [recentLogs, logSearchQuery]);
+
+  // Group logs by project name and unit code
+  const groupedLogs = React.useMemo(() => {
+    const groups: Record<string, Record<string, typeof recentLogs>> = {};
+    for (const log of filteredLogs) {
+      const proj = log.projectName || "Lain-Lain";
+      const unit = log.unitCode || "Tanpa Kavling";
+      if (!groups[proj]) {
+        groups[proj] = {};
+      }
+      if (!groups[proj][unit]) {
+        groups[proj][unit] = [];
+      }
+      groups[proj][unit].push(log);
+    }
+    return groups;
+  }, [filteredLogs]);
+
+  // Expand / Collapse all helper functions
+  const expandAll = () => {
+    const projState: Record<string, boolean> = {};
+    const unitState: Record<string, boolean> = {};
+    
+    Object.entries(groupedLogs).forEach(([projName, unitsMap]) => {
+      projState[projName] = true;
+      Object.keys(unitsMap).forEach(unitCode => {
+        const unitKey = `${projName}-${unitCode}`;
+        unitState[unitKey] = true;
+      });
+    });
+    
+    setExpandedProjects(projState);
+    setExpandedUnits(unitState);
+  };
+
+  const collapseAll = () => {
+    const projState: Record<string, boolean> = {};
+    const unitState: Record<string, boolean> = {};
+    
+    Object.entries(groupedLogs).forEach(([projName, unitsMap]) => {
+      projState[projName] = false;
+      Object.keys(unitsMap).forEach(unitCode => {
+        const unitKey = `${projName}-${unitCode}`;
+        unitState[unitKey] = false;
+      });
+    });
+    
+    setExpandedProjects(projState);
+    setExpandedUnits(unitState);
+  };
   
   // Loading & Msg states
   const [submitting, setSubmitting] = useState(false);
@@ -192,7 +281,11 @@ export function FieldSupervisorDashboardShell({ data, userName }: FieldSuperviso
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "active":
-        return <Badge className="bg-[#8FAF9A] text-white">Aktif</Badge>;
+        return <Badge className="bg-blue-500 text-white">Aktif</Badge>;
+      case "proses_konstruksi":
+        return <Badge className="bg-purple-500 text-white">Proses Konstruksi</Badge>;
+      case "selesai_konstruksi":
+        return <Badge className="bg-[#4F6F52] text-white">Selesai Konstruksi</Badge>;
       case "overdue":
         return <Badge className="bg-[#C87A7A] text-white">Terlambat</Badge>;
       case "completed":
@@ -204,7 +297,7 @@ export function FieldSupervisorDashboardShell({ data, userName }: FieldSuperviso
     }
   };
 
-  const activeSpksList = spks.filter(s => s.status === "active" || s.status === "overdue");
+  const activeSpksList = spks.filter(s => s.status === "active" || s.status === "proses_konstruksi" || s.status === "overdue");
 
   return (
     <div className="space-y-6 bg-[#F7F8F3] min-h-screen p-1 md:p-4 relative">
@@ -573,37 +666,160 @@ export function FieldSupervisorDashboardShell({ data, userName }: FieldSuperviso
               </CardTitle>
               <CardDescription className="text-xs text-[#66736A] font-medium">Riwayat update persentase pembangunan fisik dari lapangan.</CardDescription>
             </CardHeader>
-            <CardContent className="p-0 flex-grow flex flex-col">
+            <CardContent className="p-4 md:p-5 flex-grow flex flex-col">
               {recentLogs.length === 0 ? (
-                <div className="p-12 text-center text-xs text-[#66736A] italic font-medium flex-grow flex items-center justify-center">Belum ada pembaruan progres log dilaporkan.</div>
+                <div className="p-12 text-center text-xs text-[#66736A] italic font-medium flex-grow flex items-center justify-center">
+                  Belum ada pembaruan progres log dilaporkan.
+                </div>
               ) : (
-                <div className="divide-y divide-[#D6DED2]/60 flex-grow">
-                  {recentLogs.map((log) => (
-                    <div key={log.id} className="p-4.5 hover:bg-[#DDE8D8]/10 transition-colors duration-250 flex items-start justify-between gap-4">
-                      <div className="space-y-1.5 flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-xs font-black text-[#243028] truncate">{log.workItemName}</span>
-                          <span className="text-[10px] text-[#66736A] font-mono">({log.projectName} &bull; Kav. {log.unitCode})</span>
-                        </div>
-                        {log.notes && (
-                          <div className="text-xs text-[#5C6E5D] bg-[#F7F8F3]/60 px-3 py-1.5 rounded-xl border border-[#D6DED2]/40 italic font-medium">
-                            "{log.notes}"
-                          </div>
-                        )}
-                        <div className="text-[10px] text-[#66736A] flex items-center gap-2 font-semibold">
-                          <span className="h-4.5 w-4.5 rounded-full bg-[#DDE8D8] text-[#4F6F52] flex items-center justify-center text-[8px] font-black uppercase">
-                            {log.creatorName.slice(0, 2)}
-                          </span>
-                          <span>Dilaporkan oleh: {log.creatorName}</span>
-                          <span>&bull;</span>
-                          <span className="font-mono">{new Date(log.progressDate).toLocaleDateString("id-ID", { dateStyle: "medium" })}</span>
-                        </div>
-                      </div>
-                      <Badge className="bg-[#DDE8D8] text-[#243028] hover:bg-[#DDE8D8] font-mono text-[10px] font-bold shrink-0 border border-[#8FAF9A]/30">
-                        +{log.percentageAdded}% ({log.currentTotalPct}%)
-                      </Badge>
+                <div className="flex flex-col flex-grow">
+                  {/* Action Bar */}
+                  <div className="flex flex-col sm:flex-row gap-3 items-center justify-between mb-4 border-b border-[#D6DED2]/50 pb-4 shrink-0">
+                    <div className="relative w-full sm:max-w-xs">
+                      <Search className="absolute left-3 top-2.5 h-4 w-4 text-[#66736A]" />
+                      <Input
+                        placeholder="Cari perumahan, kavling, atau item..."
+                        value={logSearchQuery}
+                        onChange={(e) => setLogSearchQuery(e.target.value)}
+                        className="pl-9 h-9 text-xs border-[#D6DED2] focus-visible:ring-[#4F6F52] bg-white rounded-xl"
+                      />
                     </div>
-                  ))}
+                    <div className="flex gap-2 w-full sm:w-auto justify-end">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={expandAll}
+                        className="text-xs h-8 px-3 rounded-xl border-[#D6DED2] text-[#4F6F52] hover:bg-[#DDE8D8]/20 hover:text-[#3D563F] font-bold flex items-center gap-1.5 active:scale-95 transition-all duration-200"
+                      >
+                        Expand Semua
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={collapseAll}
+                        className="text-xs h-8 px-3 rounded-xl border-[#D6DED2] text-[#66736A] hover:bg-slate-50 font-bold flex items-center gap-1.5 active:scale-95 transition-all duration-200"
+                      >
+                        Collapse Semua
+                      </Button>
+                    </div>
+                  </div>
+
+                  {filteredLogs.length === 0 ? (
+                    <div className="p-12 text-center text-xs text-[#66736A] italic font-medium flex-grow flex items-center justify-center">
+                      Tidak ada hasil pencarian yang cocok dengan "{logSearchQuery}".
+                    </div>
+                  ) : (
+                    <div className="space-y-4 flex-grow">
+                      {Object.entries(groupedLogs).map(([projectName, unitsMap]) => {
+                        const isProjExpanded = expandedProjects[projectName] !== false;
+                        const totalUnitLogs = Object.values(unitsMap).reduce((sum, list) => sum + list.length, 0);
+
+                        return (
+                          <div key={projectName} className="border border-[#D6DED2] rounded-2xl overflow-hidden bg-white/40 shadow-sm transition-all duration-205">
+                            {/* Project Header Accordion */}
+                            <div 
+                              onClick={() => toggleProject(projectName)}
+                              className="flex items-center justify-between p-4 bg-gradient-to-r from-[#DDE8D8]/50 to-transparent hover:from-[#DDE8D8]/80 cursor-pointer transition-all duration-205 border-b border-[#D6DED2]/40 select-none group"
+                            >
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div className="h-9 w-9 rounded-xl bg-[#4F6F52]/10 text-[#4F6F52] flex items-center justify-center shrink-0 shadow-inner group-hover:bg-[#4F6F52] group-hover:text-white transition-colors duration-200">
+                                  <MapPin className="w-5 h-5" />
+                                </div>
+                                <div className="min-w-0 space-y-0.5">
+                                  <h4 className="text-xs font-black text-[#243028] tracking-tight">{projectName}</h4>
+                                  <p className="text-[10px] text-[#66736A] font-bold">{Object.keys(unitsMap).length} Kavling &bull; {totalUnitLogs} Log Update</p>
+                                </div>
+                              </div>
+                              
+                              <div className="text-slate-400 group-hover:text-[#4F6F52] transition-colors p-1">
+                                {isProjExpanded ? (
+                                  <ChevronUp className="h-5 w-5 text-[#4F6F52]" />
+                                ) : (
+                                  <ChevronDown className="h-5 w-5 text-[#66736A]" />
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Units list under Project */}
+                            {isProjExpanded && (
+                              <div className="p-4 space-y-3.5 bg-[#F7F8F3]/30">
+                                {Object.entries(unitsMap).map(([unitCode, logs]) => {
+                                  const unitKey = `${projectName}-${unitCode}`;
+                                  const isUnitExp = expandedUnits[unitKey] !== false;
+                                  const maxProgress = Math.max(...logs.map(l => l.currentTotalPct));
+
+                                  return (
+                                    <div key={unitCode} className="border border-[#D6DED2]/60 rounded-xl overflow-hidden bg-white shadow-sm transition-all duration-200">
+                                      {/* Unit Header Accordion */}
+                                      <div 
+                                        onClick={() => toggleUnit(unitKey)}
+                                        className="flex items-center justify-between p-3.5 hover:bg-slate-50 cursor-pointer transition-all select-none border-b border-dashed border-[#D6DED2]/30 group/unit"
+                                      >
+                                        <div className="flex items-center gap-2.5">
+                                          <div className="h-7 w-7 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center shrink-0 group-hover/unit:bg-[#DDE8D8]/50 group-hover/unit:text-[#4F6F52] transition-colors">
+                                            <Home className="w-4 h-4" />
+                                          </div>
+                                          <div>
+                                            <span className="text-xs font-black text-[#243028]">Kavling {unitCode}</span>
+                                            <span className="text-[10px] text-muted-foreground ml-2 font-medium">({logs.length} update)</span>
+                                          </div>
+                                        </div>
+                                        <div className="flex items-center gap-2.5">
+                                          <Badge className="bg-[#DDE8D8] text-[#4F6F52] hover:bg-[#DDE8D8] font-mono text-[9px] font-bold border border-[#8FAF9A]/30">
+                                            Progres: {maxProgress}%
+                                          </Badge>
+                                          <div className="text-slate-400 group-hover/unit:text-[#4F6F52] transition-colors">
+                                            {isUnitExp ? (
+                                              <ChevronUp className="h-4.5 w-4.5 text-[#4F6F52]" />
+                                            ) : (
+                                              <ChevronRight className="h-4.5 w-4.5 text-[#66736A]" />
+                                            )}
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      {/* Logs under Unit */}
+                                      {isUnitExp && (
+                                        <div className="divide-y divide-[#D6DED2]/40 bg-slate-50/40">
+                                          {logs.map((log) => (
+                                            <div key={log.id} className="p-4 hover:bg-[#DDE8D8]/5 transition-colors duration-200 flex items-start justify-between gap-4">
+                                              <div className="space-y-2 flex-1 min-w-0">
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                  <span className="text-xs font-extrabold text-[#243028]">{log.workItemName}</span>
+                                                </div>
+                                                {log.notes && (
+                                                  <div className="text-xs text-[#5C6E5D] bg-white px-3.5 py-2.5 rounded-xl border border-[#D6DED2]/40 italic font-medium shadow-[inset_0_1px_2px_rgba(0,0,0,0.01)] leading-relaxed">
+                                                    "{log.notes}"
+                                                  </div>
+                                                )}
+                                                <div className="text-[10px] text-[#66736A] flex items-center gap-2 font-semibold pt-1 flex-wrap">
+                                                  <span className="h-4.5 w-4.5 rounded-full bg-[#DDE8D8] text-[#4F6F52] flex items-center justify-center text-[7.5px] font-black uppercase shrink-0">
+                                                    {log.creatorName.slice(0, 2)}
+                                                  </span>
+                                                  <span>Dilaporkan: {log.creatorName}</span>
+                                                  <span>&bull;</span>
+                                                  <span>Vendor: <span className="text-[#4F6F52] font-black">{log.vendorName}</span></span>
+                                                  <span>&bull;</span>
+                                                  <span className="font-mono">{new Date(log.progressDate).toLocaleDateString("id-ID", { dateStyle: "medium" })}</span>
+                                                </div>
+                                              </div>
+                                              <Badge className="bg-[#DDE8D8] text-[#243028] hover:bg-[#DDE8D8] font-mono text-[9px] font-bold shrink-0 border border-[#8FAF9A]/30">
+                                                +{log.percentageAdded}% ({log.currentTotalPct}%)
+                                              </Badge>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>
@@ -696,7 +912,7 @@ export function FieldSupervisorDashboardShell({ data, userName }: FieldSuperviso
 
       {/* Modal 1: Approve BAST Confirmation */}
       <Dialog open={activeDialog === "approve_bast"} onOpenChange={(open) => !open && setActiveDialog(null)}>
-        <DialogContent className="max-w-md w-full bg-white/95 rounded-[24px] border border-[#D6DED2]/85 backdrop-blur-md shadow-2xl p-0 overflow-hidden">
+        <DialogContent className="max-w-lg sm:max-w-lg w-full bg-white/95 rounded-[24px] border border-[#D6DED2]/85 backdrop-blur-md shadow-2xl p-0 overflow-hidden">
           <DialogHeader className="relative overflow-hidden rounded-t-2xl border-b border-[#D6DED2]/60 bg-gradient-to-r from-[#DDE8D8]/60 via-white/80 to-transparent p-6">
             <div className="absolute top-0 right-0 w-24 h-24 bg-[#4F6F52]/5 rounded-full blur-xl pointer-events-none" />
             <DialogTitle className="text-base font-extrabold text-[#243028] flex items-center gap-2 font-sans">
@@ -738,14 +954,18 @@ export function FieldSupervisorDashboardShell({ data, userName }: FieldSuperviso
                 <div className="pt-3 border-t border-[#D6DED2]/60 text-[10px] text-rose-600 font-bold leading-normal flex items-start gap-1.5">
                   <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-rose-500" />
                   <span>
-                    Tindakan ini akan memindahkan status unit secara resmi menjadi Ready Stock (available / terbooking) di peta siteplan dan database.
+                    {selectedBast.currentCustomerId ? (
+                      "Tindakan ini akan memverifikasi selesainya pembangunan fisik lapangan secara resmi. Karena unit ini telah terikat dengan konsumen, status unit akan tetap terikat dan tidak menjadi Ready Stock (Tersedia)."
+                    ) : (
+                      "Tindakan ini akan memindahkan status unit secara resmi menjadi Ready Stock (available) di peta siteplan dan database."
+                    )}
                   </span>
                 </div>
               </div>
             )}
           </div>
           
-          <DialogFooter className="bg-[#F7F8F3]/75 border-t border-[#D6DED2]/50 p-4 flex gap-2 justify-end">
+          <div className="bg-[#F7F8F3]/75 border-t border-[#D6DED2]/50 p-4 flex gap-2 justify-end">
             <Button
               type="button"
               variant="outline"
@@ -769,7 +989,7 @@ export function FieldSupervisorDashboardShell({ data, userName }: FieldSuperviso
                 "Ya, Approve BAST"
               )}
             </Button>
-          </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
 

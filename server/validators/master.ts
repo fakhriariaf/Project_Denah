@@ -8,6 +8,8 @@ export const projectSchema = z.object({
   status: z.enum(["active", "inactive", "completed"]).default("active"),
   startDate: z.date().optional(),
   targetEndDate: z.date().optional(),
+  publicEnabled: z.boolean().default(false),
+  isFeaturedPublic: z.boolean().default(false),
 });
 export type ProjectInput = z.infer<typeof projectSchema>;
 
@@ -25,14 +27,6 @@ export const unitSchema = z.object({
   readyStockVendorId: z.string().optional(),
   notes: z.string().optional(),
 }).superRefine((data, ctx) => {
-  if (data.status === "construction" && !data.isReadyStock) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "Status 'Proses Bangun' wajib mencentang Ready Stock",
-      path: ["isReadyStock"],
-    });
-  }
-
   if (data.isReadyStock && (!data.readyStockVendorId || data.readyStockVendorId.trim() === "")) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,

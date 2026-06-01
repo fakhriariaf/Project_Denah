@@ -14,7 +14,7 @@ export default async function MarketingLayout({
 }) {
   const activeUser = await requireAuth();
   const session = await getSessionRole(activeUser.id);
-  const hasAccess = session.isSuperAdmin || session.isAdminKantor || session.isMarketing || session.isMarketingManager || session.isDireksi;
+  const hasAccess = session.isSuperAdmin || session.isAdminKantor || session.isMarketing || session.isMarketingManager || session.isDireksi || session.isPengawas;
   if (!hasAccess) redirect("/unauthorized");
 
   return (

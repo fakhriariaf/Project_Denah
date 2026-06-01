@@ -26,7 +26,7 @@ import {
   realizeKprSchema
 } from "../validators/marketing";
 import { requireAnyRole, getSessionRole, getUserRole } from "../permissions";
-import { eq, and, sql, inArray, desc } from "drizzle-orm";
+import { eq, and, sql, inArray, desc, lte, isNotNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { writeAuditLog } from "./audit";
 import { createNotification, notifyUsersWithRoles } from "./notification";
@@ -1841,8 +1841,8 @@ export async function checkFollowupReminders() {
     .leftJoin(leads, eq(customerFollowups.leadId, leads.id))
     .where(
       and(
-        sql`${customerFollowups.nextFollowupAt} IS NOT NULL`,
-        sql`${customerFollowups.nextFollowupAt} <= ${now.getTime()}`
+        isNotNull(customerFollowups.nextFollowupAt),
+        lte(customerFollowups.nextFollowupAt, now)
       )
     );
 

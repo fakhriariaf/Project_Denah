@@ -209,8 +209,13 @@ export default async function ProductionPage({
   let complaintsList = complaintsListRaw;
   if (sessionRoleInfo.isVendor) {
     const vendorUnitIds = new Set(spksList.map(s => s.unitId).filter(Boolean) as string[]);
+    // Log if vendor has a valid ID but no SPKs — may indicate data integrity issue or wrong filter
+    if (vendorId && vendorId !== "non-existent-vendor" && spksList.length === 0) {
+      console.warn(`[production/page] Vendor ${vendorId} has no SPKs — SPMB/complaint filter may return empty results.`);
+    }
     complaintsList = complaintsListRaw.filter(c => c.unitId && vendorUnitIds.has(c.unitId));
   }
+
 
   // Fetch paid DP invoices — used for DP Gate validation in SPK form
   const paidDpInvoices = await db
@@ -233,7 +238,8 @@ export default async function ProductionPage({
   return (
     <ProductionShell
       activeUser={activeUser}
-      isSuperAdmin={sessionRoleInfo.isSuperAdmin}
+      isSuperAdmin={sessionRoleInfo.isSuperAdmin || sessionRoleInfo.isAdminKantor || sessionRoleInfo.isKeuangan}
+      isPengawas={sessionRoleInfo.isPengawas}
       projects={projectsList}
       units={unitsList}
       customers={customersList}

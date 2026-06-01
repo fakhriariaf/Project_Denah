@@ -12,6 +12,7 @@ import { revalidatePath } from "next/cache";
 import { writeAuditLog } from "./audit";
 import { user as userTable, vendorProfiles } from "@/db/schema/auth";
 import { auth } from "@/server/auth";
+import { notifyNewSpkCreated } from "./production";
 
 // --- PROJECTS ---
 export async function createProject(data: unknown) {
@@ -74,8 +75,11 @@ export async function createUnit(data: unknown) {
   const id = crypto.randomUUID();
   const { readyStockVendorId, ...unitData } = parsed;
 
-  if (parsed.status === "available" && parsed.readyStockSource === "construction_flow" && !parsed.isReadyStock) {
-    throw new Error("⚠️ Unit baru dengan alur konstruksi tidak dapat langsung diset 'Tersedia' (Ready Stock) saat pembuatan. Alur wajib melewati Konstruksi ERP.");
+  if (!parsed.isReadyStock) {
+    const ALLOWED_INITIAL_STATUSES = ["available", "belum_siap", "cancelled"];
+    if (!ALLOWED_INITIAL_STATUSES.includes(parsed.status)) {
+      throw new Error(`⚠️ Unit baru dengan alur Konstruksi ERP hanya dapat dibuat dengan status 'Tersedia', 'Belum Siap', atau 'Batal'. Status '${parsed.status}' wajib melalui alur transaksi ERP.`);
+    }
   }
 
   let newSpkId: string | null = null;
@@ -100,7 +104,7 @@ export async function createUnit(data: unknown) {
       
       const isCompleted = parsed.status === "available";
       const progressPct = isCompleted ? 100 : 0;
-      const spkStatus = isCompleted ? "completed" : "active";
+      const spkStatus = isCompleted ? "selesai_konstruksi" : "active";
       const spmbStatus = isCompleted ? "completed" : "active";
       
       const targetEndDate = new Date(now);
@@ -145,6 +149,10 @@ export async function createUnit(data: unknown) {
 
   await writeAuditLog({ action: "create", module: "master", entityId: id, entityType: "unit", details: { code: parsed.code, autoSpk: !!newSpkId } });
 
+  if (newSpkId) {
+    await notifyNewSpkCreated(newSpkId, true);
+  }
+
   revalidatePath("/master/units");
   revalidatePath("/production");
   return { success: true, id };
@@ -162,8 +170,13 @@ export async function updateUnit(id: string, data: unknown) {
     const existingUnit = await tx.select().from(units).where(eq(units.id, id)).get();
     if (!existingUnit) throw new Error("Unit not found");
 
-    if (parsed.status === "available" && existingUnit.status !== "available" && parsed.readyStockSource === "construction_flow" && !existingUnit.isReadyStock) {
+    const ALLOWED_TO_BECOME_AVAILABLE = ["available", "belum_siap", "cancelled"];
+    if (parsed.status === "available" && !ALLOWED_TO_BECOME_AVAILABLE.includes(existingUnit.status) && parsed.readyStockSource === "construction_flow" && !existingUnit.isReadyStock) {
       throw new Error("⚠️ Unit dengan alur Konstruksi ERP wajib menyelesaikan pembangunan dan mengunggah BAST Vendor di modul Konstruksi untuk menjadi Tersedia.");
+    }
+
+    if (parsed.status === "construction" && existingUnit.status !== "construction" && !parsed.isReadyStock) {
+      throw new Error("⚠️ Unit tidak dapat langsung diset 'Proses Bangun'. Status 'Proses Bangun' hanya dapat diubah melalui SPK Konstruksi.");
     }
 
     let finalSpkId = existingUnit.currentSpkId;
@@ -179,7 +192,7 @@ export async function updateUnit(id: string, data: unknown) {
       
       const isCompleted = parsed.status === "available";
       const progressPct = isCompleted ? 100 : 0;
-      const spkStatus = isCompleted ? "completed" : "active";
+      const spkStatus = isCompleted ? "selesai_konstruksi" : "active";
       const spmbStatus = isCompleted ? "completed" : "active";
       
       const targetEndDate = new Date(now);
@@ -229,6 +242,10 @@ export async function updateUnit(id: string, data: unknown) {
   });
 
   await writeAuditLog({ action: "update", module: "master", entityId: id, entityType: "unit", details: { code: parsed.code, autoSpk: !!newSpkId } });
+
+  if (newSpkId) {
+    await notifyNewSpkCreated(newSpkId, true);
+  }
 
   revalidatePath("/master/units");
   revalidatePath("/production");

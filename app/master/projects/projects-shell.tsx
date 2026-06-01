@@ -20,6 +20,8 @@ interface Project {
   location: string | null;
   description: string | null;
   status: string;
+  publicEnabled: boolean;
+  isFeaturedPublic: boolean;
   createdAt: Date | null;
   updatedAt: Date | null;
 }
@@ -304,6 +306,8 @@ export function ProjectsShell({
                           location: selectedProject.location || undefined,
                           description: selectedProject.description || undefined,
                           status: selectedProject.status as ProjectInput["status"],
+                          publicEnabled: selectedProject.publicEnabled,
+                          isFeaturedPublic: selectedProject.isFeaturedPublic,
                         }}
                       />
                     </div>

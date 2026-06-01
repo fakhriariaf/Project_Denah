@@ -33,6 +33,7 @@ import {
   updateVendorProfile, 
   updateAccountStatus 
 } from "@/server/actions/profile";
+import { updateUserProjectAssignments } from "@/server/actions/project-users";
 import { useI18n } from "@/lib/i18n";
 import { ChangePasswordForm } from "@/components/dashboard/change-password-form";
 import { ResetPasswordForm } from "@/components/dashboard/reset-password-form";
@@ -99,6 +100,8 @@ interface ProfileShellProps {
     canUpdateVendor: boolean;
     canUpdateStatus: boolean;
   };
+  allProjects?: Array<{ id: string; name: string }>;
+  assignedProjectIds?: string[];
 }
 
 export function ProfileShell({
@@ -108,6 +111,8 @@ export function ProfileShell({
   currentUserRole,
   isSuperAdmin = false,
   permissions,
+  allProjects = [],
+  assignedProjectIds = [],
 }: ProfileShellProps) {
   const { user, profile, employment, vendor, auditLogs, usersList } = data;
   const { t } = useI18n();
@@ -167,6 +172,11 @@ export function ProfileShell({
     (user.status as any) || "active"
   );
   const [roleId, setRoleId] = useState(user.roleId || "");
+
+  // Project Assignments
+  const [selectedProjects, setSelectedProjects] = useState<string[]>(assignedProjectIds);
+  const [projectMsg, setProjectMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [projectLoading, setProjectLoading] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -383,6 +393,12 @@ export function ProfileShell({
             <ShieldCheck className="h-4 w-4" />
             {t("profile_shell.tab_access")}
           </TabsTrigger>
+          {(isSuperAdmin && user.roleId === "role_pengawas") && (
+            <TabsTrigger value="projects" className="flex items-center gap-1.5 px-4 py-2 font-medium">
+              <Briefcase className="h-4 w-4" />
+              Penugasan Proyek
+            </TabsTrigger>
+          )}
           <TabsTrigger value="logs" className="flex items-center gap-1.5 px-4 py-2 font-medium">
             <History className="h-4 w-4" />
             {t("profile_shell.tab_logs")}
@@ -988,6 +1004,100 @@ export function ProfileShell({
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* ==================== TAB: PROJECT ASSIGNMENTS ==================== */}
+        {(isSuperAdmin && user.roleId === "role_pengawas") && (
+          <TabsContent value="projects" className="mt-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Penugasan Proyek Pengawas</CardTitle>
+                <CardDescription>
+                  Pilih proyek perumahan yang diawasi oleh pengawas lapangan {fullName || user.name}. Penugasan ini membatasi data SPK dan progres konstruksi yang dapat diakses di portal mereka.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form 
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    setProjectLoading(true);
+                    setProjectMsg(null);
+                    try {
+                      await updateUserProjectAssignments(user.id, selectedProjects);
+                      setProjectMsg({ type: "success", text: "Penugasan proyek berhasil diperbarui!" });
+                    } catch (err: any) {
+                      setProjectMsg({ type: "error", text: err.message || "Gagal memperbarui penugasan proyek." });
+                    } finally {
+                      setProjectLoading(false);
+                    }
+                  }} 
+                  className="space-y-4"
+                >
+                  {projectMsg && (
+                    <div className={`p-3 rounded-lg flex items-center gap-2.5 text-xs font-semibold ${
+                      projectMsg.type === "success" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-rose-50 text-rose-700 border border-rose-200"
+                    }`}>
+                      {projectMsg.type === "error" && <AlertCircle className="h-4 w-4 shrink-0" />}
+                      <span>{projectMsg.text}</span>
+                    </div>
+                  )}
+
+                  {allProjects && allProjects.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-slate-50 dark:bg-slate-900/10 p-5 rounded-xl border">
+                      {allProjects.map((p) => {
+                        const isChecked = selectedProjects.includes(p.id);
+                        return (
+                          <label 
+                            key={p.id} 
+                            className="flex items-center gap-3 p-3 bg-white dark:bg-slate-900 border rounded-xl hover:bg-slate-50 cursor-pointer shadow-sm transition-all"
+                          >
+                            <input 
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => {
+                                if (isChecked) {
+                                  setSelectedProjects(prev => prev.filter(id => id !== p.id));
+                                } else {
+                                  setSelectedProjects(prev => [...prev, p.id]);
+                                }
+                              }}
+                              className="h-4.5 w-4.5 rounded text-primary focus:ring-primary border-slate-300 transition-colors"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-bold text-slate-700 dark:text-slate-200 truncate">{p.name}</p>
+                              <p className="text-[10px] text-slate-400 font-semibold font-mono tracking-wider mt-0.5">ID: {p.id.substring(0, 8).toUpperCase()}</p>
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground text-xs font-semibold bg-slate-50 border rounded-2xl">
+                      Tidak ada proyek aktif di database.
+                    </div>
+                  )}
+
+                  <Button 
+                    type="submit" 
+                    className="bg-[#4F6F52] hover:bg-[#3D563F] text-white font-medium text-xs h-8 px-4" 
+                    disabled={projectLoading}
+                  >
+                    {projectLoading ? (
+                      <>
+                        <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                        Menyimpan...
+                      </>
+                    ) : (
+                      <>
+                        <Check className="mr-1.5 h-3.5 w-3.5" />
+                        Simpan Penugasan Proyek
+                      </>
+                    )}
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
 
         {/* ==================== TAB 6: SECURITY / PASSWORD ==================== */}
         {(isOwnProfile || isSuperAdmin) && (

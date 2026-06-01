@@ -1294,7 +1294,7 @@ export default function FinanceShell({
             </Card>
 
             <Dialog open={!!selectedPayment} onOpenChange={(open) => { if (!open) setSelectedPayment(null); }}>
-              <DialogContent className="bg-white/95 backdrop-blur-md border-[#D6DED2] shadow-sage-lg rounded-3xl p-6 max-w-md">
+              <DialogContent className="bg-white/95 backdrop-blur-md border-[#D6DED2] shadow-sage-lg rounded-3xl p-6 w-full max-w-md sm:max-w-md overflow-hidden">
                 <DialogHeader>
                   <DialogTitle className="text-lg font-bold text-[#243028]">{t("finance.verify_title")}</DialogTitle>
                   <DialogDescription className="text-xs text-[#66736A]">{t("finance.verify_desc")}</DialogDescription>
@@ -1344,15 +1344,19 @@ export default function FinanceShell({
                         onValueChange={(val) => setVerificationAccount(val || "")}
                         items={accounts.map(acc => ({ label: `${acc.name} (Saldo: Rp ${acc.openingBalance.toLocaleString()})`, value: acc.id }))}
                       >
-                        <SelectTrigger className="bg-[#F7F8F3] border-[#D6DED2] rounded-xl focus:ring-[#4F6F52] font-semibold text-xs h-9.5 text-[#243028]">
+                        <SelectTrigger className="w-full max-w-full min-w-0 overflow-hidden bg-[#F7F8F3] border-[#D6DED2] rounded-[12px] focus:ring-[#4F6F52] font-semibold text-xs h-10 text-[#243028]">
                           <SelectValue placeholder={t("finance.verify_lbl_deposit_account")}>
                             {verificationAccount ? (() => {
                               const acc = accounts.find(a => a.id === verificationAccount);
-                              return acc ? `${acc.name} (${t("finance.balance_lbl")} Rp ${acc.openingBalance.toLocaleString("id-ID")})` : undefined;
+                              return acc ? (
+                                <span className="block truncate text-left w-full max-w-[280px] sm:max-w-[320px]">
+                                  {acc.name} ({t("finance.balance_lbl")} Rp {acc.openingBalance.toLocaleString("id-ID")})
+                                </span>
+                              ) : undefined;
                             })() : undefined}
                           </SelectValue>
                         </SelectTrigger>
-                        <SelectContent className="border-[#D6DED2] rounded-xl">
+                        <SelectContent className="border-[#D6DED2] rounded-[12px]">
                           {accounts.map(acc => (
                             <SelectItem key={acc.id} value={acc.id} className="text-xs font-medium">{acc.name} ({t("finance.balance_lbl")} Rp {acc.openingBalance.toLocaleString()})</SelectItem>
                           ))}
@@ -1362,11 +1366,11 @@ export default function FinanceShell({
 
                     <div className="space-y-1.5">
                       <label className="text-xs font-bold text-[#243028] uppercase tracking-wider block">{t("finance.verify_lbl_notes")}</label>
-                      <Input
+                      <textarea
                         placeholder={t("finance.verify_notes_ph")}
                         value={verificationNotes}
                         onChange={(e) => setVerificationNotes(e.target.value)}
-                        className="bg-[#F7F8F3] border-[#D6DED2] rounded-xl focus-visible:ring-[#4F6F52] font-medium text-xs h-9.5 text-[#243028]"
+                        className="flex min-h-[80px] w-full rounded-[12px] border border-[#D6DED2] bg-[#F7F8F3]/60 px-3 py-2 text-xs focus:border-[#4F6F52] focus-visible:outline-none focus:bg-white transition-all font-medium leading-normal resize-none text-[#243028]"
                       />
                     </div>
 
@@ -1389,14 +1393,14 @@ export default function FinanceShell({
                       <div className="grid grid-cols-2 gap-3">
                         <Button
                           onClick={() => handleVerifyPaymentSubmit(false)}
-                          className="bg-white text-[#D77A7A] border border-rose-200 hover:bg-rose-50 font-bold text-xs h-10 rounded-xl hover:scale-[1.02] active:scale-[0.98] transition-premium"
+                          className="bg-white text-[#D77A7A] border border-rose-200 hover:bg-rose-50 font-bold text-xs h-10 rounded-[12px] hover:scale-[1.02] active:scale-[0.98] transition-premium"
                           disabled={isSubmitting}
                         >
                           {t("finance.verify_btn_reject")}
                         </Button>
                         <Button
                           onClick={() => handleVerifyPaymentSubmit(true)}
-                          className="bg-[#4F6F52] hover:bg-[#3D563F] text-white font-bold text-xs h-10 rounded-xl shadow-sage hover:scale-[1.02] active:scale-[0.98] transition-premium"
+                          className="bg-[#4F6F52] hover:bg-[#3D563F] text-white font-bold text-xs h-10 rounded-[12px] shadow-sage hover:scale-[1.02] active:scale-[0.98] transition-premium"
                           disabled={isSubmitting}
                         >
                           {t("finance.verify_btn_approve")}
@@ -1406,7 +1410,7 @@ export default function FinanceShell({
                       {isSuperAdmin && (
                         <Button
                           onClick={handleDeletePaymentSubmit}
-                          className="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs h-10 rounded-xl shadow-[0_4px_14px_rgba(220,38,38,0.25)] hover:scale-[1.02] active:scale-[0.98] transition-premium"
+                          className="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs h-10 rounded-[12px] shadow-[0_4px_14px_rgba(220,38,38,0.25)] hover:scale-[1.02] active:scale-[0.98] transition-premium"
                           disabled={isSubmitting}
                         >
                           {t("finance.verify_btn_delete")}

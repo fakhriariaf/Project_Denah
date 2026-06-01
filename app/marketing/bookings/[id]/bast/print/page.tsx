@@ -64,9 +64,19 @@ export default async function PrintBastKonsumenPage({ params }: Props) {
 
   if (!booking) notFound();
 
-  // Enforce BAST Developer to Consumer can only be printed if unit construction is finished/sold
+  // Enforce BAST Developer to Consumer can only be printed if unit construction is finished/sold.
+  // After completeConstruction(), unit status transitions to: sold, kpr_process, booking, or available
+  // (never to construction_done which is an intermediate/legacy status).
   const statusStr = booking.unitStatus as string;
-  const isValidStatus = statusStr === "construction_done" || statusStr === "sold" || statusStr === "menunggu_serah_terima" || statusStr === "handover_complete";
+  const isValidStatus = [
+    "construction_done",
+    "sold",
+    "menunggu_serah_terima",
+    "handover_complete",
+    "booking",
+    "kpr_process",
+    "available",
+  ].includes(statusStr);
   if (!isValidStatus) {
     throw new Error("⚠️ Dokumen BAST Konsumen hanya dapat dicetak jika pembangunan unit fisik telah selesai 100% dari Vendor (Status unit minimal 'Selesai Bangun').");
   }

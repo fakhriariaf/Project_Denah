@@ -70,6 +70,8 @@ import {
   ExternalLink,
   Camera,
   Clock,
+  Loader2,
+  Trash2,
 } from "lucide-react";
 import Image from "next/image";
 import {
@@ -92,8 +94,19 @@ import {
   getBastAttachmentForSpk,
   getCustomerBastForUnit,
   uploadCustomerBastFromProduction,
+  deleteCustomerBastDocument,
 } from "@/server/actions/production";
 import { CustomerComplaintResolveDialog } from "@/components/dashboard/customer-complaint-resolve-dialog";
+
+const SPK_STATUS_LABELS: Record<string, string> = {
+  active: "Aktif",
+  proses_konstruksi: "Proses Konstruksi",
+  selesai_konstruksi: "Selesai Konstruksi",
+  overdue: "Terlambat",
+  completed: "Selesai",
+  cancelled: "Batal",
+  draft: "Draft",
+};
 
 interface ProductionShellProps {
   activeUser: { id: string; name: string; email: string; roleId?: string | null };
@@ -115,7 +128,7 @@ interface ProductionShellProps {
     startDate: Date;
     targetEndDate: Date;
     actualEndDate: Date | null;
-    status: "draft" | "active" | "completed" | "overdue" | "cancelled";
+    status: "draft" | "active" | "completed" | "overdue" | "cancelled" | "proses_konstruksi" | "selesai_konstruksi";
     progressPct: number;
     createdAt: Date;
     projectName: string;
@@ -171,12 +184,14 @@ interface ProductionShellProps {
   /** Set of unit IDs that have at least one paid DP invoice (Fase 6 gate) */
   dpPaidUnitIds: string[];
   isSuperAdmin?: boolean;
+  isPengawas?: boolean;
   defaultTab?: "spk" | "progress" | "materials" | "complaints";
 }
 
 export default function ProductionShell({
   activeUser,
   isSuperAdmin = false,
+  isPengawas = false,
   projects,
   units,
   customers,
@@ -229,6 +244,10 @@ export default function ProductionShell({
   // New TUGAS 9 states
   const [materialStep, setMaterialStep] = React.useState(1);
   const [materialNecessity, setMaterialNecessity] = React.useState(50);
+
+  // Role-based access: who can manage (hapus/re-upload) BAST Konsumen
+  // Server-side action also enforces this independently
+  const canManageBast = isSuperAdmin || isPengawas;
 
   // Interactive detail viewing state
   const [selectedSpkId, setSelectedSpkId] = React.useState<string | null>(null);
@@ -358,9 +377,9 @@ export default function ProductionShell({
 
 
   // Calculate high-level stats
-  const activeSpksCount = spks.filter(s => s.status === "active").length;
+  const activeSpksCount = spks.filter(s => s.status === "active" || s.status === "proses_konstruksi").length;
   const overdueSpksCount = spks.filter(s => s.status === "overdue").length;
-  const completedSpksCount = spks.filter(s => s.status === "completed").length;
+  const completedSpksCount = spks.filter(s => s.status === "completed" || s.status === "selesai_konstruksi").length;
   const openComplaintsCount = complaints.filter(c => c.status === "open").length;
   
   const constructionUnits = units.filter(u => u.status === "construction");
@@ -407,10 +426,10 @@ export default function ProductionShell({
         perfMap.set(s.vendorId, p);
       }
 
-      if (s.status === "active") {
+      if (s.status === "active" || s.status === "proses_konstruksi") {
         p.activeSpks += 1;
         p.totalProgress += s.progressPct;
-      } else if (s.status === "completed") {
+      } else if (s.status === "completed" || s.status === "selesai_konstruksi") {
         p.completedSpks += 1;
         p.totalProgress += 100;
       } else if (s.status === "overdue") {
@@ -598,7 +617,7 @@ export default function ProductionShell({
           targetEndDate: new Date(newSpk.targetEndDate),
           customWeights: formWeights,
         });
-        setSuccessMessage("Surat Perintah Kerja (SPK) baru berhasil diterbitkan dengan status DRAFT!");
+        setSuccessMessage("Surat Perintah Kerja (SPK) baru berhasil diterbitkan dengan status AKTIF!");
       }
       
       setSpkFormError(null);
@@ -635,17 +654,17 @@ export default function ProductionShell({
     }
   };
 
-  // Handle SPK activation (Draft to Active, auto generates SPMB)
+  // Handle SPK activation (Mulai Konstruksi, transitions from active to proses_konstruksi, auto generates SPMB)
   const handleActivateSpk = async (spkId: string) => {
     setIsSubmitting(true);
     setErrorMessage(null);
     setSuccessMessage(null);
     try {
       await activateSpk(spkId);
-      setSuccessMessage("SPK berhasil diaktifkan dan Surat Perintah Mulai Bekerja (SPMB) diterbitkan secara otomatis!");
+      setSuccessMessage("Pembangunan unit berhasil dimulai dan Surat Perintah Mulai Bekerja (SPMB) diterbitkan secara otomatis!");
       router.refresh();
     } catch (e: any) {
-      setErrorMessage(e.message || "Gagal mengaktifkan SPK.");
+      setErrorMessage(e.message || "Gagal memulai konstruksi.");
     } finally {
       setIsSubmitting(false);
     }
@@ -658,35 +677,41 @@ export default function ProductionShell({
     setErrorMessage(null);
     try {
       let photoAttachmentId: string | null = null;
+      const photoAttachmentIds: string[] = [];
 
-      // If a physical file has been selected, upload it
+      // If physical files have been selected, upload all of them
       if (selectedFiles.length > 0) {
-        const fileToUpload = selectedFiles[0]; // Upload first photo
-        const formData = new FormData();
-        formData.append("file", fileToUpload);
+        for (const fileToUpload of selectedFiles) {
+          const formData = new FormData();
+          formData.append("file", fileToUpload);
 
-        const uploadRes = await fetch("/api/upload-attachment", {
-          method: "POST",
-          body: formData,
-        });
+          const uploadRes = await fetch("/api/upload-attachment", {
+            method: "POST",
+            body: formData,
+          });
 
-        if (!uploadRes.ok) {
-          const errData = await uploadRes.json();
-          throw new Error(errData.error || "Gagal mengunggah foto progress ke storage.");
+          if (!uploadRes.ok) {
+            const errData = await uploadRes.json();
+            throw new Error(errData.error || "Gagal mengunggah foto progress ke storage.");
+          }
+
+          const fileData = await uploadRes.json();
+
+          // Save metadata to attachments table
+          const attachmentRes = await uploadProgressPhotoAttachment(newProgress.spkId, {
+            fileName: fileToUpload.name,
+            fileUrl: fileData.url,
+            mimeType: fileToUpload.type,
+            fileSize: fileToUpload.size,
+          });
+
+          if (attachmentRes.success) {
+            photoAttachmentIds.push(attachmentRes.attachmentId);
+          }
         }
 
-        const fileData = await uploadRes.json();
-
-        // Save metadata to attachments table
-        const attachmentRes = await uploadProgressPhotoAttachment(newProgress.spkId, {
-          fileName: fileToUpload.name,
-          fileUrl: fileData.url,
-          mimeType: fileToUpload.type,
-          fileSize: fileToUpload.size,
-        });
-
-        if (attachmentRes.success) {
-          photoAttachmentId = attachmentRes.attachmentId;
+        if (photoAttachmentIds.length > 0) {
+          photoAttachmentId = photoAttachmentIds[0];
         }
       }
 
@@ -696,6 +721,7 @@ export default function ProductionShell({
         percentageAdded: Number(newProgress.percentageAdded),
         progressDate: new Date(newProgress.progressDate),
         photoAttachmentId: photoAttachmentId || null,
+        photoAttachmentIds: photoAttachmentIds.length > 0 ? photoAttachmentIds : null,
         notes: newProgress.notes || null,
       });
 
@@ -1335,8 +1361,17 @@ export default function ProductionShell({
                             <div className="font-bold text-[#243028] text-xs">{s.title}</div>
                             <div className="text-[10px] text-muted-foreground truncate max-w-[150px] font-medium mt-0.5">{s.workDescription}</div>
                           </TableCell>
-                          <TableCell className="font-bold font-mono text-[#4F6F52] text-xs">
-                            Rp {s.rabAmount.toLocaleString("id-ID")}
+                          <TableCell className="font-bold font-mono text-xs">
+                            {s.rabAmount === 0 ? (
+                              <span className="text-rose-600 flex items-center gap-1">
+                                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                                Rp 0
+                              </span>
+                            ) : (
+                              <span className="text-[#4F6F52]">
+                                Rp {s.rabAmount.toLocaleString("id-ID")}
+                              </span>
+                            )}
                           </TableCell>
                           <TableCell className="text-muted-foreground text-[10px] font-bold font-mono">
                             {new Date(s.targetEndDate).toLocaleDateString("id-ID", { day: 'numeric', month: 'short', year: 'numeric' })}
@@ -1347,11 +1382,13 @@ export default function ProductionShell({
                               <span className="text-[10px] font-extrabold text-primary font-mono">{s.progressPct}%</span>
                             </div>
                           </TableCell>
-                          <TableCell>
+                           <TableCell>
                             <Badge
                               className={`shadow-none font-semibold text-[10px] ${
-                                s.status === "completed"
+                                s.status === "completed" || s.status === "selesai_konstruksi"
                                   ? "bg-[#DDE8D8] text-[#4F6F52] border border-[#8FAF9A]/30"
+                                  : s.status === "proses_konstruksi"
+                                  ? "bg-purple-50 text-purple-700 border border-purple-200"
                                   : s.status === "active"
                                   ? "bg-blue-50 text-blue-700 border border-blue-200"
                                   : s.status === "overdue"
@@ -1359,7 +1396,15 @@ export default function ProductionShell({
                                   : "bg-gray-100 text-gray-700 border border-gray-200"
                               }`}
                             >
-                              {s.status === "completed" ? t("production.status_done") : s.status === "active" ? t("production.status_active") : s.status === "overdue" ? t("production.status_overdue") : t("production.status_draft")}
+                              {s.status === "completed" || s.status === "selesai_konstruksi"
+                                ? (s.status === "selesai_konstruksi" ? t("production.status_selesai_konstruksi") : t("production.status_done"))
+                                : s.status === "proses_konstruksi"
+                                ? t("production.status_proses_konstruksi")
+                                : s.status === "active"
+                                ? t("production.status_active")
+                                : s.status === "overdue"
+                                ? t("production.status_overdue")
+                                : t("production.status_draft")}
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
@@ -1385,7 +1430,7 @@ export default function ProductionShell({
                                   </Button>
                                 </>
                               )}
-                              {s.status === "draft" && (
+                              {s.status === "active" && (
                                 <Button
                                   size="sm"
                                   onClick={() => handleActivateSpk(s.id)}
@@ -1439,6 +1484,28 @@ export default function ProductionShell({
                   if (!spk) return null;
                   return (
                     <div className="space-y-6">
+                      {spk.rabAmount === 0 && (
+                        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                          <div className="flex items-start gap-3">
+                            <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+                            <div>
+                              <h5 className="font-bold text-amber-900 text-sm">Nilai RAB Belum Diverifikasi</h5>
+                              <p className="text-amber-700 text-xs mt-1">
+                                SPK ini dibuat secara otomatis dengan nilai RAB Rp 0. Silakan verifikasi dan ubah nilai RAB sesuai harga kontrak yang benar.
+                              </p>
+                            </div>
+                          </div>
+                          {isSuperAdmin && (
+                            <Button
+                              size="sm"
+                              onClick={() => handleEditSpkClick(spk)}
+                              className="bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs whitespace-nowrap self-start sm:self-center"
+                            >
+                              Ubah Nilai RAB
+                            </Button>
+                          )}
+                        </div>
+                      )}
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#8FAF9A]/20">
                         <div>
                           <div className="text-xs font-bold text-primary uppercase tracking-wider">{t("production.spk_detail_lbl")}</div>
@@ -1459,7 +1526,7 @@ export default function ProductionShell({
                               </a>
                             ) : null;
                           })()}
-                          {spk.status === "completed" && (
+                          {(spk.status === "completed" || spk.status === "selesai_konstruksi") && (
                             <a
                               href={`/production/spk/${spk.id}/bast/print`}
                               className="border border-emerald-500/50 text-emerald-700 hover:bg-emerald-50 font-semibold text-xs h-9 px-4 rounded-md flex items-center justify-center gap-1.5 transition-colors bg-background"
@@ -1468,11 +1535,21 @@ export default function ProductionShell({
                               Cetak BAST
                             </a>
                           )}
-                          {(spk.status === "active" || spk.status === "overdue") && (
+                          {spk.status === "active" && (
+                            <Button
+                              size="sm"
+                              onClick={() => handleActivateSpk(spk.id)}
+                              className="bg-primary hover:bg-[#4F6F52] text-primary-foreground font-semibold text-xs h-9"
+                            >
+                              {t("production.btn_start_work")}
+                            </Button>
+                          )}
+                          {(spk.status === "proses_konstruksi" || spk.status === "overdue") && (
                             <Button
                               size="sm"
                               onClick={() => {
                                 setNewProgress(prev => ({ ...prev, spkId: spk.id }));
+                                handleViewSpkDetails(spk.id);
                                 setProgressOpen(true);
                               }}
                               className="bg-[#4F6F52] hover:bg-[#3D563F] text-white font-semibold text-xs h-9"
@@ -2016,14 +2093,49 @@ export default function ProductionShell({
                                                   }
                                                 }}
                                               />
-                                              <label
-                                                htmlFor="reupload-customer-bast-file"
-                                                className="bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-[10px] px-2.5 py-1.5 rounded-lg shadow-sm transition-all text-center cursor-pointer flex items-center justify-center gap-1 hover:scale-[1.02]"
-                                              >
-                                                <UploadCloud className="h-3 w-3" />
-                                                Re-Upload
-                                              </label>
+                                              {canManageBast && (
+                                                <label
+                                                  htmlFor="reupload-customer-bast-file"
+                                                  className="bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-[10px] px-2.5 py-1.5 rounded-lg shadow-sm transition-all text-center cursor-pointer flex items-center justify-center gap-1 hover:scale-[1.02]"
+                                                >
+                                                  <UploadCloud className="h-3 w-3" />
+                                                  Re-Upload
+                                                </label>
+                                              )}
                                             </>
+                                          )}
+                                          {/* Tombol Hapus BAST — hanya untuk Super Admin, Admin Kantor, atau Pengawas, dan tidak untuk dokumen yang sudah verified */}
+                                          {canManageBast && docStatus !== "verified" && customerBast.docId && (
+                                            <button
+                                              type="button"
+                                              title="Hapus dokumen BAST Konsumen ini"
+                                              className="bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-[10px] px-2.5 py-1.5 rounded-lg shadow-sm transition-all text-center flex items-center justify-center gap-1 hover:scale-[1.02] disabled:opacity-60 disabled:cursor-not-allowed"
+                                              disabled={isSubmitting}
+                                              onClick={async () => {
+                                                const confirmed = window.confirm(
+                                                  "Apakah Anda yakin ingin menghapus dokumen BAST Konsumen ini?\n\nTindakan ini tidak dapat dibatalkan."
+                                                );
+                                                if (!confirmed) return;
+
+                                                setIsSubmitting(true);
+                                                setErrorMessage(null);
+                                                setSuccessMessage(null);
+                                                try {
+                                                  const res = await deleteCustomerBastDocument(customerBast.docId);
+                                                  if (res.success) {
+                                                    setSuccessMessage("✓ Dokumen BAST Konsumen berhasil dihapus.");
+                                                    await handleViewUnitProgress(unit.id);
+                                                  }
+                                                } catch (err: any) {
+                                                  setErrorMessage(err.message || "Gagal menghapus dokumen BAST.");
+                                                } finally {
+                                                  setIsSubmitting(false);
+                                                }
+                                              }}
+                                            >
+                                              <Trash2 className="h-3 w-3" />
+                                              Hapus
+                                            </button>
                                           )}
                                         </div>
                                       </div>
@@ -2045,6 +2157,7 @@ export default function ProductionShell({
                                 </div>
                               );
                             })()}
+
                           </div>
 
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -2740,28 +2853,51 @@ export default function ProductionShell({
             </div>
 
             <TabsContent value="form" className="m-0 focus-visible:outline-none">
-              <form onSubmit={handleInputProgress} className="p-6 space-y-4 pt-4 max-h-[60vh] overflow-y-auto">
-                <div className="space-y-3.5 text-sm">
+              {/* Metadata Info Card at the top */}
+              {(() => {
+                const currentSpk = spks.find(s => s.id === newProgress.spkId);
+                if (!currentSpk) return null;
+                return (
+                  <div className="mx-6 mt-4 p-4 bg-gradient-to-r from-[#DDE8D8]/60 via-white/80 to-[#DDE8D8]/30 border border-[#D6DED2] rounded-2xl flex items-center justify-between text-xs shadow-sm animate-scale-in">
+                    <div className="space-y-1">
+                      <p className="text-[10px] font-bold text-[#66736A] uppercase tracking-wider">Nomor SPK Kerja</p>
+                      <p className="font-mono font-bold text-[#4F6F52] text-sm">{currentSpk.spkNumber}</p>
+                      <p className="text-[10px] text-muted-foreground font-medium">Vendor: {currentSpk.vendorName || "Kontraktor Utama"}</p>
+                    </div>
+                    <div className="text-right space-y-1">
+                      <p className="text-[10px] font-bold text-[#66736A] uppercase tracking-wider">Unit / Kavling</p>
+                      <p className="font-black text-[#243028] text-sm">{currentSpk.projectName} &bull; Kav. {currentSpk.unitCode}</p>
+                      <p className="text-[10px] text-muted-foreground font-medium">Status SPK: <span className="capitalize font-bold text-amber-600">{SPK_STATUS_LABELS[currentSpk.status] || currentSpk.status.replace("_", " ")}</span></p>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <form onSubmit={handleInputProgress} className="p-6 space-y-5 pt-4 max-h-[60vh] overflow-y-auto">
+                <div className="space-y-4 text-sm">
                   {/* Select Komponen Pekerjaan */}
-                  <div className="space-y-1">
-                    <label className="font-semibold text-foreground text-xs">{t("production.progress_lbl_component")}</label>
+                  <div className="space-y-1.5">
+                    <label className="font-bold text-[#243028] text-xs flex items-center gap-1.5">
+                      <ClipboardList className="h-4 w-4 text-[#8FAF9A]" />
+                      {t("production.progress_lbl_component") || "Komponen Item Pekerjaan"}
+                    </label>
                     <Select
                       value={newProgress.workItemId}
                       onValueChange={(val: string | null) => setNewProgress(prev => ({ ...prev, workItemId: val || "" }))}
                       required
                       items={currentSpkComponents.map(item => ({ label: `${item.name} — Bobot ${item.weightPct}% (Progres: ${item.currentProgress}%)`, value: item.id }))}
                     >
-                      <SelectTrigger className="w-full border-[#8FAF9A]/30 focus:ring-primary rounded-xl">
-                        <SelectValue placeholder={t("production.progress_lbl_component")}>
+                      <SelectTrigger className="w-full h-11 border-[#D6DED2] focus:ring-2 focus:ring-[#4F6F52]/20 rounded-xl bg-white/80 backdrop-blur-sm text-xs font-semibold">
+                        <SelectValue placeholder={t("production.progress_lbl_component") || "Pilih komponen pekerjaan..."}>
                           {newProgress.workItemId ? (() => {
                             const item = currentSpkComponents.find(w => w.id === newProgress.workItemId);
                             return item ? `${item.name} — Bobot ${item.weightPct}% (Progres: ${item.currentProgress}%)` : undefined;
                           })() : undefined}
                         </SelectValue>
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="border-[#D6DED2] rounded-xl bg-white/95 backdrop-blur-md">
                         {currentSpkComponents.map(item => (
-                          <SelectItem key={item.id} value={item.id}>
+                          <SelectItem key={item.id} value={item.id} className="text-xs font-semibold">
                             {item.name} &mdash; Bobot {item.weightPct}% (Progres: {item.currentProgress}%)
                           </SelectItem>
                         ))}
@@ -2771,174 +2907,233 @@ export default function ProductionShell({
 
                   {/* Dynamic Cumulative Progress Visual Indicator */}
                   {newProgress.workItemId && (
-                    <div className="p-3 bg-[#8FAF9A]/5 border border-[#8FAF9A]/20 rounded-xl space-y-2 text-xs animate-scale-in">
-                      <div className="flex justify-between font-semibold text-foreground">
-                        <span>Status Progres:</span>
-                        <span className={`font-bold ${isOverLimit ? "text-red-600 animate-pulse" : "text-[#4F6F52]"}`}>
+                    <div className="p-4 bg-gradient-to-br from-[#8FAF9A]/5 via-white/40 to-[#8FAF9A]/10 border border-[#8FAF9A]/20 rounded-2xl space-y-3 text-xs shadow-sm animate-scale-in">
+                      <div className="flex justify-between items-center font-bold text-foreground">
+                        <span className="text-[#66736A] font-bold">Status Kemajuan Fisik:</span>
+                        <span className={`font-black text-xs px-2.5 py-0.5 rounded-full ${
+                          isOverLimit 
+                            ? "bg-rose-50 text-rose-600 border border-rose-200 animate-pulse" 
+                            : "bg-[#DDE8D8] text-[#4F6F52] border border-[#8FAF9A]/25"
+                        }`}>
                           {isOverLimit 
                             ? `⚠️ Melebihi Batas! (${currentProgressPct}% + ${newProgress.percentageAdded}% = ${currentProgressPct + newProgress.percentageAdded}%)` 
                             : `${currentProgressPct}% → ${newTotalProgress}%`}
                         </span>
                       </div>
-                      {/* Segmented/Stacked Progress Bar Mockup */}
-                      <div className="relative w-full h-2.5 bg-muted rounded-full overflow-hidden flex border border-border">
+                      
+                      {/* Premium Segmented/Stacked Progress Bar */}
+                      <div className="relative w-full h-3 bg-slate-100 rounded-full overflow-hidden flex border border-[#D6DED2]/40 shadow-inner">
                         {/* Current Progress Segment */}
                         <div 
-                          className="h-full bg-[#4F6F52] transition-all duration-300"
+                          className="h-full bg-gradient-to-r from-[#4F6F52] to-[#608764] transition-all duration-500 rounded-l-full"
                           style={{ width: `${currentProgressPct}%` }}
                         />
                         {/* New Added Progress Segment */}
                         <div 
-                          className={`h-full transition-all duration-300 ${isOverLimit ? "bg-red-400" : "bg-[#8FAF9A]"}`}
+                          className={`h-full transition-all duration-500 ${isOverLimit ? "bg-red-400 animate-pulse" : "bg-gradient-to-r from-[#8FAF9A] to-[#A3C1AD]"} ${currentProgressPct === 0 ? "rounded-l-full" : ""}`}
                           style={{ width: `${isOverLimit ? 100 - currentProgressPct : newProgress.percentageAdded}%` }}
                         />
                       </div>
-                      <div className="flex justify-between text-[10px] text-muted-foreground font-semibold">
+                      
+                      <div className="flex justify-between text-[10px] text-slate-500 font-bold tracking-wide uppercase">
                         <span>Progres Terakhir: {currentProgressPct}%</span>
-                        <span>Bobot: {componentWeightPct}%</span>
+                        <span>Bobot Relatif: {componentWeightPct}%</span>
                       </div>
                     </div>
                   )}
 
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-xs font-semibold text-foreground">
-                      <span>{t("production.progress_lbl_pct")}</span>
-                      <span className="text-primary font-extrabold text-sm">+{newProgress.percentageAdded}%</span>
-                    </div>
-                    <Slider
-                      min={1}
-                      max={100}
-                      step={5}
-                      value={[newProgress.percentageAdded]}
-                      onValueChange={(val: number[]) => setNewProgress(prev => ({ ...prev, percentageAdded: val[0] }))}
-                      className="py-2"
-                    />
-                    
-                    {/* Visual Preset Tap-Friendly Buttons */}
-                    <div className="flex flex-wrap gap-1.5 pt-1">
-                      {[10, 25, 50, 100].map((preset) => (
-                        <Button
-                          key={preset}
-                          type="button"
-                          variant="outline"
-                          className={`text-[10px] px-2.5 py-1 h-7 rounded-full transition-all duration-150 ${
-                            newProgress.percentageAdded === preset
-                              ? "bg-primary text-primary-foreground border-primary"
-                              : "border-primary/20 text-[#4F6F52] hover:bg-[#8FAF9A]/10 hover:border-primary/40 bg-white"
-                          }`}
-                          onClick={() => setNewProgress(prev => ({ 
-                            ...prev, 
-                            percentageAdded: preset === 100 ? Math.max(1, 100 - currentProgressPct) : preset 
-                          }))}
-                        >
-                          {preset === 100 ? "Set 100%" : `+${preset}%`}
-                        </Button>
-                      ))}
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="text-[10px] px-2.5 py-1 h-7 rounded-full border-red-200 text-red-600 hover:bg-red-50 hover:border-red-400 bg-white transition-all duration-150 ml-auto"
-                        onClick={() => setNewProgress(prev => ({ ...prev, percentageAdded: 1 }))}
-                      >
-                        Reset (1%)
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="font-semibold text-foreground text-xs">{t("production.progress_lbl_date")}</label>
-                    <Input
-                      type="date"
-                      required
-                      className="border-[#8FAF9A]/30 focus-visible:ring-primary text-xs rounded-xl"
-                      value={newProgress.progressDate}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewProgress(prev => ({ ...prev, progressDate: e.target.value }))}
-                    />
-                  </div>
-
-                  {/* Photo Upload Dropzone with Instant Preview */}
-                  <div className="space-y-1.5">
-                    <label className="font-semibold text-foreground text-xs">{t("production.progress_lbl_photos")}</label>
-                    <div 
-                      onClick={() => document.getElementById('progress-photo-upload')?.click()}
-                      className="border-2 border-dashed border-[#8FAF9A]/30 hover:border-primary/50 bg-[#F7F8F3]/60 hover:bg-[#8FAF9A]/5 rounded-2xl p-4 text-center cursor-pointer transition-all duration-150 group"
-                    >
-                      <input
-                        id="progress-photo-upload"
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={(e) => {
-                          if (e.target.files) {
-                            const filesArray = Array.from(e.target.files);
-                            setSelectedFiles(prev => [...prev, ...filesArray]);
-                            const newUrls = filesArray.map(file => URL.createObjectURL(file));
-                            setUploadedPhotos(prev => [...prev, ...newUrls]);
-                          }
-                        }}
-                      />
-                      <div className="flex flex-col items-center justify-center space-y-1">
-                        <div className="p-2 bg-white rounded-full shadow-sm text-primary group-hover:scale-110 transition-transform duration-200">
-                          <Plus className="h-4 w-4" />
-                        </div>
-                        <span className="text-xs font-semibold text-foreground">{t("production.progress_photo_cta")}</span>
-                        <span className="text-[10px] text-muted-foreground">{t("production.progress_photo_hint")}</span>
+                  {/* Range Slider & Presets Card */}
+                  {currentProgressPct === 100 ? (
+                    <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-start gap-3 text-xs text-emerald-800 shadow-sm animate-scale-in">
+                      <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
+                      <div className="space-y-1">
+                        <p className="font-bold">Item Pekerjaan Selesai (100%)</p>
+                        <p className="text-emerald-700/90 font-medium">Komponen pekerjaan ini telah mencapai progress fisik 100% dan telah selesai. Tidak memerlukan tambahan laporan progress lapangan.</p>
                       </div>
                     </div>
-
-                    {uploadedPhotos.length > 0 && (
-                      <div className="grid grid-cols-4 gap-2 pt-2">
-                        {uploadedPhotos.map((photo, index) => (
-                          <div key={index} className="relative group aspect-square rounded-xl overflow-hidden border border-[#8FAF9A]/20 shadow-sm animate-scale-in">
-                            <Image src={photo} alt={`Preview ${index}`} fill className="object-cover" />
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedFiles(prev => prev.filter((_, i) => i !== index));
-                                setUploadedPhotos(prev => prev.filter((_, i) => i !== index));
-                              }}
-                              className="absolute top-1 right-1 p-1 bg-black/60 hover:bg-black/80 rounded-full text-white transition-colors duration-150"
-                            >
-                              <XCircle className="h-3.5 w-3.5" />
-                            </button>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="p-4 bg-white/80 backdrop-blur-sm border border-[#D6DED2] rounded-2xl shadow-sm space-y-3.5">
+                        <div className="flex items-center justify-between text-xs font-bold text-[#243028]">
+                          <span className="flex items-center gap-1.5"><TrendingUp className="h-4 w-4 text-[#8FAF9A]" /> {t("production.progress_lbl_pct") || "Tambahan Kemajuan Fisik"}</span>
+                          <div className="flex items-baseline gap-1.5">
+                            {newProgress.workItemId && componentWeightPct > 0 && (
+                              <span className="text-[10px] text-[#66736A] font-semibold">
+                                (Dampak Unit: +{((newProgress.percentageAdded || 0) * componentWeightPct / 100).toFixed(1)}%)
+                              </span>
+                            )}
+                            <span className="text-[#4F6F52] font-black text-base tracking-tight">+{newProgress.percentageAdded}%</span>
                           </div>
-                        ))}
+                        </div>
+                        <Slider
+                          min={1}
+                          max={Math.max(1, 100 - currentProgressPct)}
+                          step={1}
+                          value={[newProgress.percentageAdded]}
+                          onValueChange={(val: number[]) => setNewProgress(prev => ({ ...prev, percentageAdded: val[0] }))}
+                          className="py-2 cursor-pointer"
+                        />
+                        
+                        {/* Visual Preset Tap-Friendly Buttons */}
+                        <div className="flex items-center justify-between gap-2 pt-1 flex-wrap">
+                          <div className="flex gap-1.5">
+                            {[10, 25, 50].map((preset) => {
+                              const disabled = preset > (100 - currentProgressPct);
+                              return (
+                                <Button
+                                  key={preset}
+                                  type="button"
+                                  variant="outline"
+                                  disabled={disabled}
+                                  className={`text-[10px] font-bold px-3 py-1 h-7 rounded-full transition-all duration-200 hover:scale-105 active:scale-95 disabled:opacity-30 disabled:pointer-events-none ${
+                                    newProgress.percentageAdded === preset
+                                      ? "bg-[#4F6F52] text-white border-[#4F6F52] shadow-sm"
+                                      : "border-[#D6DED2] text-[#4F6F52] hover:bg-[#8FAF9A]/10 hover:border-[#8FAF9A]/40 bg-white"
+                                  }`}
+                                  onClick={() => setNewProgress(prev => ({ ...prev, percentageAdded: preset }))}
+                                >
+                                  +{preset}%
+                                </Button>
+                              );
+                            })}
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className={`text-[10px] font-black px-3.5 py-1 h-7 rounded-full transition-all duration-200 hover:scale-105 active:scale-95 ${
+                                newProgress.percentageAdded === Math.max(1, 100 - currentProgressPct)
+                                  ? "bg-[#4F6F52] text-white border-[#4F6F52] shadow-sm"
+                                  : "border-[#4F6F52]/50 text-[#4F6F52] hover:bg-[#4F6F52]/10 bg-white"
+                              }`}
+                              onClick={() => setNewProgress(prev => ({ 
+                                ...prev, 
+                                percentageAdded: Math.max(1, 100 - currentProgressPct) 
+                              }))}
+                            >
+                              Set 100%
+                            </Button>
+                          </div>
+                          
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="text-[10px] font-bold px-3 py-1 h-7 rounded-full border-rose-200 text-rose-600 hover:bg-rose-50 hover:border-rose-400 bg-white transition-all duration-200 hover:scale-105 active:scale-95 ml-auto"
+                            onClick={() => setNewProgress(prev => ({ ...prev, percentageAdded: 1 }))}
+                          >
+                            Reset (1%)
+                          </Button>
+                        </div>
                       </div>
-                    )}
-                  </div>
 
-                  <div className="space-y-1">
-                    <label className="font-semibold text-foreground text-xs">{t("production.progress_lbl_notes")}</label>
-                    <Textarea
-                      placeholder={t("production.progress_notes_ph")}
-                      className="border-[#8FAF9A]/30 focus-visible:ring-primary text-xs rounded-xl min-h-[70px]"
-                      value={newProgress.notes}
-                      onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNewProgress(prev => ({ ...prev, notes: e.target.value }))}
-                    />
-                  </div>
+                      {/* Tanggal Progress */}
+                      <div className="space-y-1.5">
+                        <label className="font-bold text-[#243028] text-xs flex items-center gap-1.5">
+                          <Calendar className="h-4 w-4 text-[#8FAF9A]" />
+                          {t("production.progress_lbl_date") || "Tanggal Laporan Lapangan"}
+                        </label>
+                        <Input
+                          type="date"
+                          required
+                          className="border-[#D6DED2] focus-visible:ring-2 focus-visible:ring-[#4F6F52]/20 h-10 text-xs rounded-xl bg-white/80 font-medium"
+                          value={newProgress.progressDate}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewProgress(prev => ({ ...prev, progressDate: e.target.value }))}
+                        />
+                      </div>
+
+                      {/* Photo Upload Dropzone with Instant Preview */}
+                      <div className="space-y-1.5">
+                        <label className="font-bold text-[#243028] text-xs flex items-center gap-1.5">
+                          <Camera className="h-4 w-4 text-[#8FAF9A]" />
+                          {t("production.progress_lbl_photos") || "Foto Dokumentasi Progres Lapangan"}
+                        </label>
+                        <div 
+                          onClick={() => document.getElementById('progress-photo-upload')?.click()}
+                          className="border-2 border-dashed border-[#8FAF9A]/40 hover:border-[#4F6F52]/60 bg-[#F7F8F3]/40 hover:bg-[#8FAF9A]/5 rounded-2xl p-6 text-center cursor-pointer transition-all duration-200 group"
+                        >
+                          <input
+                            id="progress-photo-upload"
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            className="hidden"
+                            onChange={(e) => {
+                              if (e.target.files) {
+                                const filesArray = Array.from(e.target.files);
+                                setSelectedFiles(prev => [...prev, ...filesArray]);
+                                const newUrls = filesArray.map(file => URL.createObjectURL(file));
+                                setUploadedPhotos(prev => [...prev, ...newUrls]);
+                              }
+                            }}
+                          />
+                          <div className="flex flex-col items-center justify-center space-y-2">
+                            <div className="p-2.5 bg-white rounded-full shadow-md text-[#4F6F52] group-hover:scale-110 transition-transform duration-300 border border-[#D6DED2]">
+                              <Plus className="h-4 w-4" />
+                            </div>
+                            <span className="text-xs font-bold text-[#243028]">{t("production.progress_photo_cta") || "Klik atau seret foto ke sini untuk mengunggah"}</span>
+                            <span className="text-[10px] text-slate-500 font-medium">Maksimal 4 foto, format JPG/PNG/WebP, max 5MB</span>
+                          </div>
+                        </div>
+
+                        {uploadedPhotos.length > 0 && (
+                          <div className="grid grid-cols-4 gap-3.5 pt-2">
+                            {uploadedPhotos.map((photo, index) => (
+                              <div key={index} className="relative group aspect-square rounded-xl overflow-hidden border border-[#8FAF9A]/30 shadow-sm animate-scale-in">
+                                <Image src={photo} alt={`Preview ${index}`} fill className="object-cover" />
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+                                    setUploadedPhotos(prev => prev.filter((_, i) => i !== index));
+                                  }}
+                                  className="absolute top-1 right-1 p-1 bg-black/60 hover:bg-rose-600 rounded-full text-white transition-all duration-200 hover:scale-110 shadow-sm"
+                                >
+                                  <XCircle className="h-4 w-4" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Catatan Lapangan */}
+                      <div className="space-y-1.5">
+                        <label className="font-bold text-[#243028] text-xs flex items-center gap-1.5">
+                          <MessageSquare className="h-4 w-4 text-[#8FAF9A]" />
+                          {t("production.progress_lbl_notes") || "Catatan Catatan Lapangan / Kendala (Opsional)"}
+                        </label>
+                        <Textarea
+                          placeholder={t("production.progress_notes_ph") || "Contoh: Pemasangan plafon gypsum tuntas 100% rapi..."}
+                          className="border-[#D6DED2] focus-visible:ring-2 focus-visible:ring-[#4F6F52]/20 text-xs rounded-xl min-h-[80px] bg-white/80"
+                          value={newProgress.notes}
+                          onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNewProgress(prev => ({ ...prev, notes: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
 
-                <DialogFooter className="pt-2 border-t border-[#8FAF9A]/10 mt-4 flex items-center justify-end gap-2">
+                <DialogFooter className="pt-3 border-t border-[#D6DED2]/40 mt-4 flex items-center justify-end gap-2">
                   <Button
                     type="button"
                     variant="ghost"
                     onClick={() => setProgressOpen(false)}
-                    className="text-xs text-muted-foreground hover:text-foreground rounded-xl"
+                    className="text-xs text-slate-500 hover:text-slate-800 rounded-xl hover:bg-slate-50 h-10 px-4 font-bold"
                   >
-                    {t("production.btn_cancel")}
+                    {t("production.btn_cancel") || "Batal"}
                   </Button>
                   <Button
                     type="submit"
                     disabled={isSubmitting || isOverLimit || !newProgress.workItemId}
-                    className="bg-primary hover:bg-[#4F6F52] text-primary-foreground font-semibold text-xs rounded-xl shadow-sm"
+                    className="bg-[#4F6F52] hover:bg-[#3D563F] text-white font-bold text-xs rounded-xl shadow-[0_4px_12px_rgba(79,111,82,0.2)] hover:scale-[1.02] active:scale-[0.98] transition-all h-10 px-5 flex items-center gap-1.5"
                   >
                     {isSubmitting ? (
-                      <span className="flex items-center gap-1">
-                        <span className="h-3 w-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
                         Menyimpan...
-                      </span>
-                    ) : t("production.btn_save_progress")}
+                      </>
+                    ) : (
+                      t("production.btn_save_progress") || "Simpan Progres"
+                    )}
                   </Button>
                 </DialogFooter>
               </form>
@@ -2980,22 +3175,42 @@ export default function ProductionShell({
                               {item.log.notes ? `"${item.log.notes}"` : <span className="italic">Tidak ada catatan lapangan.</span>}
                             </div>
 
-                            {/* Linked Progress Photo */}
-                            {item.attachment && item.attachment.fileUrl && (
+                            {/* Linked Progress Photos */}
+                            {((item.attachments && item.attachments.length > 0) || (item.attachment && item.attachment.fileUrl)) && (
                               <div className="pt-1.5">
-                                <span className="text-[10px] font-bold text-[#66736A] uppercase tracking-wider block mb-1">Bukti Foto Fisik</span>
-                                <div className="relative h-28 w-44 rounded-lg overflow-hidden border border-[#8FAF9A]/30 group shadow-sm bg-white cursor-zoom-in">
-                                  <a href={item.attachment.fileUrl} target="_blank" rel="noopener noreferrer">
-                                    <Image 
-                                      src={item.attachment.fileUrl} 
-                                      alt="Bukti Progress" 
-                                      fill 
-                                      className="object-cover group-hover:scale-105 transition-transform duration-200"
-                                    />
-                                    <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white text-[10px] font-bold">
-                                      Lihat Ukuran Penuh
+                                <span className="text-[10px] font-bold text-[#66736A] uppercase tracking-wider block mb-1.5">Bukti Foto Fisik</span>
+                                <div className="flex flex-wrap gap-2">
+                                  {item.attachments && item.attachments.length > 0 ? (
+                                    item.attachments.map((att: any, idx: number) => (
+                                      <div key={att.id || idx} className="relative h-24 w-36 rounded-lg overflow-hidden border border-[#8FAF9A]/30 group shadow-sm bg-white cursor-zoom-in">
+                                        <a href={att.fileUrl} target="_blank" rel="noopener noreferrer">
+                                          <Image 
+                                            src={att.fileUrl} 
+                                            alt={`Bukti Progress ${idx + 1}`} 
+                                            fill 
+                                            className="object-cover group-hover:scale-105 transition-transform duration-200"
+                                          />
+                                          <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white text-[9px] font-bold">
+                                            Buka Foto {idx + 1}
+                                          </div>
+                                        </a>
+                                      </div>
+                                    ))
+                                  ) : (
+                                    <div className="relative h-24 w-36 rounded-lg overflow-hidden border border-[#8FAF9A]/30 group shadow-sm bg-white cursor-zoom-in">
+                                      <a href={item.attachment.fileUrl} target="_blank" rel="noopener noreferrer">
+                                        <Image 
+                                          src={item.attachment.fileUrl} 
+                                          alt="Bukti Progress" 
+                                          fill 
+                                          className="object-cover group-hover:scale-105 transition-transform duration-200"
+                                        />
+                                        <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white text-[9px] font-bold">
+                                          Buka Foto
+                                        </div>
+                                      </a>
                                     </div>
-                                  </a>
+                                  )}
                                 </div>
                               </div>
                             )}
@@ -3077,7 +3292,7 @@ export default function ProductionShell({
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                      {spks.filter(s => s.status === "active" || s.id === newMaterial.spkId).map(s => (
+                      {spks.filter(s => s.status === "active" || s.status === "proses_konstruksi" || s.status === "overdue" || s.id === newMaterial.spkId).map(s => (
                         <SelectItem key={s.id} value={s.id}>{s.spkNumber} &mdash; {s.title} ({s.unitCode})</SelectItem>
                       ))}
                     </SelectContent>

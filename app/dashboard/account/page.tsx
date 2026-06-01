@@ -47,6 +47,23 @@ export default async function AccountPage() {
     );
   }
 
+  // Explicit null guard — if data/permissions failed to load without throwing, show fallback
+  if (!data || !permissions) {
+    return (
+      <Card className="border-rose-200 bg-rose-50/50">
+        <CardContent className="pt-6 flex items-start gap-3">
+          <AlertCircle className="h-5 w-5 text-rose-600 shrink-0 mt-0.5" />
+          <div>
+            <h3 className="font-semibold text-rose-800"><Translate namespace="account" translationKey="error_title" /></h3>
+            <p className="text-sm text-rose-700 mt-1">
+              <Translate namespace="account" translationKey="error_load" />
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-6">
       {/* ── PREMIUM HEADER ── */}
@@ -68,12 +85,13 @@ export default async function AccountPage() {
       </div>
 
       <ProfileShell 
-        data={data!}
+        data={data}
         isOwnProfile={true}
         currentUserRole={activeUser.roleId || null}
         isSuperAdmin={isSuperAdmin}
-        permissions={permissions!}
+        permissions={permissions}
       />
     </div>
   );
 }
+

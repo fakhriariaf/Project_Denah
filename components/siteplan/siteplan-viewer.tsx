@@ -41,6 +41,9 @@ import {
   Layers,
   UploadCloud,
   Trash2,
+  Link2,
+  PlusCircle,
+  Loader2,
 } from "lucide-react";
 import { getStatusColor, STATUS_COLORS, type UnitStatus, getUnitStatusLabel } from "@/lib/siteplan-utils";
 import { coordsToPolygonPoints } from "@/lib/siteplan-utils";
@@ -52,6 +55,8 @@ import { getSpkDetails, completeConstruction, getActiveSpkForUnit, uploadBastAtt
 import { startPhysicalConstructionManual } from "@/server/actions/marketing";
 import { updateUnitDefectList, deleteUnitAttachment } from "@/server/actions/master";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { updateShape } from "@/server/actions/siteplan";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 // Helper to generate cohesive CRM and payment status details dynamically per unit code
 const getMockBuyerData = (code: string) => {
@@ -113,6 +118,236 @@ export type ShapeWithUnit = {
     currentSpkId?: string | null;
   } | null;
 };
+
+// Helper functions for unit stock type and financial/physical readiness
+function getUnitStockType(unit: any) {
+  if (!unit) return "unknown";
+  const isReady = unit.isReadyStock === true || unit.isReadyStock === 1;
+
+  if (unit.status === "available" && isReady) {
+    return "available_ready_stock";
+  }
+
+  if (unit.status === "available" && !isReady) {
+    return "available";
+  }
+
+  if (
+    ["construction", "overdue"].includes(unit.status) &&
+    (unit.targetStockType === "ready_stock" || isReady)
+  ) {
+    return "building_for_ready_stock";
+  }
+
+  if (["construction", "overdue"].includes(unit.status)) {
+    return "construction";
+  }
+
+  if (unit.status === "construction_done" && isReady) {
+    return "construction_done_ready_stock";
+  }
+
+  if (unit.status === "construction_done") {
+    return "construction_done";
+  }
+
+  // Post-construction statuses (sold, booked, KPR, handover).
+  // These occur AFTER completeConstruction() which transitions the unit
+  // from construction_done → sold/kpr_process/booking/available.
+  // Physical construction is definitionally complete at this point.
+  const isPostConstruction = [
+    "sold",
+    "kpr_process",
+    "booking",
+    "menunggu_serah_terima",
+    "handover_complete",
+  ].includes(unit.status);
+
+  if (isPostConstruction && isReady) {
+    return "available_ready_stock"; // Treat as ready stock — physical done
+  }
+
+  if (isPostConstruction) {
+    // Indent unit that has been sold/in-KPR — physical is already done
+    return "construction_done";
+  }
+
+  return "unknown";
+}
+
+function getFinancialReadiness(activeBooking: any, invoices: any[], kprProcess: any) {
+  if (!activeBooking) {
+    return {
+      ready: false,
+      reason: "Unit belum memiliki booking aktif.",
+    };
+  }
+
+  const bookingInvoices = invoices.filter((invoice) => invoice.bookingId === activeBooking.id);
+
+  if (activeBooking.paymentScheme === "cash") {
+    const isCashPaid = bookingInvoices.length > 0 && bookingInvoices.every((invoice) => invoice.status === "paid");
+
+    return {
+      ready: isCashPaid,
+      reason: isCashPaid
+        ? "Pembayaran cash sudah lunas."
+        : "Menunggu pelunasan cash.",
+    };
+  }
+
+  if (
+    activeBooking.paymentScheme === "installment" ||
+    activeBooking.paymentScheme === "cash_bertahap"
+  ) {
+    const allInvoicesPaid = bookingInvoices.length > 0 && bookingInvoices.every((invoice) => invoice.status === "paid");
+
+    return {
+      ready: allInvoicesPaid,
+      reason: allInvoicesPaid
+        ? "Seluruh invoice sudah lunas."
+        : "Masih ada invoice / termin yang belum dibayar.",
+    };
+  }
+
+  if (activeBooking.paymentScheme === "kpr") {
+    const isRealized = kprProcess?.status === "realisasi";
+
+    return {
+      ready: isRealized,
+      reason: isRealized
+        ? "Dana KPR sudah realisasi."
+        : "Menunggu realisasi dana bank.",
+    };
+  }
+
+  return {
+    ready: false,
+    reason: "Skema pembayaran tidak dikenali.",
+  };
+}
+
+function getPhysicalReadiness(unit: any, selectedSpkBast: any) {
+  const unitStockType = getUnitStockType(unit);
+
+  // Ready stock units that are available or post-construction are always physically ready
+  if (unitStockType === "available_ready_stock" || unitStockType === "construction_done_ready_stock") {
+    return {
+      ready: true,
+      reason: "Unit sudah Ready Stock.",
+    };
+  }
+
+  if (unitStockType === "building_for_ready_stock") {
+    const progressDone = unit.constructionProgress === 100;
+    // attachments table has no 'status' column — existence of a BAST vendor attachment
+    // combined with progress=100 is sufficient signal that the vendor submitted BAST.
+    const bastVendorUploaded = !!selectedSpkBast;
+
+    return {
+      ready: progressDone && bastVendorUploaded,
+      reason:
+        progressDone && bastVendorUploaded
+          ? "Pembangunan selesai dan BAST Vendor sudah diupload."
+          : "Pembangunan belum selesai atau BAST Vendor belum diupload.",
+    };
+  }
+
+  if (unitStockType === "available") {
+    return {
+      ready: unit.hasPhysicalBuilding ? unit.constructionProgress === 100 : true,
+      reason: unit.hasPhysicalBuilding
+        ? "Menunggu fisik unit selesai."
+        : "Unit kavling siap dipasarkan.",
+    };
+  }
+
+  // construction_done (indent, non-ready-stock): physical is done
+  if (unitStockType === "construction_done") {
+    return {
+      ready: true,
+      reason: "Pembangunan selesai.",
+    };
+  }
+
+  return {
+    ready: false,
+    reason: "Status fisik unit belum siap.",
+  };
+}
+
+function getHandoverEligibility(
+  unit: any,
+  activeBooking: any,
+  invoices: any[],
+  kprProcess: any,
+  selectedSpkBast: any
+) {
+  if (!activeBooking) {
+    return {
+      eligible: false,
+      reason: "Unit belum memiliki booking aktif.",
+    };
+  }
+
+  if (unit.status === "handover_complete") {
+    return {
+      eligible: false,
+      reason: "Serah terima sudah selesai.",
+      readonly: true,
+    };
+  }
+
+  const financial = getFinancialReadiness(activeBooking, invoices, kprProcess);
+  const physical = getPhysicalReadiness(unit, selectedSpkBast);
+
+  if (!financial.ready) {
+    return {
+      eligible: false,
+      reason: financial.reason,
+    };
+  }
+
+  if (!physical.ready) {
+    return {
+      eligible: false,
+      reason: physical.reason,
+    };
+  }
+
+  if (unit.status !== "menunggu_serah_terima") {
+    return {
+      eligible: false,
+      reason: "Unit belum masuk status Menunggu Serah Terima.",
+    };
+  }
+
+  return {
+    eligible: true,
+    reason: "Syarat finansial dan fisik sudah terpenuhi.",
+  };
+}
+
+function getActiveBooking(unitId: string, bookingsList: any[] | undefined) {
+  if (!bookingsList) return null;
+  const validBookings = bookingsList
+    .filter((b) => b.unitId === unitId)
+    .filter((b) => !["cancelled", "rejected", "batal"].includes(b.status));
+
+  // prioritas status
+  return (
+    validBookings.find((b) => b.status === "akad") ||
+    validBookings.find((b) => b.status === "completed") ||
+    validBookings.find((b) => b.status === "active") ||
+    [...validBookings].sort((a, b) => {
+      const dateA = (a as any).createdAt ? new Date((a as any).createdAt).getTime() : 0;
+      const dateB = (b as any).createdAt ? new Date((b as any).createdAt).getTime() : 0;
+      if (dateA !== dateB) return dateB - dateA;
+      return b.id.localeCompare(a.id);
+    })[0] ||
+    null
+  );
+}
 
 type SiteplanViewerProps = {
   shapes: ShapeWithUnit[];
@@ -185,6 +420,13 @@ export function SiteplanViewer({
   const [defectNotesValue, setDefectNotesValue] = useState("");
   const [defectPhotosList, setDefectPhotosList] = useState<any[]>([]);
   const [uploadingDefectPhoto, setUploadingDefectPhoto] = useState(false);
+
+  // States for linking unlinked shape
+  const [selectedUnitId, setSelectedUnitId] = useState<string>("");
+  const [isLinking, setIsLinking] = useState(false);
+  const canEdit = currentUser?.role === "Super Admin" || currentUser?.role === "Admin Kantor";
+  const linkedUnitIds = new Set(shapes.map(s => s.unit?.id).filter(Boolean));
+  const unlinkedUnits = units?.filter(u => !linkedUnitIds.has(u.id)) || [];
 
   // Synchronize selected shape data and handle sessionStorage persistence
   useEffect(() => {
@@ -301,6 +543,35 @@ export function SiteplanViewer({
       alert(err.message || "Gagal menghapus foto.");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleLinkShapeToUnit = async () => {
+    if (!selectedShape || !selectedUnitId) return;
+    setIsLinking(true);
+    try {
+      const res = await updateShape(selectedShape.id, { unitId: selectedUnitId });
+      if (res.success) {
+        alert("Kavling berhasil dikaitkan dengan unit/kavling yang dipilih!");
+        window.location.reload();
+      }
+    } catch (err: any) {
+      alert(err.message || "Gagal mengaitkan unit.");
+    } finally {
+      setIsLinking(false);
+    }
+  };
+
+  const handleCreateUnitAndLink = async (newUnitId: string) => {
+    if (!selectedShape) return;
+    try {
+      const res = await updateShape(selectedShape.id, { unitId: newUnitId });
+      if (!res.success) {
+        throw new Error("Gagal mengaitkan koordinat ke unit.");
+      }
+    } catch (err: any) {
+      console.error("Gagal menautkan unit baru ke shape:", err);
+      alert("Unit berhasil dibuat, tetapi gagal ditautkan ke koordinat. Hubungkan manual unit ini.");
     }
   };
 
@@ -443,16 +714,38 @@ export function SiteplanViewer({
             });
             setSelectedSpkWeights(items);
 
-            // Map photos from logs that have attachments
-            const photosList = details.logs
-              .filter(l => l.attachment && l.attachment.fileUrl)
-              .map(l => ({
-                workItemName: l.workItem.name,
-                progressDate: l.log.progressDate,
-                notes: l.log.notes,
-                fileUrl: l.attachment!.fileUrl,
-                fileName: l.attachment!.fileName,
-              }));
+            // Map photos from logs that have attachments (supporting multiple photos per work item)
+            const photosList: Array<{
+              workItemName: string;
+              progressDate: Date;
+              notes: string | null;
+              fileUrl: string;
+              fileName: string;
+            }> = [];
+
+            details.logs.forEach(l => {
+              if (l.attachments && l.attachments.length > 0) {
+                l.attachments.forEach(att => {
+                  if (att.fileUrl) {
+                    photosList.push({
+                      workItemName: l.workItem.name,
+                      progressDate: l.log.progressDate,
+                      notes: l.log.notes,
+                      fileUrl: att.fileUrl,
+                      fileName: att.fileName,
+                    });
+                  }
+                });
+              } else if (l.attachment && l.attachment.fileUrl) {
+                photosList.push({
+                  workItemName: l.workItem.name,
+                  progressDate: l.log.progressDate,
+                  notes: l.log.notes,
+                  fileUrl: l.attachment.fileUrl,
+                  fileName: l.attachment.fileName,
+                });
+              }
+            });
             setSelectedSpkPhotos(photosList);
           } else {
             setSelectedSpkWeights([]);
@@ -569,93 +862,248 @@ export function SiteplanViewer({
   const unit = selectedShape?.unit;
   const isReadyStock = (unit as any)?.isReadyStock === true || (unit as any)?.isReadyStock === 1;
   const statusColor = getStatusColor(unit?.status, isReadyStock);
+  const activeBooking = unit ? getActiveBooking(unit.id, bookings) : null;
 
   // Retrieve current booking to determine payment scheme
-  const realBooking = unit 
-    ? (bookings?.find(b => b.unitId === unit.id && b.status !== "cancelled")
-       || bookings?.find(b => b.id === (unit as any).currentBookingId))
-    : undefined;
+  const realBooking = activeBooking || (unit ? bookings?.find(b => b.id === (unit as any).currentBookingId) : null);
   const paymentScheme = realBooking?.paymentScheme;
 
-  // Generate Timeline Data based on current status
-  const getTimelineSteps = (
-    status: string, 
-    isReadyStock: boolean = false, 
-    progress: number = 0,
-    paymentScheme?: string
-  ) => {
-    const isKpr = !paymentScheme || paymentScheme === "kpr";
-
-    const steps = [
-      { key: "available", label: t("timeline.available"), desc: t("timeline.available_desc"), done: false, active: false },
-      { key: "payment_pending", label: t("timeline.payment_pending"), desc: t("timeline.payment_pending_desc"), done: false, active: false },
-      { key: "booking", label: t("timeline.booking"), desc: t("timeline.booking_desc"), done: false, active: false },
-      { 
-        key: "kpr_process", 
-        label: isKpr ? t("timeline.kpr_process") : "Pelunasan / DP Lunas", 
-        desc: isKpr ? t("timeline.kpr_process_desc") : "Pembayaran sisa cash atau uang muka", 
-        done: false, 
-        active: false 
-      },
-      { key: "construction", label: t("timeline.construction"), desc: t("timeline.construction_desc"), done: false, active: false, progress: progress },
-      { key: "construction_done", label: t("timeline.construction_done"), desc: t("timeline.construction_done_desc"), done: false, active: false },
-      { key: "sold", label: t("timeline.sold"), desc: t("timeline.sold_desc"), done: false, active: false },
-    ];
-
-    // 1. Fase Pemasaran & Administrasi Penjualan
+  const isReady = unit ? (unit.isReadyStock === true || (unit.isReadyStock as any) === 1) : false;
+  const getUnbookedStatusLabel = (status: string, isReadyStock: boolean) => {
     if (status === "available") {
-      steps[0].done = true;
-      steps[0].active = true;
-    } else if (status === "payment_pending") {
-      steps[0].done = true;
-      steps[1].active = true;
-    } else if (status === "booking") {
-      steps[0].done = true;
-      steps[1].done = true;
-      steps[2].active = true;
-    } else if (status === "kpr_process") {
-      steps[0].done = true;
-      steps[1].done = true;
-      steps[2].done = true;
-      steps[3].active = true;
-    } else if (status === "sold") {
-      steps.forEach((s) => (s.done = true));
-      steps[6].active = true;
-    } else if (status === "construction" || status === "overdue") {
-      steps[0].done = true;
-      steps[1].done = true;
-      steps[2].done = true;
-      steps[3].done = true;
-      if (isReadyStock) {
-        steps[6].active = true;
-      } else {
-        steps[4].active = true;
+      return isReadyStock ? "Tersedia - Ready Stock" : "Tersedia";
+    }
+    if (status === "construction" || status === "overdue") {
+      return isReadyStock ? "Sedang Dibangun untuk Ready Stock" : "Proses Bangun";
+    }
+    if (status === "construction_done") {
+      return isReadyStock ? "Tersedia - Ready Stock" : "Selesai Bangun";
+    }
+    return getUnitStatusLabel(status, isReadyStock);
+  };
+
+  const displayStatusLabel = unit
+    ? (activeBooking
+      ? getUnitStatusLabel(unit.status, isReady)
+      : getUnbookedStatusLabel(unit.status, isReady))
+    : "—";
+
+  // Generate Timeline Data based on current status
+  const getTimelineSteps = ({
+    unit,
+    activeBooking,
+    paymentScheme,
+    kprProcess,
+    invoices
+  }: {
+    unit: any;
+    activeBooking: any;
+    paymentScheme?: string;
+    kprProcess?: any;
+    invoices: any[];
+  }) => {
+    if (!activeBooking) {
+      // Return a preview/unbooked timeline as requested:
+      // Tersedia -> Menunggu Booking Konsumen -> Booking/Penjualan -> Pembayaran sesuai skema -> Pembangunan fisik jika diperlukan -> Menunggu Serah Terima -> BAST Developer ke Konsumen -> Serah Terima Selesai
+      // Note: "Tahap setelah 'Menunggu Booking Konsumen' tidak boleh ditandai active atau done sebelum ada booking aktif."
+      const isReadyVal = unit.isReadyStock === true || unit.isReadyStock === 1;
+      return [
+        { key: "available", label: isReadyVal ? "Ready Stock" : "Tersedia", desc: isReadyVal ? "Unit Ready Stock siap dipasarkan" : "Unit siap dipasarkan", done: true, active: true },
+        { key: "waiting_booking", label: "Menunggu Booking Konsumen", desc: "Menunggu minat calon konsumen", done: false, active: false },
+        { key: "booking", label: "Booking / Penjualan", desc: "Pendaftaran transaksi konsumen", done: false, active: false },
+        { key: "payment", label: "Pembayaran sesuai skema", desc: "Cash, Cash Bertahap, atau KPR", done: false, active: false },
+        { key: "construction", label: "Pembangunan fisik jika diperlukan", desc: "Pembangunan unit non-ready stock", done: false, active: false },
+        { key: "handover_waiting", label: "Menunggu Serah Terima", desc: "Fisik & Finansial selesai divalidasi", done: false, active: false },
+        { key: "bast_developer", label: "BAST Developer ke Konsumen", desc: "Penandatanganan berita acara serah terima", done: false, active: false },
+        { key: "handover_done", label: "Serah Terima Selesai", desc: "Kunci fisik unit diserahkan", done: false, active: false },
+      ];
+    }
+
+    const unitStockType = getUnitStockType(unit);
+    const bookingInvoices = invoices.filter((invoice) => invoice.bookingId === activeBooking.id);
+    const bfInvoice = bookingInvoices.find((invoice) => invoice.type === "booking_fee");
+    const bfPaid = bfInvoice?.status === "paid";
+    const dpInvoice = bookingInvoices.find((invoice) => invoice.type === "dp");
+    const dpPaid = dpInvoice?.status === "paid";
+
+    const isHandoverWaiting = unit.status === "menunggu_serah_terima";
+    const isHandoverComplete = unit.status === "handover_complete";
+
+    const physical = getPhysicalReadiness(unit, selectedSpkBast);
+    const physicalReady = physical.ready;
+
+    // Helper to override all steps to done if handover is complete
+    const overrideIfHandoverComplete = (stepsList: any[]) => {
+      if (isHandoverComplete) {
+        return stepsList.map((s) => ({
+          ...s,
+          done: true,
+          active: s.key === "handover_done",
+        }));
       }
-    } else if (status === "construction_done") {
-      steps[0].done = true;
-      steps[1].done = true;
-      steps[2].done = true;
-      steps[3].done = true;
-      steps[4].done = true;
-      if (isReadyStock) {
-        steps[6].active = true;
-      } else {
-        steps[5].active = true;
+      return stepsList;
+    };
+
+    // ----------------------------------------------------
+    // CASH SCHEME
+    // ----------------------------------------------------
+    if (paymentScheme === "cash") {
+      const isCashPaid = bookingInvoices.length > 0 && bookingInvoices.every((invoice) => invoice.status === "paid");
+
+      if (unitStockType === "available_ready_stock" || unitStockType === "construction_done_ready_stock") {
+        const steps = [
+          { key: "available", label: "Tersedia - Ready Stock", desc: "Unit Ready Stock siap dipasarkan", done: true, active: false },
+          { key: "booking_fee", label: "Booking Fee", desc: "Pembayaran booking fee awal", done: bfPaid, active: !bfPaid },
+          { key: "cash_payment", label: "Pelunasan Cash", desc: "Pelunasan sisa pembayaran unit", done: isCashPaid, active: bfPaid && !isCashPaid },
+          { key: "akad_ppjb", label: "Akad / PPJB", desc: "Penandatanganan Akad / PPJB", done: isCashPaid, active: isCashPaid && !isHandoverWaiting && !isHandoverComplete },
+          { key: "handover_waiting", label: "Menunggu Serah Terima", desc: "Fisik & Finansial selesai divalidasi", done: isHandoverWaiting || isHandoverComplete, active: isHandoverWaiting },
+          { key: "bast_developer", label: "BAST Developer ke Konsumen", desc: "Penandatanganan berita acara serah terima", done: isHandoverComplete, active: isHandoverWaiting },
+          { key: "handover_done", label: "Serah Terima Selesai", desc: "Kunci fisik unit diserahkan", done: isHandoverComplete, active: isHandoverComplete },
+        ];
+        return overrideIfHandoverComplete(steps);
       }
+
+      if (unitStockType === "building_for_ready_stock") {
+        const steps = [
+          { key: "available", label: "Sedang Dibangun untuk Ready Stock", desc: "Unit sedang dalam konstruksi internal", done: true, active: false },
+          { key: "booking_fee", label: "Booking Fee", desc: "Pembayaran booking fee awal", done: bfPaid, active: !bfPaid },
+          { key: "cash_payment", label: "Pelunasan Cash", desc: "Pelunasan sisa pembayaran unit", done: isCashPaid, active: bfPaid && !isCashPaid },
+          { key: "akad_ppjb", label: "Akad / PPJB", desc: "Penandatanganan Akad / PPJB", done: isCashPaid, active: isCashPaid && !physicalReady },
+          { key: "physical_waiting", label: "Menunggu Fisik Selesai", desc: "Progress 100% & BAST Vendor approved", done: physicalReady, active: isCashPaid && !physicalReady },
+          { key: "handover_waiting", label: "Menunggu Serah Terima", desc: "Fisik & Finansial selesai divalidasi", done: isHandoverWaiting || isHandoverComplete, active: isHandoverWaiting },
+          { key: "bast_developer", label: "BAST Developer ke Konsumen", desc: "Penandatanganan berita acara serah terima", done: isHandoverComplete, active: isHandoverWaiting },
+          { key: "handover_done", label: "Serah Terima Selesai", desc: "Kunci fisik unit diserahkan", done: isHandoverComplete, active: isHandoverComplete },
+        ];
+        return overrideIfHandoverComplete(steps);
+      }
+
+      // Default / Tersedia non-ready stock / Kavling
+      const steps = [
+        { key: "available", label: "Tersedia", desc: "Unit siap dipasarkan", done: true, active: false },
+        { key: "booking_fee", label: "Booking Fee", desc: "Pembayaran booking fee awal", done: bfPaid, active: !bfPaid },
+        { key: "booking_pemberkasan", label: "Booking & Pemberkasan", desc: "Verifikasi kas & berkas konsumen", done: bfPaid, active: bfPaid && !isCashPaid },
+        { key: "cash_payment", label: "Pelunasan Cash", desc: "Pelunasan sisa pembayaran unit", done: isCashPaid, active: bfPaid && !isCashPaid },
+        { key: "akad_ppjb", label: "Akad / PPJB", desc: "Penandatanganan Akad / PPJB", done: isCashPaid, active: isCashPaid && !physicalReady },
+        { key: "physical_waiting", label: "Cek Fisik Unit", desc: "Menunggu pembangunan fisik selesai", done: physicalReady, active: isCashPaid && !physicalReady },
+        { key: "handover_waiting", label: "Menunggu Serah Terima", desc: "Fisik & Finansial selesai divalidasi", done: isHandoverWaiting || isHandoverComplete, active: isHandoverWaiting },
+        { key: "bast_developer", label: "BAST Developer ke Konsumen", desc: "Penandatanganan berita acara serah terima", done: isHandoverComplete, active: isHandoverWaiting },
+        { key: "handover_done", label: "Serah Terima Selesai", desc: "Kunci fisik unit diserahkan", done: isHandoverComplete, active: isHandoverComplete },
+      ];
+      return overrideIfHandoverComplete(steps);
     }
 
-    if (status === "cancelled") {
-      steps.forEach((s) => {
-        s.done = false;
-        s.active = false;
-      });
+    // ----------------------------------------------------
+    // CASH BERTAHAP / INSTALLMENT SCHEME
+    // ----------------------------------------------------
+    if (paymentScheme === "installment" || paymentScheme === "cash_bertahap") {
+      const allInvoicesPaid = bookingInvoices.length > 0 && bookingInvoices.every((invoice) => invoice.status === "paid");
+
+      if (unitStockType === "available_ready_stock" || unitStockType === "construction_done_ready_stock") {
+        const steps = [
+          { key: "available", label: "Tersedia - Ready Stock", desc: "Unit Ready Stock siap dipasarkan", done: true, active: false },
+          { key: "booking_fee", label: "Booking Fee", desc: "Pembayaran booking fee awal", done: bfPaid, active: !bfPaid },
+          { key: "dp_payment", label: "DP / Termin Awal", desc: "Pembayaran uang muka / termin ke-1", done: dpPaid, active: bfPaid && !dpPaid },
+          { key: "installment_payment", label: "Pembayaran Termin Berjalan", desc: "Pelunasan cicilan termin berjalan", done: allInvoicesPaid, active: dpPaid && !allInvoicesPaid },
+          { key: "all_paid", label: "Seluruh Invoice Lunas", desc: "Semua invoice termin lunas", done: allInvoicesPaid, active: dpPaid && !allInvoicesPaid },
+          { key: "akad_ppjb", label: "Akad / PPJB", desc: "Penandatanganan Akad / PPJB", done: allInvoicesPaid, active: allInvoicesPaid && !isHandoverWaiting && !isHandoverComplete },
+          { key: "handover_waiting", label: "Menunggu Serah Terima", desc: "Fisik & Finansial selesai divalidasi", done: isHandoverWaiting || isHandoverComplete, active: isHandoverWaiting },
+          { key: "bast_developer", label: "BAST Developer ke Konsumen", desc: "Penandatanganan berita acara serah terima", done: isHandoverComplete, active: isHandoverWaiting },
+          { key: "handover_done", label: "Serah Terima Selesai", desc: "Kunci fisik unit diserahkan", done: isHandoverComplete, active: isHandoverComplete },
+        ];
+        return overrideIfHandoverComplete(steps);
+      }
+
+      if (unitStockType === "building_for_ready_stock") {
+        const steps = [
+          { key: "available", label: "Sedang Dibangun untuk Ready Stock", desc: "Unit sedang dalam konstruksi internal", done: true, active: false },
+          { key: "booking_fee", label: "Booking Fee", desc: "Pembayaran booking fee awal", done: bfPaid, active: !bfPaid },
+          { key: "dp_payment", label: "DP / Termin Awal", desc: "Pembayaran uang muka / termin ke-1", done: dpPaid, active: bfPaid && !dpPaid },
+          { key: "installment_payment", label: "Pembayaran Termin Berjalan", desc: "Pelunasan cicilan termin berjalan", done: allInvoicesPaid, active: dpPaid && !allInvoicesPaid },
+          { key: "all_paid", label: "Seluruh Invoice Lunas", desc: "Semua invoice termin lunas", done: allInvoicesPaid, active: dpPaid && !allInvoicesPaid },
+          { key: "akad_ppjb", label: "Akad / PPJB", desc: "Penandatanganan Akad / PPJB", done: allInvoicesPaid, active: allInvoicesPaid && !physicalReady },
+          { key: "physical_waiting", label: "Menunggu Fisik Selesai", desc: "Progress 100% & BAST Vendor approved", done: physicalReady, active: allInvoicesPaid && !physicalReady },
+          { key: "handover_waiting", label: "Menunggu Serah Terima", desc: "Fisik & Finansial selesai divalidasi", done: isHandoverWaiting || isHandoverComplete, active: isHandoverWaiting },
+          { key: "bast_developer", label: "BAST Developer ke Konsumen", desc: "Penandatanganan berita acara serah terima", done: isHandoverComplete, active: isHandoverWaiting },
+          { key: "handover_done", label: "Serah Terima Selesai", desc: "Kunci fisik unit diserahkan", done: isHandoverComplete, active: isHandoverComplete },
+        ];
+        return overrideIfHandoverComplete(steps);
+      }
+
+      // Default / Tersedia non-ready stock / Kavling
+      const steps = [
+        { key: "available", label: "Tersedia", desc: "Unit siap dipasarkan", done: true, active: false },
+        { key: "booking_fee", label: "Booking Fee", desc: "Pembayaran booking fee awal", done: bfPaid, active: !bfPaid },
+        { key: "booking_pemberkasan", label: "Booking & Pemberkasan", desc: "Verifikasi kas & berkas konsumen", done: bfPaid, active: bfPaid && !dpPaid },
+        { key: "dp_payment", label: "DP / Termin Awal", desc: "Pembayaran uang muka / termin ke-1", done: dpPaid, active: bfPaid && !dpPaid },
+        { key: "installment_payment", label: "Pembayaran Termin Berjalan", desc: "Pelunasan cicilan termin berjalan", done: allInvoicesPaid, active: dpPaid && !allInvoicesPaid },
+        { key: "all_paid", label: "Seluruh Invoice Lunas", desc: "Semua invoice termin lunas", done: allInvoicesPaid, active: dpPaid && !allInvoicesPaid },
+        { key: "akad_ppjb", label: "Akad / PPJB", desc: "Penandatanganan Akad / PPJB", done: allInvoicesPaid, active: allInvoicesPaid && !physicalReady },
+        { key: "physical_waiting", label: "Cek Fisik Unit", desc: "Menunggu pembangunan fisik selesai", done: physicalReady, active: allInvoicesPaid && !physicalReady },
+        { key: "handover_waiting", label: "Menunggu Serah Terima", desc: "Fisik & Finansial selesai divalidasi", done: isHandoverWaiting || isHandoverComplete, active: isHandoverWaiting },
+        { key: "bast_developer", label: "BAST Developer ke Konsumen", desc: "Penandatanganan berita acara serah terima", done: isHandoverComplete, active: isHandoverWaiting },
+        { key: "handover_done", label: "Serah Terima Selesai", desc: "Kunci fisik unit diserahkan", done: isHandoverComplete, active: isHandoverComplete },
+      ];
+      return overrideIfHandoverComplete(steps);
     }
 
-    if (isReadyStock) {
-      return steps.filter(s => s.key !== "construction" && s.key !== "construction_done");
+    // ----------------------------------------------------
+    // KPR SCHEME
+    // ----------------------------------------------------
+    const kprStatus = kprProcess?.status || "bi_checking";
+    const kprRealized = kprStatus === "realisasi" || kprProcess?.status === "completed";
+    const kprAkad = kprStatus === "akad" || kprRealized;
+    const kprApproved = kprStatus === "approved" || kprStatus === "offering" || kprAkad;
+    const kprProsesBank = kprStatus === "proses_bank" || kprApproved;
+
+    if (unitStockType === "available_ready_stock" || unitStockType === "construction_done_ready_stock") {
+      const steps = [
+        { key: "available", label: "Tersedia - Ready Stock", desc: "Unit Ready Stock siap dipasarkan", done: true, active: false },
+        { key: "booking_fee", label: "Booking Fee", desc: "Pembayaran booking fee awal", done: bfPaid, active: !bfPaid },
+        { key: "dp_kpr", label: "DP / Dokumen KPR", desc: "Pembayaran DP & kelengkapan dokumen KPR", done: dpPaid, active: bfPaid && !dpPaid },
+        { key: "proses_bank", label: "Proses Bank", desc: "Analisis KPR oleh bank", done: kprProsesBank, active: dpPaid && !kprProsesBank },
+        { key: "sp3k_approval", label: "Approval / SP3K", desc: "Surat Penegasan Persetujuan KPR", done: kprApproved, active: kprProsesBank && !kprApproved },
+        { key: "akad_kredit", label: "Akad Kredit", desc: "Tanda tangan akad kredit konsumen", done: kprAkad, active: kprApproved && !kprAkad },
+        { key: "realisasi_dana", label: "Realisasi Dana Bank", desc: "Pencairan dana KPR ke developer", done: kprRealized, active: kprAkad && !kprRealized },
+        { key: "handover_waiting", label: "Menunggu Serah Terima", desc: "Fisik & Finansial selesai divalidasi", done: isHandoverWaiting || isHandoverComplete, active: isHandoverWaiting },
+        { key: "bast_developer", label: "BAST Developer ke Konsumen", desc: "Penandatanganan berita acara serah terima", done: isHandoverComplete, active: isHandoverWaiting },
+        { key: "handover_done", label: "Serah Terima Selesai", desc: "Kunci fisik unit diserahkan", done: isHandoverComplete, active: isHandoverComplete },
+      ];
+      return overrideIfHandoverComplete(steps);
     }
 
-    return steps;
+    if (unitStockType === "building_for_ready_stock") {
+      const steps = [
+        { key: "available", label: "Sedang Dibangun untuk Ready Stock", desc: "Unit sedang dalam konstruksi internal", done: true, active: false },
+        { key: "booking_fee", label: "Booking Fee", desc: "Pembayaran booking fee awal", done: bfPaid, active: !bfPaid },
+        { key: "dp_kpr", label: "DP / Dokumen KPR", desc: "Pembayaran DP & kelengkapan dokumen KPR", done: dpPaid, active: bfPaid && !dpPaid },
+        { key: "proses_bank", label: "Proses Bank", desc: "Analisis KPR oleh bank", done: kprProsesBank, active: dpPaid && !kprProsesBank },
+        { key: "sp3k_approval", label: "Approval / SP3K", desc: "Surat Penegasan Persetujuan KPR", done: kprApproved, active: kprProsesBank && !kprApproved },
+        { key: "akad_kredit", label: "Akad Kredit", desc: "Tanda tangan akad kredit konsumen", done: kprAkad, active: kprApproved && !kprAkad },
+        { key: "realisasi_dana", label: "Realisasi Dana Bank", desc: "Pencairan dana KPR ke developer", done: kprRealized, active: kprAkad && !kprRealized },
+        { key: "physical_waiting", label: "Menunggu Fisik Selesai", desc: "Progress 100% & BAST Vendor approved", done: physicalReady, active: kprRealized && !physicalReady },
+        { key: "handover_waiting", label: "Menunggu Serah Terima", desc: "Fisik & Finansial selesai divalidasi", done: isHandoverWaiting || isHandoverComplete, active: isHandoverWaiting },
+        { key: "bast_developer", label: "BAST Developer ke Konsumen", desc: "Penandatanganan berita acara serah terima", done: isHandoverComplete, active: isHandoverWaiting },
+        { key: "handover_done", label: "Serah Terima Selesai", desc: "Kunci fisik unit diserahkan", done: isHandoverComplete, active: isHandoverComplete },
+      ];
+      return overrideIfHandoverComplete(steps);
+    }
+
+    // Default / Tersedia non-ready stock / Kavling
+    const steps = [
+      { key: "available", label: "Tersedia", desc: "Unit siap dipasarkan", done: true, active: false },
+      { key: "booking_fee", label: "Booking Fee", desc: "Pembayaran booking fee awal", done: bfPaid, active: !bfPaid },
+      { key: "booking_pemberkasan", label: "Booking & Pemberkasan", desc: "Verifikasi kas & berkas konsumen", done: bfPaid, active: bfPaid && !dpPaid },
+      { key: "dp_kpr", label: "DP / Dokumen KPR", desc: "Pembayaran DP & kelengkapan dokumen KPR", done: dpPaid, active: bfPaid && !dpPaid },
+      { key: "proses_bank", label: "Proses Bank", desc: "Analisis KPR oleh bank", done: kprProsesBank, active: dpPaid && !kprProsesBank },
+      { key: "sp3k_approval", label: "Approval / SP3K", desc: "Surat Penegasan Persetujuan KPR", done: kprApproved, active: kprProsesBank && !kprApproved },
+      { key: "akad_kredit", label: "Akad Kredit", desc: "Tanda tangan akad kredit konsumen", done: kprAkad, active: kprApproved && !kprAkad },
+      { key: "realisasi_dana", label: "Realisasi Dana Bank", desc: "Pencairan dana KPR ke developer", done: kprRealized, active: kprAkad && !kprRealized },
+      { key: "physical_waiting", label: "Cek Fisik Unit", desc: "Menunggu pembangunan fisik selesai", done: physicalReady, active: kprRealized && !physicalReady },
+      { key: "handover_waiting", label: "Menunggu Serah Terima", desc: "Fisik & Finansial selesai divalidasi", done: isHandoverWaiting || isHandoverComplete, active: isHandoverWaiting },
+      { key: "bast_developer", label: "BAST Developer ke Konsumen", desc: "Penandatanganan berita acara serah terima", done: isHandoverComplete, active: isHandoverWaiting },
+      { key: "handover_done", label: "Serah Terima Selesai", desc: "Kunci fisik unit diserahkan", done: isHandoverComplete, active: isHandoverComplete },
+    ];
+    return overrideIfHandoverComplete(steps);
   };
 
   return (
@@ -1040,7 +1488,7 @@ export function SiteplanViewer({
                       {unit.status === "booking" && <Clock className="h-3.5 w-3.5 animate-pulse" />}
                       {unit.status === "construction" && <Hammer className="h-3.5 w-3.5 animate-pulse" />}
                       {unit.status === "sold" && <CheckCircle2 className="h-3.5 w-3.5" />}
-                      {getUnitStatusLabel(unit.status, isReadyStock)}
+                      {displayStatusLabel}
                     </span>
                   </div>
 
@@ -1054,12 +1502,11 @@ export function SiteplanViewer({
                   </div>
                 </div>
 
-                {/* KPR Pipeline Status Card (Only if payment scheme is KPR) */}
+                {/* KPR Pipeline Status Card (Only if active booking and payment scheme is KPR) */}
                 {(() => {
-                  const realBooking = bookings?.find(b => b.unitId === unit.id && b.status !== "cancelled")
-                    || bookings?.find(b => b.id === (unit as any).currentBookingId);
-                  const isKpr = realBooking?.paymentScheme === "kpr" || unit.status === "kpr_process";
-                  const kprProcess = realBooking ? kprProcesses?.find(k => k.bookingId === realBooking.id) : null;
+                  if (!activeBooking) return null;
+                  const isKpr = activeBooking.paymentScheme === "kpr" || unit.status === "kpr_process";
+                  const kprProcess = kprProcesses?.find(k => k.bookingId === activeBooking.id);
                   
                   if (!isKpr) return null;
 
@@ -1071,6 +1518,7 @@ export function SiteplanViewer({
                     approved:    { label: "Approved KPR", className: "bg-teal-50 text-teal-700 border-teal-200" },
                     rejected:    { label: "Rejected KPR", className: "bg-rose-50 text-rose-700 border-rose-200" },
                     akad:        { label: "Akad Kredit", className: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+                    realisasi:   { label: "Realisasi Dana", className: "bg-emerald-100 text-emerald-800 border-emerald-300" },
                   };
 
                   const currentKprStatus = kprProcess?.status || "bi_checking";
@@ -1106,60 +1554,98 @@ export function SiteplanViewer({
                   );
                 })()}
 
-                {/* Sprint 3: Serah Terima Info Card */}
-                {(unit.status === "menunggu_serah_terima" || unit.status === "handover_complete") && (() => {
-                  // Filter booking aktif — exclude cancelled. Prioritaskan akad/completed.
-                  const activeBooking = bookings?.find(
-                    b => b.unitId === unit.id && (b.status === "akad" || b.status === "completed")
-                  ) || bookings?.find(
-                    b => b.unitId === unit.id && b.status !== "cancelled"
-                  );
-                  const activeCustomer = activeBooking
-                    ? customers?.find(c => c.id === activeBooking.customerId)
-                    : null;
-                  const schemeReason =
-                    activeBooking?.paymentScheme === "kpr" ? "KPR — Realisasi Dana" :
-                    activeBooking?.paymentScheme === "cash" ? "Cash — Invoice Lunas" :
-                    activeBooking?.paymentScheme === "installment" ? "Installment — Invoice Lunas" :
-                    "—";
+                {/* BAST Developer ke Konsumen Card */}
+                {(() => {
+                  if (!activeBooking) return null;
 
                   const isHandoverDone = unit.status === "handover_complete";
+                  const kprProcess = kprProcesses?.find(k => k.bookingId === activeBooking.id);
+                  const eligibility = getHandoverEligibility(unit, activeBooking, invoices, kprProcess, selectedSpkBast);
+
+                  const schemeReason =
+                    activeBooking.paymentScheme === "kpr" ? "KPR — Realisasi Dana" :
+                    activeBooking.paymentScheme === "cash" ? "Cash — Invoice Lunas" :
+                    activeBooking.paymentScheme === "installment" ? "Installment — Invoice Lunas" :
+                    "—";
+
+                  if (unit.status !== "menunggu_serah_terima" && !isHandoverDone) {
+                    return null;
+                  }
+
+                  const activeCustomer = customers?.find(c => c.id === activeBooking.customerId);
+
                   return (
-                    <div className={`rounded-2xl border p-4 mt-3 ${
-                      isHandoverDone
-                        ? "border-teal-200 bg-teal-50/60"
-                        : "border-violet-200 bg-violet-50/60"
-                    }`}>
-                      <div className="flex items-start gap-2">
-                        <div className={`h-7 w-7 rounded-lg flex items-center justify-center shrink-0 ${
-                          isHandoverDone ? "bg-teal-100 text-teal-600" : "bg-violet-100 text-violet-600"
-                        }`}>
-                          <CheckCircle2 className="h-4 w-4" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className={`text-[11px] font-black uppercase tracking-wide ${
-                            isHandoverDone ? "text-teal-700" : "text-violet-700"
+                    <div className="rounded-[2rem] border p-5 mt-3 bg-white border-[#D6DED2] shadow-sage space-y-4 transition-all hover:shadow-sage-lg text-left">
+                      <h4 className="text-xs font-black text-[#243028] uppercase tracking-wider flex items-center gap-2 border-b border-[#D6DED2]/40 pb-3">
+                        <CheckCircle2 className="h-4 w-4 text-[#4F6F52]" />
+                        BAST Developer ke Konsumen
+                      </h4>
+                      <div className="space-y-3">
+                        <div className="flex items-start gap-2">
+                          <div className={`h-7 w-7 rounded-lg flex items-center justify-center shrink-0 ${
+                            isHandoverDone ? "bg-teal-100 text-teal-600" : "bg-violet-100 text-violet-600"
                           }`}>
-                            {isHandoverDone ? "Serah Terima Selesai" : "Menunggu Serah Terima"}
-                          </p>
-                          {activeCustomer && (
-                            <p className="text-xs font-semibold text-slate-700 mt-1">
-                              Konsumen: {activeCustomer.name}
+                            <CheckCircle2 className="h-4 w-4" />
+                          </div>
+                          <div className="flex-1 min-w-0 text-xs">
+                            <p className={`font-black uppercase tracking-wide ${
+                              isHandoverDone ? "text-teal-700" : "text-violet-700"
+                            }`}>
+                              {isHandoverDone ? "Serah Terima Selesai" : "Menunggu Serah Terima"}
                             </p>
-                          )}
-                          <p className={`text-[10px] font-bold mt-0.5 uppercase tracking-wider ${
-                            isHandoverDone ? "text-teal-500" : "text-violet-500"
-                          }`}>
-                            {schemeReason}
-                          </p>
-                          <p className={`text-[10px] mt-1 leading-relaxed ${
-                            isHandoverDone ? "text-teal-600" : "text-violet-600"
-                          }`}>
-                            {isHandoverDone
-                              ? "BAST Konsumen telah disetujui. Unit telah resmi diserahterimakan."
-                              : "Seluruh kewajiban pembayaran lunas. Jadwalkan serah terima fisik unit."}
-                          </p>
+                            {activeCustomer && (
+                              <p className="font-semibold text-slate-700 mt-1">
+                                Konsumen: {activeCustomer.name}
+                              </p>
+                            )}
+                            <p className={`font-bold mt-0.5 uppercase tracking-wider ${
+                              isHandoverDone ? "text-teal-500" : "text-violet-500"
+                            }`}>
+                              {schemeReason}
+                            </p>
+                            <p className="mt-1 leading-relaxed text-[#66736A]">
+                              {isHandoverDone
+                                ? "BAST Konsumen telah disetujui. Unit telah resmi diserahterimakan."
+                                : "Syarat finansial dan fisik sudah terpenuhi. Jadwalkan serah terima fisik unit."}
+                            </p>
+                          </div>
                         </div>
+
+                        {/* BAST Button Actions */}
+                        {eligibility.eligible ? (
+                          <a
+                            href={`/marketing/bookings/${activeBooking.id}/bast/print`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-full bg-[#4F6F52] hover:bg-[#3D563F] text-white font-extrabold text-xs rounded-xl py-3 flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-[0.98]"
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                            Cetak BAST Konsumen
+                          </a>
+                        ) : isHandoverDone ? (
+                          <a
+                            href={`/marketing/bookings/${activeBooking.id}/bast/print`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-full bg-[#DDE8D8] text-[#4F6F52] border border-[#8FAF9A]/30 font-extrabold text-xs rounded-xl py-3 flex items-center justify-center gap-1.5 transition-all shadow-sm hover:bg-[#c9dcc2]"
+                          >
+                            <CheckCircle2 className="h-4 w-4" />
+                            Lihat Dokumen BAST (Selesai)
+                          </a>
+                        ) : (
+                          <div className="space-y-2">
+                            <Button
+                              disabled
+                              className="w-full bg-slate-100 border border-slate-200 text-slate-400 font-extrabold text-xs rounded-xl py-3 flex items-center justify-center gap-1.5 cursor-not-allowed shadow-none"
+                            >
+                              <Lock className="h-4 w-4" />
+                              Cetak BAST Konsumen
+                            </Button>
+                            <p className="text-[10px] text-rose-600 font-bold bg-rose-50 border border-rose-100 rounded-xl p-2 text-center leading-normal">
+                              ⚠️ {eligibility.reason}
+                            </p>
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
@@ -1167,8 +1653,8 @@ export function SiteplanViewer({
 
                 {unit.status !== "belum_siap" && (
                   <>
-                    {/* 1.5. Booking Unit Action Card */}
-                    {unit.status === "available" && canBook && projects && units && customers && marketings && currentUser && (
+                    {/* Booking Unit Action Card */}
+                    {!activeBooking && unit.status === "available" && canBook && projects && units && customers && marketings && currentUser && (
                       <div className="bg-white rounded-[2rem] p-4.5 border border-[#D6DED2] shadow-sage flex flex-col gap-3 transition-all hover:shadow-sage-lg text-left mt-5">
                         <p className="text-xs font-medium text-[#66736A] leading-relaxed" dangerouslySetInnerHTML={{ __html: t("siteplan_viewer.booking_desc").replace(/<1>/g, '<span class="text-[#4F6F52] font-black">').replace(/<\/1>/g, '</span>') }} />
                         <AddBookingDialog
@@ -1195,48 +1681,43 @@ export function SiteplanViewer({
                       </div>
                     )}
 
-                    {/* 1.7. Mulai Pembangunan Fisik Action Card */}
-                    {(unit.status === "booking" || unit.status === "kpr_process") && (() => {
-                      const realBooking = bookings?.find(b => b.unitId === unit.id && b.status !== "cancelled")
-                        || bookings?.find(b => b.id === (unit as any).currentBookingId);
-                      if (!realBooking) return null;
-
-                      const kprProcess = kprProcesses?.find(k => k.bookingId === realBooking.id);
-                      const bfInvoice = invoices?.find(i => i.bookingId === realBooking.id && i.type === "booking_fee");
-                      const dpInvoice = invoices?.find(i => i.bookingId === realBooking.id && i.type === "dp");
+                    {/* Mulai Pembangunan Fisik Action Card */}
+                    {activeBooking && (unit.status === "booking" || unit.status === "kpr_process") && (() => {
+                      const kprProcess = kprProcesses?.find(k => k.bookingId === activeBooking.id);
+                      const bfInvoice = invoices?.find(i => i.bookingId === activeBooking.id && i.type === "booking_fee");
+                      const dpInvoice = invoices?.find(i => i.bookingId === activeBooking.id && i.type === "dp");
 
                       const bfPaid = bfInvoice?.status === "paid";
                       const dpPaid = dpInvoice?.status === "paid";
-                      const kprApproved = realBooking.paymentScheme !== "kpr" || (kprProcess && (kprProcess.status === "approved" || kprProcess.status === "akad"));
+                      const kprApproved = activeBooking.paymentScheme !== "kpr" || (kprProcess && (kprProcess.status === "approved" || kprProcess.status === "akad"));
 
                       if (bfPaid && dpPaid && kprApproved) {
-                        // Role-based authorization check
                         const isAuthorized = currentUser?.role != null &&
                           ["Super Admin", "Admin Kantor", "Marketing Manager"].includes(currentUser.role);
 
                         return (
                           <div className="bg-white rounded-[2rem] p-4.5 border border-[#D6DED2] shadow-sage flex flex-col gap-3 transition-all hover:shadow-sage-lg text-left mt-5 animate-fade-in">
                             <p className="text-xs font-medium text-[#66736A] leading-relaxed">
-                              Pembayaran Uang Muka (DP) &amp; Booking Fee telah lunas divalidasi oleh Keuangan {realBooking.paymentScheme === "kpr" ? "serta Analisis KPR disetujui" : ""}. {isAuthorized ? "Anda sekarang dapat memulai pembangunan fisik untuk unit ini." : "Menunggu otorisasi untuk memulai pembangunan fisik."}
+                              Pembayaran Uang Muka (DP) &amp; Booking Fee telah lunas divalidasi oleh Keuangan {activeBooking.paymentScheme === "kpr" ? "serta Analisis KPR disetujui" : ""}. {isAuthorized ? "Anda sekarang dapat memulai pembangunan fisik untuk unit ini." : "Menunggu otorisasi untuk memulai pembangunan fisik."}
                             </p>
                             <Button
                               disabled={isSubmitting || !isAuthorized}
                               onClick={async () => {
-                                if (!isAuthorized) return;
-                                setIsSubmitting(true);
-                                setErrorMessage(null);
-                                try {
-                                  const res = await startPhysicalConstructionManual(unit.id);
-                                  if (res.success) {
-                                    alert(`Unit "${unit.code}" berhasil masuk ke tahap Pembangunan Fisik!`);
-                                    window.location.reload();
+                                  if (!isAuthorized) return;
+                                  setIsSubmitting(true);
+                                  setErrorMessage(null);
+                                  try {
+                                    const res = await startPhysicalConstructionManual(unit.id);
+                                    if (res.success) {
+                                      alert(`Unit "${unit.code}" berhasil masuk ke tahap Pembangunan Fisik!`);
+                                      window.location.reload();
+                                    }
+                                  } catch (err: any) {
+                                    setErrorMessage(err.message || "Gagal memulai pembangunan fisik.");
+                                    alert(err.message || "Gagal memulai pembangunan fisik.");
+                                  } finally {
+                                    setIsSubmitting(false);
                                   }
-                                } catch (err: any) {
-                                  setErrorMessage(err.message || "Gagal memulai pembangunan fisik.");
-                                  alert(err.message || "Gagal memulai pembangunan fisik.");
-                                } finally {
-                                  setIsSubmitting(false);
-                                }
                               }}
                               className={
                                 isAuthorized
@@ -1271,210 +1752,279 @@ export function SiteplanViewer({
                       return null;
                     })()}
 
-                    {/* 1.6. Selesai Pembangunan Action Card */}
+                    {/* Selesai Pembangunan Action Card */}
                     {((unit.status === "construction_done") ||
-                      ((unit.status === "construction" || unit.status === "overdue") && unit.constructionProgress === 100)) && (
-                      <div className="bg-white rounded-[2rem] p-4.5 border border-[#D6DED2] shadow-sage flex flex-col gap-3 transition-all hover:shadow-sage-lg text-left mt-5 animate-fade-in">
-                        <p className="text-xs font-medium text-[#66736A] leading-relaxed">
-                          Pembangunan unit ini telah rampung 100%. Sebagai Developer, Anda dapat memverifikasi selesainya pembangunan fisik lapangan secara resmi agar status unit kembali menjadi <span className="text-[#4F6F52] font-black">Tersedia (Ready Stock)</span>.
-                        </p>
-                        <Button
-                          disabled={isSubmitting}
-                          onClick={() => handleOpenBastDialog(unit)}
-                          className="w-full bg-[#4F6F52] hover:bg-[#3D563F] text-white font-extrabold rounded-2xl py-3 flex items-center justify-center gap-2 shadow-[0_4px_12px_rgba(79,111,82,0.25)] hover:scale-[1.01] active:scale-[0.99] transition-all"
-                        >
-                          {isSubmitting ? (
-                            <>
-                              <span className="h-3 w-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                              Memproses...
-                            </>
-                          ) : (
-                            <>
-                              <CheckCircle2 className="h-4 w-4 text-white" />
-                              Selesai Pembangunan
-                            </>
-                          )}
-                        </Button>
+                      ((unit.status === "construction" || unit.status === "overdue") && unit.constructionProgress === 100)) && (() => {
+                        const isIndentUnit = !!activeBooking || !!(unit as any).currentCustomerId;
+                        const canVerifyBast = currentUser?.role != null &&
+                          ["Super Admin", "Admin Kantor", "Pengawas Lapangan", "Pengawas"].includes(currentUser.role);
+
+                        return (
+                          <div className="bg-white rounded-[2rem] p-4.5 border border-[#D6DED2] shadow-sage flex flex-col gap-3 transition-all hover:shadow-sage-lg text-left mt-5 animate-fade-in">
+                            <p className="text-xs font-medium text-[#66736A] leading-relaxed">
+                              {isIndentUnit ? (
+                                <>
+                                  Pembangunan unit ini telah rampung 100%. Sebagai Developer, Anda dapat memverifikasi selesainya pembangunan fisik lapangan secara resmi. Karena unit ini telah terikat dengan konsumen, status unit akan tetap terikat dan tidak menjadi <span className="text-[#4F6F52] font-black">Tersedia (Ready Stock)</span>.
+                                </>
+                              ) : (
+                                <>
+                                  Pembangunan unit ini telah rampung 100%. Sebagai Developer, Anda dapat memverifikasi selesainya pembangunan fisik lapangan secara resmi agar status unit kembali menjadi <span className="text-[#4F6F52] font-black">Tersedia (Ready Stock)</span>.
+                                </>
+                              )}
+                            </p>
+                            <Button
+                              disabled={isSubmitting || !canVerifyBast}
+                              onClick={() => {
+                                if (!canVerifyBast) return;
+                                handleOpenBastDialog(unit);
+                              }}
+                              className={
+                                canVerifyBast
+                                  ? "w-full bg-[#4F6F52] hover:bg-[#3D563F] text-white font-extrabold rounded-2xl py-3 flex items-center justify-center gap-2 shadow-[0_4px_12px_rgba(79,111,82,0.25)] hover:scale-[1.01] active:scale-[0.99] transition-all"
+                                  : "w-full bg-slate-100 border border-slate-200 text-slate-400 font-extrabold rounded-2xl py-3 flex items-center justify-center gap-2 cursor-not-allowed shadow-none transition-all"
+                              }
+                            >
+                              {isSubmitting ? (
+                                <>
+                                  <span className="h-3.5 w-3.5 border-2 border-slate-300 border-t-slate-600 rounded-full animate-spin mr-1.5" />
+                                  Memproses...
+                                </>
+                              ) : canVerifyBast ? (
+                                <>
+                                  <CheckCircle2 className="h-4 w-4 text-white" />
+                                  Selesai Pembangunan
+                                </>
+                              ) : (
+                                <>
+                                  <Lock className="h-4 w-4 shrink-0" />
+                                  Selesai Pembangunan
+                                </>
+                              )}
+                            </Button>
+                            {!canVerifyBast && (
+                              <div className="text-[10px] text-amber-800 font-bold flex items-start gap-2 bg-amber-50/70 border border-amber-100/80 rounded-xl px-3 py-2.5 text-left leading-normal mt-1 animate-fade-in">
+                                <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0 mt-0.5" />
+                                <span>
+                                  Hanya <span className="font-black text-amber-950">Super Admin</span>,{" "}
+                                  <span className="font-black text-amber-950">Admin Kantor</span>, atau{" "}
+                                  <span className="font-black text-amber-950">Pengawas Lapangan</span> yang berwenang memverifikasi selesainya pembangunan fisik.
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+
+                    {/* Unbooked Stock Info Card (Only if NO active booking) */}
+                    {!activeBooking && (
+                      <div className="bg-white rounded-[2rem] p-5 border border-[#D6DED2] shadow-sage space-y-3 transition-all hover:shadow-sage-lg mt-5 text-left animate-fade-in">
+                        <h4 className="text-xs font-black text-[#243028] uppercase tracking-wider flex items-center gap-2 border-b border-[#D6DED2]/40 pb-3">
+                          <Building2 className="h-4 w-4 text-[#4F6F52]" />
+                          Status Stok &amp; Unit
+                        </h4>
+                        <div className="text-xs font-medium text-[#66736A] leading-relaxed space-y-2">
+                          {(() => {
+                            const stockType = getUnitStockType(unit);
+                            if (stockType === "available") {
+                              return (
+                                <p>
+                                  Unit tersedia dan siap dipasarkan.<br />
+                                  <span className="font-bold text-amber-600">Belum ada booking aktif.</span>
+                                </p>
+                              );
+                            }
+                            if (stockType === "available_ready_stock" || stockType === "construction_done_ready_stock") {
+                              return (
+                                <p>
+                                  Unit Ready Stock dan belum terjual.<br />
+                                  <span className="font-bold text-[#4F6F52]">BAST Konsumen akan aktif setelah ada booking dan syarat pembayaran terpenuhi.</span>
+                                </p>
+                              );
+                            }
+                            if (stockType === "building_for_ready_stock") {
+                              return (
+                                <p>
+                                  Unit sedang dibangun untuk stok developer.<br />
+                                  <span className="font-bold text-purple-600">Setelah progress 100% dan BAST Vendor ke Developer disetujui, unit akan menjadi Ready Stock.</span>
+                                </p>
+                              );
+                            }
+                            if (stockType === "construction") {
+                              return (
+                                <p>
+                                  Unit sedang dalam proses pembangunan.<br />
+                                  <span className="font-bold text-amber-600">Belum ada booking aktif.</span>
+                                </p>
+                              );
+                            }
+                            return (
+                              <p>
+                                Unit tersedia dan siap dipasarkan.<br />
+                                <span className="font-bold text-amber-600">Belum ada booking aktif.</span>
+                              </p>
+                            );
+                          })()}
+                          <p className="text-[10px] text-[#8FAF9A] italic border-t border-[#D6DED2]/30 pt-2 font-semibold">
+                            Unit belum memiliki booking aktif. Alur penjualan dan akad akan muncul setelah unit dibooking konsumen.
+                          </p>
+                        </div>
                       </div>
                     )}
 
-                    {/* 2. Customer / Buyer Info Card — OR — Ready Stock Developer Build Card */}
-                    {unit.status !== "available" && unit.status !== "cancelled" && (() => {
-                      const realBooking = bookings?.find(b => b.unitId === unit.id && b.status !== "cancelled")
-                        || bookings?.find(b => b.id === (unit as any).currentBookingId);
-                      const realCustomer = customers?.find(c => c.id === (unit as any).currentCustomerId)
-                        || customers?.find(c => c.id === realBooking?.customerId);
+                    {/* Buyer Info Card (Only if active booking exists) */}
+                    {activeBooking && (() => {
+                      const realCustomer = customers?.find(c => c.id === activeBooking.customerId)
+                        || customers?.find(c => c.id === (unit as any).currentCustomerId);
+                      
+                      let buyerName = "";
+                      let buyerPhone = "";
+                      let buyerScheme = "";
+                      let paymentProgress = 25;
 
-                      // Ready Stock WITHOUT real buyer → Developer build card
-                      if (isReadyStock && !realCustomer && !realBooking) {
-                        return (
-                          <div className="bg-white rounded-[2rem] p-5 border border-[#D6DED2] shadow-sage space-y-3 transition-all hover:shadow-sage-lg mt-5">
-                            <h4 className="text-xs font-black text-[#243028] uppercase tracking-wider flex items-center gap-2 border-b border-[#D6DED2]/40 pb-3">
-                              <HardHat className="h-4 w-4 text-amber-600" />
-                              {t("siteplan_viewer.dev_build")}
-                            </h4>
-                            <div className="flex items-start gap-2.5 p-3 rounded-2xl bg-amber-50/60 border border-amber-200/50 text-amber-800 text-xs font-medium leading-relaxed">
-                              <Sparkles className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
-                              <span dangerouslySetInnerHTML={{ __html: t("siteplan_viewer.dev_build_desc").replace(/<1>/g, '<strong>').replace(/<\/1>/g, '</strong>') }} />
-                            </div>
-                          </div>
-                        );
+                      if (realCustomer) {
+                        buyerName = realCustomer.name;
+                        buyerPhone = realCustomer.phone || "-";
+                        
+                        buyerScheme = activeBooking.paymentScheme === "kpr" 
+                          ? "KPR" 
+                          : activeBooking.paymentScheme === "installment" 
+                            ? "Cash Bertahap" 
+                            : "Cash Keras";
+                        paymentProgress = activeBooking.status === "akad" || activeBooking.status === "completed" ? 100 : 25;
+                      } else {
+                        const mockBuyer = getMockBuyerData(unit.code);
+                        buyerName = mockBuyer.name;
+                        buyerPhone = mockBuyer.phone;
+                        buyerScheme = mockBuyer.scheme;
+                        paymentProgress = mockBuyer.paymentProgress;
                       }
 
-                      // Has real buyer → Show buyer info
-                      if (realCustomer || realBooking) {
-                        let buyerName = "";
-                        let buyerPhone = "";
-                        let buyerScheme = "";
-                        let paymentProgress = 25;
+                      // Adjust buyerScheme display
+                      const schemeLabel = 
+                        activeBooking.paymentScheme === "kpr" ? "KPR" :
+                        activeBooking.paymentScheme === "installment" ? "Cash Bertahap" :
+                        activeBooking.paymentScheme === "cash" ? "Cash Keras" :
+                        buyerScheme;
 
-                        if (realCustomer) {
-                          buyerName = realCustomer.name;
-                          buyerPhone = realCustomer.phone || "-";
-                          
-                          if (realBooking) {
-                            buyerScheme = realBooking.paymentScheme === "kpr" 
-                              ? "KPR" 
-                              : realBooking.paymentScheme === "installment" 
-                                ? "Cash Bertahap" 
-                                : "Cash Keras";
-                            paymentProgress = realBooking.status === "akad" || realBooking.status === "completed" ? 100 : 25;
-                          } else {
-                            buyerScheme = unit.status === "kpr_process" ? "KPR" : "Cash Keras";
-                            paymentProgress = 100;
-                          }
-                        } else {
-                          const mockBuyer = getMockBuyerData(unit.code);
-                          buyerName = mockBuyer.name;
-                          buyerPhone = mockBuyer.phone;
-                          buyerScheme = mockBuyer.scheme;
-                          paymentProgress = mockBuyer.paymentProgress;
-                        }
+                      const buyer = {
+                        name: buyerName,
+                        phone: buyerPhone,
+                        scheme: schemeLabel,
+                        paymentProgress: paymentProgress
+                      };
 
-                        const buyer = {
-                          name: buyerName,
-                          phone: buyerPhone,
-                          scheme: buyerScheme,
-                          paymentProgress: paymentProgress
-                        };
-
-                        return (
-                          <div className="bg-white rounded-[2rem] p-5 border border-[#D6DED2] shadow-sage space-y-4 transition-all hover:shadow-sage-lg mt-5">
-                            <h4 className="text-xs font-black text-[#243028] uppercase tracking-wider flex items-center gap-2 border-b border-[#D6DED2]/40 pb-3">
-                              <User className="h-4 w-4 text-[#4F6F52]" />
-                              {t("siteplan_viewer.buyer_info")}
-                            </h4>
-                            <div className="space-y-4">
-                              <div className="flex items-center gap-3 bg-[#F7F8F3]/70 p-3 rounded-2xl border border-[#D6DED2]/50">
-                                <div className="h-10 w-10 rounded-full bg-[#8FAF9A]/20 flex items-center justify-center text-[#4F6F52] font-black text-sm font-mono shrink-0 border border-[#8FAF9A]/30">
-                                  {buyer.name.split(" ").filter(Boolean).map(n => n[0]).join("").toUpperCase().slice(0, 2)}
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                  <p className="text-xs font-extrabold text-[#243028] truncate">{buyer.name}</p>
-                                  <p className="text-[10px] text-[#66736A] font-bold flex items-center gap-1 font-mono mt-0.5">
-                                    <Phone className="h-3 w-3 text-[#8FAF9A]" /> {buyer.phone}
-                                  </p>
-                                </div>
-                                <span className="text-[9px] font-black uppercase bg-[#DDE8D8] text-[#4F6F52] px-2 py-0.5 rounded-lg border border-[#8FAF9A]/30">
-                                  {t("siteplan_viewer.buyer")}
-                                </span>
+                      return (
+                        <div className="bg-white rounded-[2rem] p-5 border border-[#D6DED2] shadow-sage space-y-4 transition-all hover:shadow-sage-lg mt-5 text-left">
+                          <h4 className="text-xs font-black text-[#243028] uppercase tracking-wider flex items-center gap-2 border-b border-[#D6DED2]/40 pb-3">
+                            <User className="h-4 w-4 text-[#4F6F52]" />
+                            {t("siteplan_viewer.buyer_info")}
+                          </h4>
+                          <div className="space-y-4">
+                            <div className="flex items-center gap-3 bg-[#F7F8F3]/70 p-3 rounded-2xl border border-[#D6DED2]/50">
+                              <div className="h-10 w-10 rounded-full bg-[#8FAF9A]/20 flex items-center justify-center text-[#4F6F52] font-black text-sm font-mono shrink-0 border border-[#8FAF9A]/30">
+                                {buyer.name.split(" ").filter(Boolean).map(n => n[0]).join("").toUpperCase().slice(0, 2)}
                               </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-xs font-extrabold text-[#243028] truncate">{buyer.name}</p>
+                                <p className="text-[10px] text-[#66736A] font-bold flex items-center gap-1 font-mono mt-0.5">
+                                  <Phone className="h-3 w-3 text-[#8FAF9A]" /> {buyer.phone}
+                                </p>
+                              </div>
+                              <span className="text-[9px] font-black uppercase bg-[#DDE8D8] text-[#4F6F52] px-2 py-0.5 rounded-lg border border-[#8FAF9A]/30">
+                                {t("siteplan_viewer.buyer")}
+                              </span>
+                            </div>
 
-                              <div className="grid grid-cols-2 gap-3 text-xs">
-                                <div className="bg-[#F7F8F3]/50 p-2.5 rounded-xl border border-[#D6DED2]/40">
-                                  <p className="text-[9px] text-[#66736A] font-bold uppercase mb-1">{t("siteplan_viewer.payment_scheme")}</p>
-                                  <p className="font-extrabold text-[#243028]">{buyer.scheme}</p>
-                                </div>
-                                <div className="bg-[#F7F8F3]/50 p-2.5 rounded-xl border border-[#D6DED2]/40">
-                                  <p className="text-[9px] text-[#66736A] font-bold uppercase mb-1">{t("siteplan_viewer.cash_status")}</p>
-                                  <div className="flex items-center gap-1">
-                                    <span className={`inline-block h-2 w-2 rounded-full ${buyer.paymentProgress === 100 ? "bg-[#4F6F52]" : "bg-amber-400"}`} />
-                                    <span className="font-black font-mono text-[#243028]">{buyer.paymentProgress}% {t("siteplan_viewer.paid")}</span>
-                                  </div>
+                            <div className="grid grid-cols-2 gap-3 text-xs">
+                              <div className="bg-[#F7F8F3]/50 p-2.5 rounded-xl border border-[#D6DED2]/40">
+                                <p className="text-[9px] text-[#66736A] font-bold uppercase mb-1">{t("siteplan_viewer.payment_scheme")}</p>
+                                <p className="font-extrabold text-[#243028]">{buyer.scheme}</p>
+                              </div>
+                              <div className="bg-[#F7F8F3]/50 p-2.5 rounded-xl border border-[#D6DED2]/40">
+                                <p className="text-[9px] text-[#66736A] font-bold uppercase mb-1">{t("siteplan_viewer.cash_status")}</p>
+                                <div className="flex items-center gap-1">
+                                  <span className={`inline-block h-2 w-2 rounded-full ${buyer.paymentProgress === 100 ? "bg-[#4F6F52]" : "bg-amber-400"}`} />
+                                  <span className="font-black font-mono text-[#243028]">{buyer.paymentProgress}% {t("siteplan_viewer.paid")}</span>
                                 </div>
                               </div>
+                            </div>
 
-                              {/* Payment Milestones Mini Checklist */}
-                              {(() => {
-                                const kprProcess = realBooking ? kprProcesses.find(k => k.bookingId === realBooking.id) : null;
-                                const bfInvoice = realBooking ? invoices.find(i => i.bookingId === realBooking.id && i.type === "booking_fee") : null;
-                                const dpInvoice = realBooking ? invoices.find(i => i.bookingId === realBooking.id && i.type === "dp") : null;
+                            {/* Payment Milestones Mini Checklist */}
+                            {(() => {
+                              const kprProcess = kprProcesses.find(k => k.bookingId === activeBooking.id);
+                              const bfInvoice = invoices.find(i => i.bookingId === activeBooking.id && i.type === "booking_fee");
+                              const dpInvoice = invoices.find(i => i.bookingId === activeBooking.id && i.type === "dp");
 
-                                const bfPaid = bfInvoice?.status === "paid";
-                                const dpPaid = dpInvoice?.status === "paid";
-                                const kprApproved = kprProcess ? (kprProcess.status === "approved" || kprProcess.status === "akad") : false;
+                              const bfPaid = bfInvoice?.status === "paid";
+                              const dpPaid = dpInvoice?.status === "paid";
+                              const kprApproved = kprProcess ? (kprProcess.status === "approved" || kprProcess.status === "akad" || kprProcess.status === "realisasi") : false;
 
-                                return (
-                                  <div className="pt-2 border-t border-[#D6DED2]/30 space-y-2">
-                                    <p className="text-[9px] text-[#66736A] font-bold uppercase tracking-wider">{t("siteplan_viewer.milestone")}</p>
-                                    <div className="grid grid-cols-3 gap-2 text-[9px] font-bold">
+                              return (
+                                <div className="pt-2 border-t border-[#D6DED2]/30 space-y-2">
+                                  <p className="text-[9px] text-[#66736A] font-bold uppercase tracking-wider">{t("siteplan_viewer.milestone")}</p>
+                                  <div className="grid grid-cols-3 gap-2 text-[9px] font-bold">
+                                    <div className={`flex items-center justify-center gap-1 px-2 py-1 rounded-lg border ${
+                                      bfPaid 
+                                        ? "text-[#4F6F52] bg-[#DDE8D8]/50 border-[#8FAF9A]/20" 
+                                        : "text-[#66736A]/50 bg-white border-[#D6DED2]/40"
+                                    }`}>
+                                      <CheckCircle2 className="h-3 w-3 shrink-0" />
+                                      <span>{t("siteplan_viewer.booking_fee")} ({bfPaid ? "Lunas" : "Belum"})</span>
+                                    </div>
+                                    <div className={`flex items-center justify-center gap-1 px-2 py-1 rounded-lg border ${
+                                      dpPaid 
+                                        ? "text-[#4F6F52] bg-[#DDE8D8]/50 border-[#8FAF9A]/20" 
+                                        : "text-[#66736A]/50 bg-white border-[#D6DED2]/40"
+                                    }`}>
+                                      <CheckCircle2 className="h-3 w-3 shrink-0" />
+                                      <span>{t("siteplan_viewer.down_payment")} ({dpPaid ? "Lunas" : "Belum"})</span>
+                                    </div>
+                                    {activeBooking.paymentScheme === "kpr" ? (
                                       <div className={`flex items-center justify-center gap-1 px-2 py-1 rounded-lg border ${
-                                        bfPaid 
+                                        kprApproved 
                                           ? "text-[#4F6F52] bg-[#DDE8D8]/50 border-[#8FAF9A]/20" 
                                           : "text-[#66736A]/50 bg-white border-[#D6DED2]/40"
                                       }`}>
                                         <CheckCircle2 className="h-3 w-3 shrink-0" />
-                                        <span>{t("siteplan_viewer.booking_fee")} ({bfPaid ? "Lunas" : "Belum"})</span>
+                                        <span>{t("siteplan_viewer.credit_akad")} ({kprProcess ? (kprProcess.status === "akad" ? "Akad" : kprProcess.status === "approved" ? "Disetujui" : kprProcess.status === "realisasi" ? "Realisasi" : "Proses") : "Belum"})</span>
                                       </div>
+                                    ) : (
                                       <div className={`flex items-center justify-center gap-1 px-2 py-1 rounded-lg border ${
                                         dpPaid 
                                           ? "text-[#4F6F52] bg-[#DDE8D8]/50 border-[#8FAF9A]/20" 
                                           : "text-[#66736A]/50 bg-white border-[#D6DED2]/40"
                                       }`}>
                                         <CheckCircle2 className="h-3 w-3 shrink-0" />
-                                        <span>{t("siteplan_viewer.down_payment")} ({dpPaid ? "Lunas" : "Belum"})</span>
+                                        <span>Lunas Cash ({dpPaid ? "Selesai" : "Proses"})</span>
                                       </div>
-                                      {realBooking?.paymentScheme === "kpr" ? (
-                                        <div className={`flex items-center justify-center gap-1 px-2 py-1 rounded-lg border ${
-                                          kprApproved 
-                                            ? "text-[#4F6F52] bg-[#DDE8D8]/50 border-[#8FAF9A]/20" 
-                                            : "text-[#66736A]/50 bg-white border-[#D6DED2]/40"
-                                        }`}>
-                                          <CheckCircle2 className="h-3 w-3 shrink-0" />
-                                          <span>{t("siteplan_viewer.credit_akad")} ({kprProcess ? (kprProcess.status === "akad" ? "Akad" : kprProcess.status === "approved" ? "Disetujui" : "Proses") : "Belum"})</span>
-                                        </div>
-                                      ) : (
-                                        <div className={`flex items-center justify-center gap-1 px-2 py-1 rounded-lg border ${
-                                          dpPaid 
-                                            ? "text-[#4F6F52] bg-[#DDE8D8]/50 border-[#8FAF9A]/20" 
-                                            : "text-[#66736A]/50 bg-white border-[#D6DED2]/40"
-                                        }`}>
-                                          <CheckCircle2 className="h-3 w-3 shrink-0" />
-                                          <span>Lunas Cash ({dpPaid ? "Selesai" : "Proses"})</span>
-                                        </div>
-                                      )}
-                                    </div>
+                                    )}
                                   </div>
-                                );
-                              })()}
-
-                              {realBooking && (
-                                <div className="pt-2 border-t border-[#D6DED2]/30">
-                                  {canViewBooking ? (
-                                    <a
-                                      href={`/marketing/bookings/${realBooking.id}`}
-                                      className="w-full bg-[#F7F8F3] hover:bg-[#DDE8D8]/50 text-[#4F6F52] border border-[#D6DED2] font-bold text-xs rounded-xl py-2 flex items-center justify-center gap-1.5 transition-all active:scale-[0.98]"
-                                    >
-                                      <ExternalLink className="h-3.5 w-3.5" />
-                                      {t("siteplan_viewer.view_booking")}
-                                    </a>
-                                  ) : (
-                                    <button
-                                      disabled
-                                      className="w-full bg-[#F7F8F3] text-gray-400 border border-gray-200 font-bold text-xs rounded-xl py-2 flex items-center justify-center gap-1.5 opacity-60 cursor-not-allowed"
-                                    >
-                                      <Lock className="h-3.5 w-3.5" />
-                                      {t("siteplan_viewer.view_booking")}
-                                    </button>
-                                  )}
                                 </div>
+                              );
+                            })()}
+
+                            <div className="pt-2 border-t border-[#D6DED2]/30">
+                              {canViewBooking ? (
+                                <a
+                                  href={`/marketing/bookings/${activeBooking.id}`}
+                                  className="w-full bg-[#F7F8F3] hover:bg-[#DDE8D8]/50 text-[#4F6F52] border border-[#D6DED2] font-bold text-xs rounded-xl py-2 flex items-center justify-center gap-1.5 transition-all active:scale-[0.98]"
+                                >
+                                  <ExternalLink className="h-3.5 w-3.5" />
+                                  {t("siteplan_viewer.view_booking")}
+                                </a>
+                              ) : (
+                                <button
+                                  disabled
+                                  className="w-full bg-[#F7F8F3] text-gray-400 border border-gray-200 font-bold text-xs rounded-xl py-2 flex items-center justify-center gap-1.5 opacity-60 cursor-not-allowed"
+                                >
+                                  <Lock className="h-3.5 w-3.5" />
+                                  {t("siteplan_viewer.view_booking")}
+                                </button>
                               )}
                             </div>
                           </div>
-                        );
-                      }
-
-                      return null;
+                        </div>
+                      );
                     })()}
 
                     {/* 3. Physical Dimension and Spec Details Grid */}
@@ -1713,57 +2263,65 @@ export function SiteplanViewer({
                     )}
 
                     {/* 5. DYNAMIC ERP WORKFLOW TIMELINE STEPS */}
-                    <div className="bg-white rounded-[2rem] p-5 border border-[#D6DED2] shadow-sage space-y-4 transition-all hover:shadow-sage-lg mt-5">
-                      <h4 className="text-[11px] font-black text-[#243028] uppercase tracking-wider flex items-center gap-2 border-b border-[#D6DED2]/40 pb-3">
-                        <Clock className="h-4 w-4 text-[#4F6F52]" />
-                        {t("siteplan_viewer.sales_flow")}
-                      </h4>
+                    {!(isReadyStock && (unit.status === "construction" || unit.status === "overdue")) && (
+                      <div className="bg-white rounded-[2rem] p-5 border border-[#D6DED2] shadow-sage space-y-4 transition-all hover:shadow-sage-lg mt-5">
+                        <h4 className="text-[11px] font-black text-[#243028] uppercase tracking-wider flex items-center gap-2 border-b border-[#D6DED2]/40 pb-3">
+                          <Clock className="h-4 w-4 text-[#4F6F52]" />
+                          {t("siteplan_viewer.sales_flow")}
+                        </h4>
 
-                      <div className="space-y-4 relative pl-3">
-                        {/* Left Solid Guide Line */}
-                        <div className="absolute left-[20px] top-2 bottom-2 w-0.5 bg-[#D6DED2]" />
+                        <div className="space-y-4 relative pl-3">
+                          {/* Left Solid Guide Line */}
+                          <div className="absolute left-[20px] top-2 bottom-2 w-0.5 bg-[#D6DED2]" />
 
-                        {getTimelineSteps(unit.status, isReadyStock, unit.constructionProgress || 0, paymentScheme).map((step, idx) => {
-                          const isDone = step.done;
-                          const isActive = step.active;
+                          {getTimelineSteps({
+                            unit,
+                            activeBooking,
+                            paymentScheme: activeBooking?.paymentScheme,
+                            kprProcess: kprProcesses.find(k => k.bookingId === activeBooking?.id),
+                            invoices,
+                          }).map((step, idx) => {
+                            const isDone = step.done;
+                            const isActive = step.active;
 
-                          return (
-                            <div key={idx} className="flex gap-4 relative animate-fade-in">
-                              {/* Timeline Bullet Indicator */}
-                              <div
-                                className={`z-10 h-4.5 w-4.5 rounded-full border-2 flex items-center justify-center shrink-0 mt-0.5 transition-all ${
-                                  isDone
-                                    ? "bg-[#4F6F52] border-[#4F6F52] text-white shadow-sm"
-                                    : isActive
-                                    ? "bg-amber-50 border-amber-500 text-amber-600 animate-pulse shadow-md"
-                                    : "bg-[#F7F8F3] border-[#D6DED2]"
-                                }`}
-                              >
-                                {isDone && <CheckCircle2 className="h-2.5 w-2.5" />}
-                                {isActive && <div className="h-1.5 w-1.5 bg-amber-500 rounded-full animate-ping" />}
-                              </div>
-
-                              {/* Timeline Content */}
-                              <div className="pb-5 relative top-[-2px] flex-1">
-                                <span
-                                  className={`text-[11px] font-extrabold uppercase tracking-widest block transition-colors ${
-                                    isDone ? "text-[#243028]" : isActive ? "text-amber-700" : "text-[#8FAF9A]/70"
+                            return (
+                              <div key={idx} className="flex gap-4 relative animate-fade-in">
+                                {/* Timeline Bullet Indicator */}
+                                <div
+                                  className={`z-10 h-4.5 w-4.5 rounded-full border-2 flex items-center justify-center shrink-0 mt-0.5 transition-all ${
+                                    isDone
+                                      ? "bg-[#4F6F52] border-[#4F6F52] text-white shadow-sm"
+                                      : isActive
+                                      ? "bg-amber-50 border-amber-500 text-amber-600 animate-pulse shadow-md"
+                                      : "bg-[#F7F8F3] border-[#D6DED2]"
                                   }`}
                                 >
-                                  {step.label}
-                                </span>
-                                <span className={`text-[10px] font-medium leading-tight block mt-0.5 ${isActive ? "text-amber-700/80" : "text-[#66736A]"}`}>
-                                  {step.desc}
-                                </span>
+                                  {isDone && <CheckCircle2 className="h-2.5 w-2.5" />}
+                                  {isActive && <div className="h-1.5 w-1.5 bg-amber-500 rounded-full animate-ping" />}
+                                </div>
+
+                                {/* Timeline Content */}
+                                <div className="pb-5 relative top-[-2px] flex-1">
+                                  <span
+                                    className={`text-[11px] font-extrabold uppercase tracking-widest block transition-colors ${
+                                      isDone ? "text-[#243028]" : isActive ? "text-amber-700" : "text-[#8FAF9A]/70"
+                                    }`}
+                                  >
+                                    {step.label}
+                                  </span>
+                                  <span className={`text-[10px] font-medium leading-tight block mt-0.5 ${isActive ? "text-amber-700/80" : "text-[#66736A]"}`}>
+                                    {step.desc}
+                                  </span>
+                                </div>
                               </div>
-                            </div>
-                          );
-                        })}
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
+                    )}
 
                     {/* 6. DYNAMIC ERP DEVELOPER PROGRESS (ONLY FOR READY STOCK) */}
-                    {isReadyStock && (
+                    {isReadyStock && (unit.status === "construction" || unit.status === "overdue" || unit.status === "construction_done" || (unit.constructionProgress || 0) > 0) && (
                       <div className="bg-white rounded-[2rem] p-5 border border-[#D6DED2] shadow-sage space-y-4 transition-all hover:shadow-sage-lg mt-5">
                         <h4 className="text-xs font-black text-[#243028] uppercase tracking-wider flex items-center justify-between border-b border-[#D6DED2]/40 pb-3">
                           <div className="flex items-center gap-2">
@@ -1951,31 +2509,131 @@ export function SiteplanViewer({
                     <p className="text-xs text-[#66736A] leading-relaxed mb-5 whitespace-pre-line">
                       {t("siteplan_viewer.not_ready_desc")}
                     </p>
-                    <UnitForm 
-                      id={unit.id}
-                      projects={projects || []}
-                      vendors={vendors || []}
-                      initialData={{
-                        projectId: projects?.[0]?.id || "",
-                        code: unit.code,
-                        cluster: unit.cluster || undefined,
-                        typeName: unit.typeName || undefined,
-                        landArea: unit.landArea || 0,
-                        buildingArea: unit.buildingArea || 0,
-                        price: unit.price || 0,
-                        status: "belum_siap",
-                        isReadyStock: unit.isReadyStock || false,
-                        readyStockSource: (unit as any).readyStockSource || "construction_flow",
-                        notes: unit.notes || undefined,
-                      }}
-                    />
+                    {canEdit && (
+                      <UnitForm 
+                        id={unit.id}
+                        projects={projects || []}
+                        vendors={vendors || []}
+                        initialData={{
+                          projectId: projects?.[0]?.id || "",
+                          code: unit.code,
+                          cluster: unit.cluster || undefined,
+                          typeName: unit.typeName || undefined,
+                          landArea: unit.landArea || 0,
+                          buildingArea: unit.buildingArea || 0,
+                          price: unit.price || 0,
+                          status: "belum_siap",
+                          isReadyStock: unit.isReadyStock || false,
+                          readyStockSource: (unit as any).readyStockSource || "construction_flow",
+                          notes: unit.notes || undefined,
+                        }}
+                      />
+                    )}
                   </div>
                 )}
               </>
             ) : (
-              <div className="mt-16 text-center text-xs font-bold text-[#66736A] py-8">
-                <HelpCircle className="h-16 w-16 mx-auto mb-4 text-[#A8B0AA]/30 animate-bounce" />
-                {t("siteplan_viewer.unlinked_shape")}
+              <div className="mt-8 px-4 py-8 text-center bg-white rounded-[2rem] border border-[#D6DED2] shadow-sage animate-fade-in space-y-6">
+                <div className="h-16 w-16 rounded-full bg-[#F7F8F3] border border-[#D6DED2] flex items-center justify-center mx-auto text-[#66736A] shadow-inner">
+                  <HelpCircle className="h-8 w-8 text-[#A8B0AA] animate-pulse" />
+                </div>
+                
+                <div className="space-y-2">
+                  <h4 className="text-sm font-black text-[#243028] uppercase tracking-wider">
+                    Shape Koordinat Belum Terhubung
+                  </h4>
+                  <p className="text-xs text-[#66736A] leading-relaxed max-w-sm mx-auto">
+                    {t("siteplan_viewer.unlinked_shape")}
+                  </p>
+                </div>
+
+                {/* We only allow editing/linking if the user has editor/admin permissions */}
+                {canEdit ? (
+                  <div className="space-y-4 pt-2 border-t border-[#D6DED2]/60">
+                    <div className="flex flex-col gap-3.5">
+                      
+                      {/* Option 1: Link to existing unlinked unit */}
+                      {unlinkedUnits.length > 0 ? (
+                        <div className="bg-[#F7F8F3]/60 p-4 rounded-2xl border border-[#D6DED2]/50 text-left space-y-3">
+                          <label className="text-[10px] font-black uppercase text-[#66736A] tracking-wider block">
+                            Hubungkan ke Unit / Kavling yang Sudah Ada
+                          </label>
+                          <div className="flex gap-2">
+                            <Select
+                              value={selectedUnitId}
+                              onValueChange={(val) => setSelectedUnitId(val || "")}
+                            >
+                              <SelectTrigger className="flex-1 text-xs rounded-xl border border-[#D6DED2] bg-white h-9 px-3">
+                                <SelectValue placeholder="Pilih unit/kavling..." />
+                              </SelectTrigger>
+                              <SelectContent className="border-[#D6DED2] rounded-xl bg-white max-h-60">
+                                {unlinkedUnits.map((u) => (
+                                  <SelectItem key={u.id} value={u.id} className="text-xs">
+                                    {u.code} - Rp {u.price.toLocaleString("id-ID")}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Button
+                              disabled={!selectedUnitId || isLinking}
+                              onClick={handleLinkShapeToUnit}
+                              className="bg-[#4F6F52] hover:bg-[#3D563F] text-white font-extrabold text-xs h-9 rounded-xl px-4 flex items-center gap-1.5 shadow-sm"
+                            >
+                              {isLinking ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Link2 className="h-3.5 w-3.5" />
+                              )}
+                              Hubungkan
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="p-3 bg-amber-50/50 border border-amber-100 rounded-xl text-[10px] text-amber-800 font-bold text-center leading-normal">
+                          Tidak ada unit/kavling tanpa koordinat. Silakan buat unit baru di bawah.
+                        </div>
+                      )}
+
+                      {/* Option 2: Create new unit directly and link it */}
+                      <div className="bg-[#F7F8F3]/60 p-4 rounded-2xl border border-[#D6DED2]/50 text-left space-y-3 flex flex-col items-center">
+                        <div className="w-full">
+                          <label className="text-[10px] font-black uppercase text-[#66736A] tracking-wider block mb-1">
+                            Buat Unit / Kavling Baru
+                          </label>
+                          <p className="text-[10px] text-[#66736A] leading-normal mb-3">
+                            Buat data unit baru di database dan hubungkan secara otomatis ke shape ini.
+                          </p>
+                        </div>
+                        <UnitForm
+                          projects={projects || []}
+                          vendors={vendors || []}
+                          initialData={{
+                            projectId: projects?.[0]?.id || "",
+                            code: selectedShape?.label || "", // Default to the shape label if set
+                            status: "available",
+                            isReadyStock: false,
+                            readyStockSource: "construction_flow",
+                            price: 0,
+                            landArea: 0,
+                            buildingArea: 0,
+                          }}
+                          onSuccess={handleCreateUnitAndLink}
+                          triggerButton={
+                            <Button className="w-full bg-white hover:bg-[#DDE8D8]/20 border border-[#D6DED2] text-[#4F6F52] font-black text-xs h-10 rounded-xl flex items-center justify-center gap-1.5 shadow-sm transition-all hover:scale-[1.01]">
+                              <PlusCircle className="h-4 w-4 text-[#4F6F52]" />
+                              Buat &amp; Hubungkan Kavling Baru
+                            </Button>
+                          }
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 p-3 bg-slate-50 border border-slate-100 rounded-xl text-[10px] text-slate-500 font-bold justify-center">
+                    <Lock className="h-3.5 w-3.5" />
+                    Silakan masuk sebagai Admin untuk mengaitkan unit.
+                  </div>
+                )}
               </div>
             )}
           </div>

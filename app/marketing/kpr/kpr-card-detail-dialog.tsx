@@ -1723,7 +1723,27 @@ export default function KprCardDetailDialog({
             
             {/* Details */}
             <div className="min-w-0">
-              <span className="text-xs font-extrabold text-[#243028] block truncate max-w-[150px] sm:max-w-[200px]">{doc.label}</span>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-xs font-extrabold text-[#243028] block truncate max-w-[150px] sm:max-w-[200px]">{doc.label}</span>
+                {uploaded && (
+                  <Badge 
+                    variant="outline" 
+                    className={`text-[8px] font-black px-1.5 py-0 border rounded-md uppercase tracking-wider ${
+                      docObj.status === "verified"
+                        ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+                        : docObj.status === "rejected"
+                        ? "bg-rose-50 border-rose-200 text-rose-700"
+                        : "bg-amber-50 border-amber-200 text-amber-700"
+                    }`}
+                  >
+                    {docObj.status === "verified"
+                      ? "Terverifikasi"
+                      : docObj.status === "rejected"
+                      ? "Ditolak"
+                      : "Menunggu Diverifikasi"}
+                  </Badge>
+                )}
+              </div>
               {uploaded ? (
                 <span className="text-[9px] text-[#66736A] font-mono block truncate max-w-[120px] sm:max-w-[175px] mt-0.5" title={docObj.fileName}>
                   {docObj.fileName || "dokumen.pdf"}

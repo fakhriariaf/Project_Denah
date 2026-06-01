@@ -42,5 +42,21 @@ let connectionString = process.env.DATABASE_URL || '';
 if (!connectionString.startsWith('postgres://') && !connectionString.startsWith('postgresql://')) {
   connectionString = 'postgres://postgres:postgres@localhost:5432/postgres';
 }
-const client = postgres(connectionString, { prepare: false });
+
+declare global {
+  // eslint-disable-next-line no-var
+  var globalClient: any;
+}
+
+let client: any;
+
+if (process.env.NODE_ENV === 'production') {
+  client = postgres(connectionString, { prepare: false });
+} else {
+  if (!globalThis.globalClient) {
+    globalThis.globalClient = postgres(connectionString, { prepare: false });
+  }
+  client = globalThis.globalClient;
+}
+
 export const db = drizzle(client, { schema });

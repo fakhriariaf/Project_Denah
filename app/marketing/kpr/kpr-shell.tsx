@@ -780,6 +780,7 @@ export function KprShell({
           documents={documents.filter(d => d.customerId === viewingKpr.customerId)}
           open={!!viewingKpr}
           onOpenChange={(open) => !open && setViewingKpr(null)}
+          canVerifyDocs={canVerifyDocs}
         />
       )}
     </div>

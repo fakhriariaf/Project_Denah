@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition, useRef } from "react";
-import { updateSiteplanImage, deleteSiteplan } from "@/server/actions/siteplan";
+import { updateSiteplanImage, deleteSiteplan, updateSiteplanPublicStatus } from "@/server/actions/siteplan";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,16 +10,20 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ImageIcon, Link2, Save, Upload, X, FileImage, Loader2, Trash2, AlertTriangle } from "lucide-react";
 import { parseServerError } from "@/lib/error-parser";
 import { useI18n } from "@/lib/i18n";
+import { Separator } from "@/components/ui/separator";
 
 export function ImageUploadForm({
   siteplanId,
   currentImageUrl,
+  currentPublicEnabled = false,
 }: {
   siteplanId: string;
   currentImageUrl?: string | null;
+  currentPublicEnabled?: boolean;
 }) {
   const { t } = useI18n();
   const [url, setUrl] = useState(currentImageUrl ?? "");
+  const [publicEnabled, setPublicEnabled] = useState(currentPublicEnabled);
   const [isPending, startTransition] = useTransition();
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -164,6 +168,40 @@ export function ImageUploadForm({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Public Access Toggle */}
+        <div className="flex items-center justify-between p-3.5 bg-[#F7F8F3] rounded-2xl border border-[#D6DED2] mb-4">
+          <div className="space-y-0.5">
+            <Label htmlFor="public-siteplan-toggle" className="text-xs font-bold text-[#243028] cursor-pointer">
+              Tampilkan Publik (Siteplan View)
+            </Label>
+            <p className="text-[10px] text-[#66736A] font-medium leading-tight">
+              Izinkan denah/siteplan ini diakses oleh calon konsumen di halaman publik.
+            </p>
+          </div>
+          <input
+            id="public-siteplan-toggle"
+            type="checkbox"
+            checked={publicEnabled}
+            disabled={isPending}
+            onChange={async (e) => {
+              const val = e.target.checked;
+              setPublicEnabled(val);
+              startTransition(async () => {
+                try {
+                  await updateSiteplanPublicStatus(siteplanId, val);
+                  alert(`Akses publik siteplan berhasil ${val ? "diaktifkan" : "dinonaktifkan"}!`);
+                } catch (err) {
+                  setPublicEnabled(!val);
+                  alert(parseServerError(err));
+                }
+              });
+            }}
+            className="w-5 h-5 rounded-lg border-[#D6DED2] text-[#4F6F52] focus:ring-[#8FAF9A] rounded cursor-pointer accent-[#4F6F52]"
+          />
+        </div>
+
+        <Separator className="bg-[#D6DED2]/40 my-4" />
+
         <Tabs defaultValue="upload">
           <TabsList className="w-full">
             <TabsTrigger value="upload" className="flex-1 gap-1.5">

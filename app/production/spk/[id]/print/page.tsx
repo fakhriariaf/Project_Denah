@@ -87,8 +87,13 @@ export default async function PrintSpkPage({ params }: Props) {
   const companyEmail = settingsRows.find(r => r.key === "company_email")?.value || "info@denahproperty.com";
 
   const STATUS_LABELS: Record<string, string> = {
-    draft: "Draft", approved: t("production.status_active") || "Disetujui", active: t("production.status_active") || "Aktif",
-    completed: t("production.status_done") || "Selesai", cancelled: t("production.status_draft") || "Dibatalkan",
+    draft: "Draft", 
+    approved: t("production.status_active") || "Disetujui", 
+    active: t("production.status_active") || "Aktif",
+    proses_konstruksi: "Proses Konstruksi",
+    selesai_konstruksi: "Selesai Konstruksi",
+    completed: t("production.status_done") || "Selesai", 
+    cancelled: t("production.status_draft") || "Dibatalkan",
   };
 
   return (

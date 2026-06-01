@@ -39,15 +39,18 @@ export default async function DashboardPage() {
 
   const stats = await getExecutiveOverviewData();
 
-  // Auto-trigger reminder scans concurrently and safely wait for execution to finish
-  try {
-    await Promise.allSettled([
-      checkFollowupReminders(),
-      checkPaymentReminders()
-    ]);
-  } catch (err) {
-    console.error("Failed to run dashboard background scans:", err);
-  }
+  // Auto-trigger reminder scans concurrently (non-blocking, errors logged individually)
+  Promise.allSettled([
+    checkFollowupReminders(),
+    checkPaymentReminders()
+  ]).then((results) => {
+    for (const result of results) {
+      if (result.status === "rejected") {
+        console.error("Dashboard background scan failed:", result.reason);
+      }
+    }
+  });
+
 
   return (
     <DashboardShell

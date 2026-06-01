@@ -12,18 +12,14 @@ export default async function ProductionLayout({
   children: React.ReactNode
 }) {
   // RBAC: Production accessible by Super Admin, Admin Kantor, Pengawas Lapangan, Vendor, Direksi
-  // Marketing Biasa and Admin Keuangan get read-only views but not full access
   const activeUser = await requireAuth();
-  const { isSuperAdmin, isAdminKantor, isDireksi, isKeuangan } = await getSessionRole(activeUser.id);
+  const { isSuperAdmin, isAdminKantor, isPengawas, isVendor, isDireksi } = await getSessionRole(activeUser.id);
   
-  // Get full role info
-  const sessionRoleInfo = await getSessionRole(activeUser.id);
-  const role = sessionRoleInfo.role;
-  const allowedRoles = ["Super Admin", "Admin Kantor", "Pengawas Lapangan", "Kontraktor / Vendor", "Direksi / Manager"];
-  
-  if (!isSuperAdmin && !allowedRoles.includes(role)) {
+  const hasAccess = isSuperAdmin || isAdminKantor || isPengawas || isVendor || isDireksi;
+  if (!hasAccess) {
     redirect("/unauthorized");
   }
+
 
   return (
     <SidebarProvider>

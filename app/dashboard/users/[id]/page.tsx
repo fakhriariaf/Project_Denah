@@ -5,6 +5,8 @@ import { getRoles } from "@/server/actions/users";
 import { Card, CardContent } from "@/components/ui/card";
 import { AlertCircle, User } from "lucide-react";
 import { Translate } from "@/components/translate";
+import { db } from "@/db";
+import { projects as projectsTable } from "@/db/schema/master";
 
 interface UserDetailPageProps {
   params: Promise<{ id: string }>;
@@ -21,13 +23,17 @@ export default async function UserDetailPage({ params }: UserDetailPageProps) {
   let permissions;
   let errorMsg: string | null = null;
 
+  let allProjectsList: Array<{ id: string; name: string }> = [];
+
   try {
-    const [fetchedData, fetchedRolesList] = await Promise.all([
+    const [fetchedData, fetchedRolesList, fetchedProjects] = await Promise.all([
       getUserProfileData(targetUserId),
       getRoles(),
+      db.select({ id: projectsTable.id, name: projectsTable.name }).from(projectsTable).orderBy(projectsTable.name),
     ]);
     data = fetchedData;
     rolesList = fetchedRolesList;
+    allProjectsList = fetchedProjects;
 
     // 2. Resolve admin permission configurations
     const canUpdateAnyBasic = await hasPermission(activeUser.id, "profile.update_any");
@@ -90,6 +96,8 @@ export default async function UserDetailPage({ params }: UserDetailPageProps) {
         currentUserRole={activeUser.roleId || null}
         isSuperAdmin={isSuperAdmin}
         permissions={permissions!}
+        allProjects={allProjectsList}
+        assignedProjectIds={data?.assignedProjectIds || []}
       />
     </div>
   );

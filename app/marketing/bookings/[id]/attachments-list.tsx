@@ -103,6 +103,8 @@ export default function BookingAttachmentsList({ bookingId, initialAttachments }
             {att.fileUrl && (
               <a
                 href={att.fileUrl}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="h-7 px-2.5 rounded-lg bg-sky-50 text-sky-600 hover:bg-sky-100 flex items-center justify-center gap-1 text-xs font-semibold transition-colors"
                 title={t("booking_proof.view")}
               >

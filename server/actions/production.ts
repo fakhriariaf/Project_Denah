@@ -18,7 +18,7 @@ import { transactions } from "@/db/schema/finance";
 import { user as userTable, vendorProfiles } from "@/db/schema/auth";
 import { attachments } from "@/db/schema/system";
 import { getCurrentUser, requireAuth, requireAnyRole, getSessionRole } from "@/server/permissions";
-import { eq, ne, and, desc, sql, sum } from "drizzle-orm";
+import { eq, ne, and, desc, sql, sum, lt, isNotNull, or, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { writeAuditLog } from "./audit";
 import { createNotification, notifyUsersWithRoles } from "./notification";
@@ -56,7 +56,13 @@ export async function getProgressPhotosForProject(projectId: string) {
     .from(spkProgressLogs)
     .innerJoin(spks, eq(spkProgressLogs.spkId, spks.id))
     .innerJoin(workItems, eq(spkProgressLogs.workItemId, workItems.id))
-    .innerJoin(attachments, eq(spkProgressLogs.photoAttachmentId, attachments.id))
+    .innerJoin(
+      attachments,
+      or(
+        eq(spkProgressLogs.photoAttachmentId, attachments.id),
+        and(eq(attachments.entityId, spkProgressLogs.id), eq(attachments.entityType, "progress_log"))
+      )
+    )
     .where(eq(spks.projectId, projectId))
     .orderBy(desc(spkProgressLogs.progressDate));
 
@@ -136,18 +142,51 @@ export async function getSpkDetails(spkId: string) {
     .innerJoin(workItems, eq(spkWorkItemWeights.workItemId, workItems.id))
     .where(eq(spkWorkItemWeights.spkId, spkId));
 
-  // Get progress logs with optional attachments
-  const logs = await db
+  // Get progress logs
+  const logsRaw = await db
     .select({
       log: spkProgressLogs,
       workItem: workItems,
-      attachment: attachments,
     })
     .from(spkProgressLogs)
     .innerJoin(workItems, eq(spkProgressLogs.workItemId, workItems.id))
-    .leftJoin(attachments, eq(spkProgressLogs.photoAttachmentId, attachments.id))
     .where(eq(spkProgressLogs.spkId, spkId))
     .orderBy(desc(spkProgressLogs.progressDate));
+
+  // Get all attachments associated with this SPK or these logs
+  const logIds = logsRaw.map(l => l.log.id);
+  let allAttachments: any[] = [];
+  if (logIds.length > 0) {
+    allAttachments = await db
+      .select()
+      .from(attachments)
+      .where(
+        or(
+          and(eq(attachments.entityId, spkId), eq(attachments.entityType, "spk_progress")),
+          and(inArray(attachments.entityId, logIds), eq(attachments.entityType, "progress_log"))
+        )
+      );
+  } else {
+    allAttachments = await db
+      .select()
+      .from(attachments)
+      .where(and(eq(attachments.entityId, spkId), eq(attachments.entityType, "spk_progress")));
+  }
+
+  // Map attachments to logs (can be multiple)
+  const logs = logsRaw.map(row => {
+    const rowAttachments = allAttachments.filter(att =>
+      att.id === row.log.photoAttachmentId ||
+      (att.entityId === row.log.id && att.entityType === "progress_log")
+    );
+
+    return {
+      log: row.log,
+      workItem: row.workItem,
+      attachments: rowAttachments,
+      attachment: rowAttachments[0] || null, // backwards compatibility
+    };
+  });
 
   return {
     ...results[0],
@@ -221,7 +260,7 @@ export async function createSpk(data: unknown) {
       rabAmount: parsed.rabAmount,
       startDate: parsed.startDate,
       targetEndDate: parsed.targetEndDate,
-      status: "draft",
+      status: "active",
       progressPct: 0,
       createdBy: activeUser.id,
     }).run();
@@ -252,32 +291,11 @@ export async function createSpk(data: unknown) {
       }
     }
 
-    // 3. Update unit status and currentSpkId
-    const unitResults = await tx.select().from(units).where(eq(units.id, parsed.unitId)).limit(1).all();
-    const oldStatus = unitResults.length > 0 ? unitResults[0].status : "booking";
-    const isReadyStock = unitResults.length > 0 ? unitResults[0].isReadyStock : false;
-
-    // Decoupled logic: For Ready Stock, physical SPK issuance does NOT override sales marketing status
-    const newStatus = isReadyStock ? oldStatus : "construction";
-
+    // 3. Update currentSpkId in units table (keep status unchanged until construction is officially started)
     await tx.update(units).set({
-      status: newStatus,
       currentSpkId: spkId,
       updatedAt: new Date(),
     }).where(eq(units.id, parsed.unitId)).run();
-
-    // 4. Log unit status history ONLY if status actually changed
-    if (newStatus !== oldStatus) {
-      await tx.insert(unitStatusHistories).values({
-        id: crypto.randomUUID(),
-        unitId: parsed.unitId,
-        previousStatus: oldStatus,
-        newStatus: newStatus,
-        reason: `Mulai pembangunan unit, SPK diterbitkan: ${spkNumber}`,
-        changedBy: activeUser.id,
-        changedAt: new Date(),
-      }).run();
-    }
   });
 
   // 5. Audit Log outside transaction
@@ -289,6 +307,9 @@ export async function createSpk(data: unknown) {
     details: { spkNumber, title: parsed.title, rabAmount: parsed.rabAmount },
   });
 
+  // Notify Pengawas Lapangan and Vendor
+  await notifyNewSpkCreated(spkId, false);
+
   revalidatePath("/production/spk");
   revalidatePath("/master/units");
   revalidatePath("/siteplan");
@@ -296,8 +317,8 @@ export async function createSpk(data: unknown) {
 }
 
 export async function deleteSpk(spkId: string) {
-  // Only Super Admin can delete SPKs
-  await requireAnyRole(["Super Admin"]);
+  // Super Admin, Admin Kantor, and Admin Keuangan can delete SPKs
+  await requireAnyRole(["Super Admin", "Admin Kantor", "Admin Keuangan"]);
 
   const [spk] = await db.select().from(spks).where(eq(spks.id, spkId)).limit(1);
   if (!spk) throw new Error("SPK tidak ditemukan.");
@@ -307,7 +328,7 @@ export async function deleteSpk(spkId: string) {
     const unitResults = await tx.select().from(units).where(eq(units.id, spk.unitId)).limit(1).all();
     if (unitResults.length > 0) {
       const unit = unitResults[0];
-      
+
       let restoredStatus: "available" | "belum_siap" | "booking" | "kpr_process" | "payment_pending" | "sold" | "construction" | "construction_done" | "overdue" | "cancelled" = "belum_siap";
       if (unit.isReadyStock) {
         restoredStatus = unit.status as any;
@@ -342,8 +363,8 @@ export async function deleteSpk(spkId: string) {
 }
 
 export async function updateSpk(spkId: string, data: any) {
-  // Only Super Admin can edit SPKs
-  await requireAnyRole(["Super Admin"]);
+  // Super Admin, Admin Kantor, and Admin Keuangan can edit SPKs
+  const activeUser = await requireAnyRole(["Super Admin", "Admin Kantor", "Admin Keuangan"]);
 
   const [existingSpk] = await db.select().from(spks).where(eq(spks.id, spkId)).limit(1);
   if (!existingSpk) throw new Error("SPK tidak ditemukan.");
@@ -385,7 +406,62 @@ export async function updateSpk(spkId: string, data: any) {
     details: { spkNumber: existingSpk.spkNumber, title: data.title },
   });
 
+  // check if RAB is verified (was 0, now > 0)
+  const isRabVerified = existingSpk.rabAmount === 0 && Number(data.rabAmount) > 0;
+  if (isRabVerified) {
+    try {
+      const spkDetails = await db
+        .select({
+          spk: spks,
+          unit: units,
+          project: projects,
+        })
+        .from(spks)
+        .innerJoin(units, eq(spks.unitId, units.id))
+        .innerJoin(projects, eq(spks.projectId, projects.id))
+        .where(eq(spks.id, spkId))
+        .get();
+
+      if (spkDetails) {
+        // 1. Notify Pengawas Lapangan
+        await notifyUsersWithRoles({
+          roleNames: ["Pengawas Lapangan"],
+          type: "info",
+          title: "Verifikasi Nilai RAB SPK",
+          message: `Nilai RAB Sudah Diverifikasi oleh ${activeUser.name} silahkan lanjutkan untuk kontruksi (Kav. ${spkDetails.unit.code} - ${spkDetails.spk.spkNumber})`,
+          entityId: spkId,
+          entityType: "spk",
+        });
+
+        // 2. Notify Vendor if they have a user account
+        if (spkDetails.spk.vendorId) {
+          const matchedVendorUser = await db
+            .select({ userId: vendorProfiles.userId })
+            .from(vendorProfiles)
+            .where(eq(vendorProfiles.vendorId, spkDetails.spk.vendorId))
+            .limit(1)
+            .all();
+
+          if (matchedVendorUser.length > 0) {
+            await createNotification({
+              userId: matchedVendorUser[0].userId,
+              type: "info",
+              title: "Verifikasi Nilai RAB SPK",
+              message: `Nilai RAB Sudah Diverifikasi oleh ${activeUser.name} silahkan lanjutkan untuk kontruksi (Kav. ${spkDetails.unit.code} - ${spkDetails.spk.spkNumber})`,
+              entityId: spkId,
+              entityType: "spk",
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.error("[Notification] Failed to notify on RAB verification:", err);
+    }
+  }
+
   revalidatePath("/production/spk");
+  revalidatePath("/master/units");
+  revalidatePath("/siteplan");
   return { success: true };
 }
 
@@ -401,13 +477,40 @@ export async function activateSpk(spkId: string) {
     const spk = results[0];
     spkNumberResult = spk.spkNumber;
 
-    if (spk.status !== "draft") throw new Error("Hanya SPK draft yang dapat diaktifkan");
+    if (spk.status !== "active") throw new Error("Hanya SPK berstatus Aktif yang dapat memulai konstruksi");
+    if (spk.rabAmount === 0) throw new Error("Nilai RAB tidak boleh 0 untuk memulai konstruksi. Harap edit dan verifikasi nilai RAB terlebih dahulu.");
 
-    // Update status to active
+    // Update status to proses_konstruksi
     await tx.update(spks).set({
-      status: "active",
+      status: "proses_konstruksi",
       updatedAt: new Date(),
     }).where(eq(spks.id, spkId)).run();
+
+    // Update unit status to construction
+    const unitResults = await tx.select().from(units).where(eq(units.id, spk.unitId)).limit(1).all();
+    if (unitResults.length > 0) {
+      const unit = unitResults[0];
+      const oldStatus = unit.status;
+      const isReadyStock = unit.isReadyStock || false;
+      const newStatus = isReadyStock ? oldStatus : "construction";
+
+      await tx.update(units).set({
+        status: newStatus,
+        updatedAt: new Date(),
+      }).where(eq(units.id, spk.unitId)).run();
+
+      if (newStatus !== oldStatus) {
+        await tx.insert(unitStatusHistories).values({
+          id: crypto.randomUUID(),
+          unitId: spk.unitId,
+          previousStatus: oldStatus,
+          newStatus: newStatus,
+          reason: `Konstruksi fisik dimulai, SPK: ${spk.spkNumber}`,
+          changedBy: activeUser.id,
+          changedAt: new Date(),
+        }).run();
+      }
+    }
 
     // Generate matching SPMB command automatically
     const spmbId = crypto.randomUUID();
@@ -424,7 +527,7 @@ export async function activateSpk(spkId: string) {
       startWorkDate: spk.startDate,
       targetEndDate: spk.targetEndDate,
       status: "active",
-      notes: `Terbit otomatis dari aktivasi SPK ${spk.spkNumber}`,
+      notes: `Terbit otomatis dari mulai konstruksi SPK ${spk.spkNumber}`,
       createdBy: activeUser.id,
     }).run();
   });
@@ -435,7 +538,7 @@ export async function activateSpk(spkId: string) {
     module: "production",
     entityId: spkId,
     entityType: "spk",
-    details: { spkNumber: spkNumberResult, status: "active", spmbNumber: spmbNumberResult },
+    details: { spkNumber: spkNumberResult, status: "proses_konstruksi", spmbNumber: spmbNumberResult },
   });
 
   // Notify vendor if they have a user account
@@ -452,18 +555,21 @@ export async function activateSpk(spkId: string) {
         await createNotification({
           userId: matchedVendorUser[0].userId,
           type: "info",
-          title: "SPK Kerja Aktif",
-          message: `Surat Perintah Kerja ${spkDetails.spk.spkNumber} untuk "${spkDetails.spk.title}" telah diaktifkan. Silakan mulai pekerjaan.`,
+          title: "Mulai Konstruksi SPK",
+          message: `Surat Perintah Kerja ${spkDetails.spk.spkNumber} untuk "${spkDetails.spk.title}" telah memasuki proses konstruksi. Silakan mulai pengerjaan fisik.`,
           entityId: spkId,
           entityType: "spk",
         });
       }
     }
   } catch (err) {
-    console.warn("Failed to notify vendor of SPK activation:", err);
+    console.warn("Failed to notify vendor of SPK construction start:", err);
   }
 
   revalidatePath("/production/spk");
+  revalidatePath("/production/progress");
+  revalidatePath("/master/units");
+  revalidatePath("/siteplan");
   return { success: true };
 }
 
@@ -543,12 +649,23 @@ export async function inputProgress(data: unknown) {
       createdBy: activeUser.id,
     }).run();
 
+    // 4b. Update uploaded attachments to point to the progressLogId
+    if (parsed.photoAttachmentIds && parsed.photoAttachmentIds.length > 0) {
+      await tx
+        .update(attachments)
+        .set({
+          entityId: progressLogId,
+          entityType: "progress_log"
+        })
+        .where(inArray(attachments.id, parsed.photoAttachmentIds)).run();
+    }
+
     // 5. Recalculate overall weighted progress percentage of the SPK
     const allWeights = await tx.select().from(spkWorkItemWeights).where(eq(spkWorkItemWeights.spkId, parsed.spkId)).all();
-    
+
     // Fetch all logs for this SPK in a single database roundtrip
     const allLogs = await tx.select().from(spkProgressLogs).where(eq(spkProgressLogs.spkId, parsed.spkId)).all();
-    
+
     let overallProgress = 0;
     for (const w of allWeights) {
       // Sum progress for this specific work item from the pre-fetched list
@@ -559,7 +676,7 @@ export async function inputProgress(data: unknown) {
       overallProgress += (itemTotal * w.weightPct) / 100;
     }
 
-    const finalOverallPct = Math.min(100, Math.round(overallProgress));
+    const finalOverallPct = Math.min(100, Math.floor(overallProgress));
     finalOverallPctResult = finalOverallPct;
 
     // Update progress in units table
@@ -569,8 +686,16 @@ export async function inputProgress(data: unknown) {
     }).where(eq(units.id, spk.unitId)).run();
 
     // 6. Update SPK overall progress percentage
-    const isCompleted = finalOverallPct >= 100;
-    const statusUpdate = isCompleted ? "completed" : spk.status;
+    // Check if all work items have reached 100% progress
+    const allItemsDone = allWeights.every((w) => {
+      const itemTotal = allLogs
+        .filter((log) => log.workItemId === w.workItemId)
+        .reduce((sum, item) => sum + item.percentageAdded, 0);
+      return itemTotal >= 100;
+    });
+
+    const isCompleted = finalOverallPct >= 100 && allItemsDone;
+    const statusUpdate = isCompleted ? "selesai_konstruksi" : spk.status;
     const actualEndDate = isCompleted ? new Date() : null;
 
     await tx.update(spks).set({
@@ -585,7 +710,7 @@ export async function inputProgress(data: unknown) {
       const unitData = await tx.select().from(units).where(eq(units.id, spk.unitId)).limit(1).get();
       const oldStatus = unitData?.status || "construction";
       const isReadyStock = unitData?.isReadyStock || false;
-      
+
       const newStatus = isReadyStock ? oldStatus : "construction_done";
 
       await tx.update(units).set({
@@ -693,9 +818,10 @@ export async function checkOverdueSpks() {
     .innerJoin(units, eq(spks.unitId, units.id))
     .where(
       and(
-        eq(spks.status, "active"),
-        sql`${spks.targetEndDate} < ${now.getTime()}`,
-        sql`${spks.progressPct} < 100`
+        or(eq(spks.status, "active"), eq(spks.status, "proses_konstruksi")),
+        isNotNull(spks.targetEndDate),
+        lt(spks.targetEndDate, now),
+        lt(spks.progressPct, 100)
       )
     );
 
@@ -742,21 +868,21 @@ export async function checkOverdueSpks() {
       details: { spkNumber: item.spk.spkNumber, status: "overdue" },
     });
 
-      // Notify about overdue SPK
-      try {
-        await notifyUsersWithRoles({
-          roleNames: ["Super Admin", "Direksi / Manager", "Pengawas Lapangan"],
-          type: "spk_overdue",
-          title: "Konstruksi Unit Overdue",
-          message: `Pekerjaan SPK ${item.spk.spkNumber} untuk unit kavling ${item.unit.code} mengalami keterlambatan (target: ${new Date(item.spk.targetEndDate).toLocaleDateString("id-ID")}).`,
-          entityId: item.spk.id,
-          entityType: "spk",
-        });
-      } catch (err) {
-        console.warn("Failed to trigger overdue notification for SPK:", item.spk.spkNumber, err);
-      }
+    // Notify about overdue SPK
+    try {
+      await notifyUsersWithRoles({
+        roleNames: ["Super Admin", "Direksi / Manager", "Pengawas Lapangan"],
+        type: "spk_overdue",
+        title: "Konstruksi Unit Overdue",
+        message: `Pekerjaan SPK ${item.spk.spkNumber} untuk unit kavling ${item.unit.code} mengalami keterlambatan (target: ${new Date(item.spk.targetEndDate).toLocaleDateString("id-ID")}).`,
+        entityId: item.spk.id,
+        entityType: "spk",
+      });
+    } catch (err) {
+      console.warn("Failed to trigger overdue notification for SPK:", item.spk.spkNumber, err);
+    }
 
-      updatedCount++;
+    updatedCount++;
   }
 
   revalidatePath("/production/spk");
@@ -849,7 +975,7 @@ export async function submitMaterialRequest(requestId: string) {
       eq(financeCategories.type, "expense"),
       sql`lower(${financeCategories.name}) LIKE '%produksi%' OR lower(${financeCategories.name}) LIKE '%lapangan%'`
     )).limit(1).all();
-    
+
     // Fallback if production category doesn't exist
     let categoryId = "";
     if (categoryResults.length > 0) {
@@ -1018,10 +1144,10 @@ export async function createHandoverEstimation(data: unknown) {
     module: "production",
     entityId: estimationId,
     entityType: "handover_estimation",
-    details: { 
-      unitId: parsed.unitId, 
-      handoverType: parsed.handoverType, 
-      date: parsed.estimatedHandoverDate 
+    details: {
+      unitId: parsed.unitId,
+      handoverType: parsed.handoverType,
+      date: parsed.estimatedHandoverDate
     },
   });
 
@@ -1109,12 +1235,12 @@ export async function createVendorComplaint(data: unknown) {
     module: "production",
     entityId: complaintId,
     entityType: "complaint",
-    details: { 
-      complaintNumber, 
-      complaintType: "vendor_to_supervisor", 
-      spkId: parsed.spkId, 
-      vendorId: currentVendorId, 
-      category: parsed.category 
+    details: {
+      complaintNumber,
+      complaintType: "vendor_to_supervisor",
+      spkId: parsed.spkId,
+      vendorId: currentVendorId,
+      category: parsed.category
     },
   });
 
@@ -1356,11 +1482,11 @@ export async function createCustomerComplaint(data: unknown) {
     module: "production",
     entityId: complaintId,
     entityType: "complaint",
-    details: { 
-      complaintNumber, 
-      complaintType: "customer_to_developer", 
-      category: parsed.category, 
-      createdBy: activeUser.id 
+    details: {
+      complaintNumber,
+      complaintType: "customer_to_developer",
+      category: parsed.category,
+      createdBy: activeUser.id
     },
   });
 
@@ -1680,6 +1806,19 @@ export async function completeConstruction(unitId: string, bastAttachmentId?: st
     )
     .limit(1);
 
+  // Find SPK that is currently active, in progress, or overdue and has 100% progress for this unit
+  const [activeSpk] = await db
+    .select()
+    .from(spks)
+    .where(
+      and(
+        eq(spks.unitId, unitId),
+        inArray(spks.status, ["active", "proses_konstruksi", "selesai_konstruksi", "overdue"]),
+        eq(spks.progressPct, 100)
+      )
+    )
+    .limit(1);
+
   let newStatus: "sold" | "kpr_process" | "booking" | "available" = "available";
   if (booking) {
     if (booking.status === "completed" || booking.status === "akad") {
@@ -1710,7 +1849,20 @@ export async function completeConstruction(unitId: string, bastAttachmentId?: st
     }
     await tx.update(units).set(unitUpdate).where(eq(units.id, unitId)).run();
 
-    // 2. Add history record
+    // 2. Update SPK status to completed
+    if (activeSpk) {
+      await tx
+        .update(spks)
+        .set({
+          status: "completed",
+          actualEndDate: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(spks.id, activeSpk.id))
+        .run();
+    }
+
+    // 3. Add history record
     await tx.insert(unitStatusHistories).values({
       id: crypto.randomUUID(),
       unitId,
@@ -1945,6 +2097,118 @@ export async function uploadCustomerBastFromProduction(
   revalidatePath("/siteplan");
 
   return { success: true };
+}
+
+/**
+ * Hapus dokumen BAST Konsumen (customer document + attachment).
+ * Hanya boleh dilakukan oleh Super Admin, Admin Kantor, atau Pengawas Lapangan.
+ * Tidak bisa dihapus jika status dokumen sudah "verified".
+ */
+export async function deleteCustomerBastDocument(docId: string) {
+  const activeUser = await requireAuth();
+  const roleInfo = await getSessionRole(activeUser.id);
+
+  if (!roleInfo.isSuperAdmin && !roleInfo.isAdminKantor && !roleInfo.isPengawas) {
+    throw new Error("Anda tidak memiliki wewenang untuk menghapus dokumen BAST Konsumen.");
+  }
+
+  // Fetch the document to verify it exists and is not already verified
+  const [doc] = await db
+    .select({
+      id: customerDocuments.id,
+      attachmentId: customerDocuments.attachmentId,
+      status: customerDocuments.status,
+      bookingId: customerDocuments.bookingId,
+    })
+    .from(customerDocuments)
+    .where(eq(customerDocuments.id, docId))
+    .limit(1);
+
+  if (!doc) throw new Error("Dokumen BAST tidak ditemukan.");
+  if (doc.status === "verified") {
+    throw new Error("Dokumen BAST yang sudah terverifikasi tidak dapat dihapus.");
+  }
+
+  await db.transaction(async (tx) => {
+    // 1. Delete the customer document record
+    await tx.delete(customerDocuments).where(eq(customerDocuments.id, docId)).run();
+
+    // 2. Delete the attachment record
+    if (doc.attachmentId) {
+      await tx.delete(attachments).where(eq(attachments.id, doc.attachmentId)).run();
+    }
+  });
+
+  await writeAuditLog({
+    action: "delete",
+    module: "production",
+    entityId: docId,
+    entityType: "bast_customer_document",
+    details: { docId, bookingId: doc.bookingId, deletedBy: activeUser.id },
+  });
+
+  revalidatePath("/production/progress");
+  revalidatePath("/marketing/bookings");
+  revalidatePath("/marketing/kpr");
+  revalidatePath("/master/units");
+  revalidatePath("/siteplan");
+
+  return { success: true };
+}
+
+
+
+export async function notifyNewSpkCreated(spkId: string, isAuto = false) {
+  try {
+    const spkDetails = await db
+      .select({
+        spk: spks,
+        unit: units,
+        project: projects,
+      })
+      .from(spks)
+      .innerJoin(units, eq(spks.unitId, units.id))
+      .innerJoin(projects, eq(spks.projectId, projects.id))
+      .where(eq(spks.id, spkId))
+      .get();
+
+    if (!spkDetails) return;
+
+    const sourceText = isAuto ? "Otomatis" : "Manual";
+
+    // 1. Notify Pengawas Lapangan
+    await notifyUsersWithRoles({
+      roleNames: ["Pengawas Lapangan"],
+      type: "info",
+      title: `SPK Baru Diterbitkan (${sourceText})`,
+      message: `Surat Perintah Kerja ${spkDetails.spk.spkNumber} untuk pekerjaan "${spkDetails.spk.title}" di kavling ${spkDetails.unit.code} (${spkDetails.project.name}) telah diterbitkan.`,
+      entityId: spkId,
+      entityType: "spk",
+    });
+
+    // 2. Notify Vendor if they have a user account
+    if (spkDetails.spk.vendorId) {
+      const matchedVendorUser = await db
+        .select({ userId: vendorProfiles.userId })
+        .from(vendorProfiles)
+        .where(eq(vendorProfiles.vendorId, spkDetails.spk.vendorId))
+        .limit(1)
+        .all();
+
+      if (matchedVendorUser.length > 0) {
+        await createNotification({
+          userId: matchedVendorUser[0].userId,
+          type: "info",
+          title: `SPK Baru Ditugaskan (${sourceText})`,
+          message: `Anda mendapat tugas SPK baru ${spkDetails.spk.spkNumber} untuk pekerjaan "${spkDetails.spk.title}" di kavling ${spkDetails.unit.code} (${spkDetails.project.name}).`,
+          entityId: spkId,
+          entityType: "spk",
+        });
+      }
+    }
+  } catch (err) {
+    console.error("[Notification] Failed to notify on new SPK:", err);
+  }
 }
 
 

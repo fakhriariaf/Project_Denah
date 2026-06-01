@@ -124,6 +124,27 @@ export default function LoginPage() {
               </div>
             </div>
           </div>
+
+          {/* Public Siteplan CTA Card */}
+          <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-4 shadow-lg max-w-md space-y-3 hover:bg-white/15 transition-all">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-white/15 text-[#DDE8D8]">
+                <Building2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-white">Lihat Siteplan Perumahan</h4>
+                <p className="text-xs text-[#DDE8D8]/80 mt-0.5 font-medium">Cek ketersediaan kavling dan progress pembangunan secara real-time</p>
+              </div>
+            </div>
+            <a
+              href="/siteplan-public"
+              target="_blank"
+              className="inline-flex items-center justify-center gap-1.5 w-full bg-[#DDE8D8] hover:bg-white text-[#243028] font-bold text-xs py-2.5 rounded-xl transition-all shadow-sm active:scale-98"
+            >
+              <span>Lihat Siteplan (Tanpa Login)</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </a>
+          </div>
         </div>
 
         {/* Footer info */}
@@ -217,7 +238,7 @@ export default function LoginPage() {
                 
                 <Button 
                   type="submit" 
-                  className="w-full h-12 font-bold bg-[#8FAF9A] hover:bg-[#4F6F52] text-white dark:bg-primary dark:hover:bg-primary/90 dark:text-primary-foreground rounded-xl shadow-md hover:shadow-lg hover:-translate-y-0.5 active:scale-98 active:translate-y-0 transition-premium text-sm flex items-center justify-center gap-2 cursor-pointer" 
+                  className="group w-full h-12 font-bold bg-[#8FAF9A] hover:bg-[#4F6F52] text-white dark:bg-primary dark:hover:bg-primary/90 dark:text-primary-foreground rounded-xl shadow-md hover:shadow-lg hover:-translate-y-0.5 active:scale-98 active:translate-y-0 transition-premium text-sm flex items-center justify-center gap-2 cursor-pointer" 
                   disabled={loading}
                 >
                   {loading ? (
@@ -232,6 +253,19 @@ export default function LoginPage() {
                     </>
                   )}
                 </Button>
+
+                {/* Mobile Public Siteplan Link */}
+                <div className="text-center pt-2 lg:hidden">
+                  <a
+                    href="/siteplan-public"
+                    target="_blank"
+                    className="inline-flex items-center gap-1 text-xs font-bold text-[#4F6F52] hover:underline"
+                  >
+                    <span>Lihat Siteplan Perumahan (Tanpa Login)</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </a>
+                </div>
+
               </form>
             </CardContent>
 

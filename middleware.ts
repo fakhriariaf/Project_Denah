@@ -33,9 +33,19 @@ function hasSessionCookie(request: NextRequest): boolean {
 }
 
 export async function middleware(request: NextRequest) {
-  const isAuthenticated = hasSessionCookie(request);
-
   const pathname = request.nextUrl.pathname;
+
+  // Whitelist public routes
+  const isPublicRoute =
+    pathname === "/siteplan-public" ||
+    pathname.startsWith("/siteplan-public/") ||
+    pathname === "/api/public/siteplan";
+
+  if (isPublicRoute) {
+    return NextResponse.next();
+  }
+
+  const isAuthenticated = hasSessionCookie(request);
   const isAuthPage = pathname.startsWith("/login");
 
   // Redirect authenticated users away from login page
@@ -63,6 +73,9 @@ export const config = {
   matcher: [
     "/",
     "/login",
+    "/siteplan-public",
+    "/siteplan-public/:path*",
+    "/api/public/siteplan",
     "/dashboard/:path*",
     "/siteplan/:path*",
     "/master/:path*",

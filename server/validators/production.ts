@@ -34,6 +34,7 @@ export const progressInputSchema = z.object({
   percentageAdded: z.coerce.number().min(1, "Progress minimal 1%").max(100, "Progress maksimal 100%"),
   progressDate: z.coerce.date(),
   photoAttachmentId: z.string().trim().optional().nullable(),
+  photoAttachmentIds: z.array(z.string()).optional().nullable(),
   notes: z.string().trim().optional().nullable(),
 });
 export type ProgressInput = z.infer<typeof progressInputSchema>;

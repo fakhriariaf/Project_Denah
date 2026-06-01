@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus, Users, AlertCircle, Loader2 } from "lucide-react";
 import { parseServerError } from "@/lib/error-parser";
 import { useI18n } from "@/lib/i18n";
+import { z } from "zod";
 
 const CUSTOMER_SOURCE_LABELS: Record<string, string> = {
   walk_in: "Walk in",
@@ -32,12 +33,20 @@ const CUSTOMER_STATUS_LABELS: Record<string, string> = {
   cancelled: "Batal",
 };
 
+const formSchema = customerSchema.extend({
+  status: z.string(),
+});
+
 export function CustomerForm({ 
   initialData, 
   id,
+  originalStatus,
+  paymentScheme,
 }: { 
   initialData?: CustomerInput; 
   id?: string;
+  originalStatus?: string | null;
+  paymentScheme?: string | null;
 }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
@@ -45,7 +54,7 @@ export function CustomerForm({
   const [error, setError] = useState<string | null>(null);
 
   const form = useForm({
-    resolver: zodResolver(customerSchema),
+    resolver: zodResolver(formSchema),
     defaultValues: initialData || {
       name: "",
       nik: "",
@@ -108,15 +117,23 @@ export function CustomerForm({
   
   const parsedNik = parseNik(nikValue);
 
-  const onSubmit = (data: CustomerInput) => {
+  const onSubmit = (data: any) => {
+    // If editing and status is dynamic, map it back to originalStatus
+    const submittedData = { ...data };
+    if (id && originalStatus) {
+      if (data.status !== "cancelled" && data.status !== "prospect") {
+        submittedData.status = originalStatus;
+      }
+    }
+    
     startTransition(async () => {
       setError(null);
       try {
         if (id) {
-          await updateCustomer(id, data);
+          await updateCustomer(id, submittedData);
           alert("Data konsumen berhasil diperbarui!");
         } else {
-          await createCustomer(data);
+          await createCustomer(submittedData);
           alert("Data konsumen berhasil disimpan!");
         }
         setOpen(false);
@@ -126,6 +143,32 @@ export function CustomerForm({
         setError(parseServerError(err));
       }
     });
+  };
+
+  const getStatusLabel = (status: string, scheme?: string | null) => {
+    const isKpr = scheme === "kpr";
+    if (status === "under_constructor") {
+      return isKpr ? "Pembeli KPR - Unit Sedang Pembangunan" : "Pembeli - Unit Sedang Pembangunan";
+    }
+    if (status === "buyer") {
+      return isKpr ? "Pembeli KPR - Sukses" : "Pembeli - Sukses";
+    }
+    if (status === "akad") {
+      return isKpr ? "Pembeli KPR - Proses Akad" : "Pembeli - Akad";
+    }
+    if (status === "kpr_process") {
+      return "Proses KPR";
+    }
+    if (status === "booking") {
+      return "Booking";
+    }
+    if (status === "prospect") {
+      return "Konsumen Baru";
+    }
+    if (status === "cancelled") {
+      return "Batal";
+    }
+    return CUSTOMER_STATUS_LABELS[status] || status;
   };
 
   return (
@@ -256,24 +299,43 @@ export function CustomerForm({
               <Label htmlFor="status" className="text-xs font-semibold text-[#243028]">{t("cust_form.status")} <span className="text-red-500">*</span></Label>
               <Select 
                 value={watch("status") ?? ""} 
-                onValueChange={(val) => setValue("status", val as CustomerInput["status"])}
+                onValueChange={(val) => setValue("status", val as any)}
                 required
+                disabled={!id}
               >
                 <SelectTrigger className="w-full text-xs rounded-xl border border-[#D6DED2] bg-white hover:bg-[#F7F8F3]/50 focus:ring-2 focus:ring-[#8FAF9A]/20 h-9 px-3 transition-premium">
                   <SelectValue placeholder="Pilih...">
                     {(() => {
                       const val = watch("status");
-                      return val ? (CUSTOMER_STATUS_LABELS[val] || val) : undefined;
+                      return val ? getStatusLabel(val, paymentScheme) : undefined;
                     })()}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent className="border-[#D6DED2] rounded-xl bg-white/95 backdrop-blur-md">
-                  <SelectItem value="prospect" className="text-xs">{t("cust_form.status_prospect")}</SelectItem>
-                  <SelectItem value="booking" className="text-xs">{t("cust_form.status_booking")}</SelectItem>
-                  <SelectItem value="kpr_process" className="text-xs">{t("cust_form.status_kpr")}</SelectItem>
-                  <SelectItem value="akad" className="text-xs">{t("cust_form.status_akad")}</SelectItem>
-                  <SelectItem value="buyer" className="text-xs">{t("cust_form.status_buyer")}</SelectItem>
-                  <SelectItem value="cancelled" className="text-xs">{t("cust_form.status_cancelled")}</SelectItem>
+                  {!id ? (
+                    <SelectItem value="prospect" className="text-xs">Konsumen Baru</SelectItem>
+                  ) : (
+                    <>
+                      {/* Option for current status */}
+                      <SelectItem value={initialData?.status || "prospect"} className="text-xs">
+                        {getStatusLabel(initialData?.status || "prospect", paymentScheme)}
+                      </SelectItem>
+                      
+                      {/* If current is prospect or cancelled, we allow toggling between prospect and cancelled */}
+                      {(initialData?.status === "prospect" || initialData?.status === "cancelled") && (
+                        <SelectItem value={initialData?.status === "prospect" ? "cancelled" : "prospect"} className="text-xs">
+                          {initialData?.status === "prospect" ? "Batal" : "Konsumen Baru"}
+                        </SelectItem>
+                      )}
+
+                      {/* If current status is dynamic (not prospect/cancelled), we allow Batal (cancelled) as option */}
+                      {initialData?.status !== "prospect" && initialData?.status !== "cancelled" && (
+                        <SelectItem value="cancelled" className="text-xs">
+                          Batal
+                        </SelectItem>
+                      )}
+                    </>
+                  )}
                 </SelectContent>
               </Select>
             </div>

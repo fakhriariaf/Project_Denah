@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { verifyCustomerDocument } from "@/server/actions/marketing";
 import {
   Sheet,
   SheetContent,
@@ -23,6 +25,9 @@ import {
   AlertCircle,
   Hammer,
   HardHat,
+  Check,
+  X,
+  RotateCcw,
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { useI18n } from "@/lib/i18n";
@@ -34,6 +39,7 @@ interface Props {
   documents: any[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  canVerifyDocs?: boolean;
 }
 
 export default function KprDetailViewSheet({
@@ -43,8 +49,44 @@ export default function KprDetailViewSheet({
   documents,
   open,
   onOpenChange,
+  canVerifyDocs = false,
 }: Props) {
   const { t } = useI18n();
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  const [docsList, setDocsList] = useState(documents);
+
+  useEffect(() => {
+    setDocsList(documents);
+  }, [documents]);
+
+  const handleVerify = async (docId: string, docStatus: "verified" | "rejected", notes?: string) => {
+    setLoading(true);
+    try {
+      const res = await verifyCustomerDocument(docId, docStatus, notes);
+      if (res.success) {
+        setDocsList((prev) =>
+          prev.map((d) => (d.id === docId ? { ...d, status: docStatus, notes: notes || null } : d))
+        );
+        router.refresh();
+      }
+    } catch (err: any) {
+      alert(err.message || "Gagal memperbarui verifikasi berkas.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRejectClick = (docId: string) => {
+    const notes = prompt("Masukkan alasan penolakan berkas:");
+    if (notes === null) return;
+    if (!notes.trim()) {
+      alert("Alasan penolakan wajib diisi!");
+      return;
+    }
+    handleVerify(docId, "rejected", notes.trim());
+  };
+
 
   const getKprStatusBadge = (status: string) => {
     const map: Record<string, { label: string; className: string }> = {
@@ -497,7 +539,7 @@ export default function KprDetailViewSheet({
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                    {documents.map((doc) => {
+                    {docsList.map((doc) => {
                       const docLabels: Record<string, string> = {
                         ktp: "Kartu Tanda Penduduk (KTP)",
                         npwp: "Nomor Pokok Wajib Pajak (NPWP)",
@@ -553,15 +595,55 @@ export default function KprDetailViewSheet({
                               )}
                             </div>
                           </div>
-                          <a
-                            href={doc.fileUrl || "#"}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="bg-[#4F6F52] hover:bg-[#3D563F] text-white font-extrabold text-[10px] px-3 py-1.5 rounded-xl shadow-sm transition-all hover:scale-[1.02] flex items-center gap-1 shrink-0 ml-2"
-                          >
-                            <ExternalLink className="h-3 w-3 text-white" />
-                            Lihat Berkas
-                          </a>
+                          <div className="shrink-0 flex items-center gap-1.5 ml-2">
+                            <a
+                              href={doc.fileUrl || "#"}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="h-8 w-8 bg-slate-50 hover:bg-[#DDE8D8]/50 border border-[#D6DED2]/50 text-[#4F6F52] flex items-center justify-center transition-all shadow-sm rounded-xl"
+                              title="Lihat Berkas"
+                            >
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </a>
+
+                            {canVerifyDocs && (
+                              <>
+                                {doc.status !== "verified" && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleVerify(doc.id, "verified")}
+                                    disabled={loading}
+                                    className="h-8 w-8 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200/50 flex items-center justify-center transition-all shadow-sm font-bold rounded-xl"
+                                    title="Setujui Berkas"
+                                  >
+                                    <Check className="h-4 w-4 text-emerald-600" />
+                                  </button>
+                                )}
+                                {doc.status !== "rejected" && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRejectClick(doc.id)}
+                                    disabled={loading}
+                                    className="h-8 w-8 bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200/50 flex items-center justify-center transition-all shadow-sm font-bold rounded-xl"
+                                    title="Tolak Berkas"
+                                  >
+                                    <X className="h-4 w-4 text-rose-600" />
+                                  </button>
+                                )}
+                                {doc.status === "verified" && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleVerify(doc.id, "rejected", "Dibatalkan verifikasi")}
+                                    disabled={loading}
+                                    className="h-8 w-8 rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200/50 flex items-center justify-center transition-all shadow-sm"
+                                    title="Batalkan & Tolak"
+                                  >
+                                    <RotateCcw className="h-3.5 w-3.5 text-rose-600" />
+                                  </button>
+                                )}
+                              </>
+                            )}
+                          </div>
                         </div>
                       );
                     })}
