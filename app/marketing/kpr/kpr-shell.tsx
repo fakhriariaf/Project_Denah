@@ -24,6 +24,7 @@ import KprDetailViewSheet from "./kpr-detail-view-sheet";
 import { useI18n } from "@/lib/i18n";
 import { updateKprStatusDirect } from "@/server/actions/marketing";
 import { Progress } from "@/components/ui/progress";
+import { KprMilestoneTracker } from "./kpr-milestone-tracker";
 
 interface KprCard {
   id: string;
@@ -44,6 +45,8 @@ interface KprCard {
   unitCode: string;
   price: number;
   unitStatus: string;
+  isReadyStock: boolean;
+  readyStockSource: string | null;
   constructionProgress: number | null;
   marketingName?: string | null;
 }
@@ -107,7 +110,48 @@ export function KprShell({
     { id: "rejected", label: t("kpr_board.col_rejected"), color: "border-rose-200 bg-rose-50/20 text-rose-800", marker: "bg-rose-500" },
     { id: "akad", label: t("kpr_board.col_akad"), color: "border-emerald-200 bg-emerald-50/20 text-emerald-800", marker: "bg-emerald-500" },
     { id: "realisasi", label: "Realisasi Dana", color: "border-cyan-200 bg-cyan-50/20 text-cyan-800", marker: "bg-cyan-500" },
+    { id: "physical_waiting", label: "Cek Fisik Unit", color: "border-orange-200 bg-orange-50/20 text-orange-800", marker: "bg-orange-500" },
+    { id: "handover_waiting", label: "Menunggu Serah Terima", color: "border-fuchsia-200 bg-fuchsia-50/20 text-fuchsia-800", marker: "bg-fuchsia-500" },
+    { id: "bast_developer", label: "BAST Dev ke Konsumen", color: "border-pink-200 bg-pink-50/20 text-pink-800", marker: "bg-pink-500" },
+    { id: "handover_done", label: "Serah Terima Selesai", color: "border-emerald-200 bg-emerald-50/20 text-emerald-800", marker: "bg-emerald-500" },
   ];
+
+  // Helper to map card to the correct column dynamically (supporting terminal Serah Terima columns)
+  const getCardKanbanColumn = (k: KprCard): string => {
+    if (k.unitStatus === "handover_complete") {
+      return "handover_done";
+    }
+
+    if (k.status === "realisasi") {
+      const bastDoc = documents.find(d => d.customerId === k.customerId && d.documentType === "bast");
+      if (bastDoc) {
+        if (bastDoc.status === "verified") {
+          return "handover_done";
+        }
+        return "bast_developer";
+      }
+
+      const isReady = k.isReadyStock === true || k.readyStockSource === "legacy_ready_stock" || k.readyStockSource === "manual_ready_stock";
+      if (!isReady && (k.constructionProgress ?? 0) < 100) {
+        return "physical_waiting";
+      }
+
+      return "realisasi";
+    }
+
+    if (k.unitStatus === "menunggu_serah_terima") {
+      const bastDoc = documents.find(d => d.customerId === k.customerId && d.documentType === "bast");
+      if (bastDoc) {
+        if (bastDoc.status === "verified") {
+          return "handover_done";
+        }
+        return "bast_developer";
+      }
+      return "handover_waiting";
+    }
+
+    return k.status;
+  };
 
   // States
   const [projectFilter, setProjectFilter] = useState("all");
@@ -171,6 +215,12 @@ export function KprShell({
 
   // HTML5 Drag Handlers
   const handleDragStart = (e: React.DragEvent, id: string) => {
+    const card = initialKpr.find(k => k.id === id);
+    if (card && (card.status === "realisasi" || card.unitStatus === "menunggu_serah_terima" || card.unitStatus === "handover_complete" || card.unitStatus === "sold")) {
+      e.preventDefault();
+      alert("Tahapan pasca-Realisasi dan Serah Terima dikelola melalui Tombol Aksi di Detail Kelola KPR, bukan dengan geser kartu.");
+      return;
+    }
     setDraggingId(id);
     e.dataTransfer.setData("text/plain", id);
     e.dataTransfer.effectAllowed = "move";
@@ -192,6 +242,13 @@ export function KprShell({
     setDraggedOverColId(null);
     const id = e.dataTransfer.getData("text/plain") || draggingId;
     if (!id) return;
+
+    const TERMINAL_COLUMNS = ["physical_waiting", "handover_waiting", "bast_developer", "handover_done"];
+    if (TERMINAL_COLUMNS.includes(targetStatus)) {
+      alert("Tahapan pasca-Realisasi dan Serah Terima dikelola melalui Tombol Aksi di Detail Kelola KPR, bukan dengan geser kartu.");
+      setDraggingId(null);
+      return;
+    }
 
     const targetCard = initialKpr.find(k => k.id === id);
     if (!targetCard || targetCard.status === targetStatus) return;
@@ -492,7 +549,7 @@ export function KprShell({
       {/* ── PIPELINE KANBAN BOARD ── */}
       <div className="flex gap-4 overflow-x-auto pb-6 items-start scrollbar-thin scrollbar-thumb-[#8FAF9A]/30 scrollbar-track-[#F7F8F3] w-full">
         {COLUMNS.map((col) => {
-          const colCards = filteredKpr.filter((k) => k.status === col.id);
+          const colCards = filteredKpr.filter((k) => getCardKanbanColumn(k) === col.id);
           const isOver = draggedOverColId === col.id;
 
           return (
@@ -703,6 +760,20 @@ export function KprShell({
                                   <span className="text-[#243028]">{t("kpr_board.banks_count", { count: clientSubmissions.length })}</span>
                                 </div>
                               </div>
+                            </div>
+
+                            {/* Milestone Tracker Mini */}
+                            <div className="pt-2">
+                              <KprMilestoneTracker 
+                                data={{
+                                  unitStatus: kprCard.unitStatus,
+                                  kprStatus: kprCard.status,
+                                  isReadyStock: kprCard.isReadyStock,
+                                  readyStockSource: kprCard.readyStockSource || null,
+                                  constructionProgress: kprCard.constructionProgress || 0
+                                }}
+                                orientation="horizontal"
+                              />
                             </div>
 
                             {/* SLA WARNING ALERTS */}

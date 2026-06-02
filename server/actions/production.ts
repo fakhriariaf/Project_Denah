@@ -20,7 +20,7 @@ import { attachments } from "@/db/schema/system";
 import { getCurrentUser, requireAuth, requireAnyRole, getSessionRole } from "@/server/permissions";
 import { eq, ne, and, desc, sql, sum, lt, isNotNull, or, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { writeAuditLog } from "./audit";
+import { writeAuditLog, safeWriteBlockedTransitionLog } from "./audit";
 import { createNotification, notifyUsersWithRoles } from "./notification";
 import {
   spkSchema,
@@ -686,50 +686,10 @@ export async function inputProgress(data: unknown) {
     }).where(eq(units.id, spk.unitId)).run();
 
     // 6. Update SPK overall progress percentage
-    // Check if all work items have reached 100% progress
-    const allItemsDone = allWeights.every((w) => {
-      const itemTotal = allLogs
-        .filter((log) => log.workItemId === w.workItemId)
-        .reduce((sum, item) => sum + item.percentageAdded, 0);
-      return itemTotal >= 100;
-    });
-
-    const isCompleted = finalOverallPct >= 100 && allItemsDone;
-    const statusUpdate = isCompleted ? "selesai_konstruksi" : spk.status;
-    const actualEndDate = isCompleted ? new Date() : null;
-
     await tx.update(spks).set({
       progressPct: finalOverallPct,
-      status: statusUpdate,
-      actualEndDate,
       updatedAt: new Date(),
     }).where(eq(spks.id, parsed.spkId)).run();
-
-    // 7. If overall progress reaches 100%, transition Unit status to "construction_done"
-    if (isCompleted) {
-      const unitData = await tx.select().from(units).where(eq(units.id, spk.unitId)).limit(1).get();
-      const oldStatus = unitData?.status || "construction";
-      const isReadyStock = unitData?.isReadyStock || false;
-
-      const newStatus = isReadyStock ? oldStatus : "construction_done";
-
-      await tx.update(units).set({
-        status: newStatus,
-        updatedAt: new Date(),
-      }).where(eq(units.id, spk.unitId)).run();
-
-      if (newStatus !== oldStatus) {
-        await tx.insert(unitStatusHistories).values({
-          id: crypto.randomUUID(),
-          unitId: spk.unitId,
-          previousStatus: oldStatus,
-          newStatus: newStatus,
-          reason: `Pembangunan unit selesai 100%, SPK ${spk.spkNumber} diselesaikan`,
-          changedBy: activeUser.id,
-          changedAt: new Date(),
-        }).run();
-      }
-    }
   });
 
   // 8. Audit Log outside transaction
@@ -763,6 +723,87 @@ export async function inputProgress(data: unknown) {
   revalidatePath("/master/units");
   revalidatePath("/siteplan");
   revalidatePath("/dashboard");
+  return { success: true };
+}
+
+export async function deleteProgressLog(logId: string) {
+  const activeUser = await requireAuth();
+  const roleInfo = await getSessionRole(activeUser.id);
+
+  if (!roleInfo.isSuperAdmin && !roleInfo.isAdminKantor && !roleInfo.isPengawas) {
+    throw new Error("Anda tidak memiliki wewenang untuk menghapus log progres pembangunan.");
+  }
+
+  let spkIdResult = "";
+  let finalOverallPctResult = 0;
+
+  await db.transaction(async (tx) => {
+    // 1. Get the progress log details
+    const [log] = await tx.select().from(spkProgressLogs).where(eq(spkProgressLogs.id, logId)).limit(1).all();
+    if (!log) throw new Error("Log progres tidak ditemukan");
+    spkIdResult = log.spkId;
+
+    // 2. Get SPK details
+    const [spk] = await tx.select().from(spks).where(eq(spks.id, log.spkId)).limit(1).all();
+    if (!spk) throw new Error("SPK tidak ditemukan");
+
+    // 3. Block if SPK is already officially completed
+    if (spk.status === "completed" || spk.status === "selesai_konstruksi") {
+      throw new Error("Log progres tidak dapat dihapus karena pembangunan sudah diselesaikan secara resmi.");
+    }
+
+    // 4. Delete associated photo attachment if exists
+    if (log.photoAttachmentId) {
+      await tx.delete(attachments).where(eq(attachments.id, log.photoAttachmentId)).run();
+    }
+
+    // 5. Delete the progress log
+    await tx.delete(spkProgressLogs).where(eq(spkProgressLogs.id, logId)).run();
+
+    // 6. Recalculate progress
+    const allWeights = await tx.select().from(spkWorkItemWeights).where(eq(spkWorkItemWeights.spkId, log.spkId)).all();
+    const allLogs = await tx.select().from(spkProgressLogs).where(eq(spkProgressLogs.spkId, log.spkId)).all();
+
+    let overallProgress = 0;
+    for (const w of allWeights) {
+      const itemTotal = allLogs
+        .filter((l) => l.workItemId === w.workItemId)
+        .reduce((sum, item) => sum + item.percentageAdded, 0);
+
+      overallProgress += (itemTotal * w.weightPct) / 100;
+    }
+
+    const finalOverallPct = Math.min(100, Math.floor(overallProgress));
+    finalOverallPctResult = finalOverallPct;
+
+    // 7. Update progress in units table
+    await tx.update(units).set({
+      constructionProgress: finalOverallPct,
+      updatedAt: new Date(),
+    }).where(eq(units.id, spk.unitId)).run();
+
+    // 8. Update SPK overall progress percentage
+    await tx.update(spks).set({
+      progressPct: finalOverallPct,
+      updatedAt: new Date(),
+    }).where(eq(spks.id, log.spkId)).run();
+  });
+
+  // 9. Audit Log
+  await writeAuditLog({
+    action: "delete",
+    module: "production",
+    entityId: logId,
+    entityType: "progress_log",
+    details: { spkId: spkIdResult, overallProgress: finalOverallPctResult, deletedBy: activeUser.id },
+  });
+
+  revalidatePath("/production/progress");
+  revalidatePath("/production/spk");
+  revalidatePath("/master/units");
+  revalidatePath("/siteplan");
+  revalidatePath("/dashboard");
+
   return { success: true };
 }
 
@@ -1781,7 +1822,7 @@ export async function deleteWorkItem(id: string) {
   return { success: true };
 }
 
-export async function completeConstruction(unitId: string, bastAttachmentId?: string | null) {
+export async function completeConstruction(unitId: string, bastAttachmentId?: string | null, reason?: string | null) {
   const activeUser = await requireAuth();
   const roleInfo = await getSessionRole(activeUser.id);
 
@@ -1818,6 +1859,54 @@ export async function completeConstruction(unitId: string, bastAttachmentId?: st
       )
     )
     .limit(1);
+
+  // P2: manual_ready_stock check
+  if (unit.readyStockSource === "manual_ready_stock" && !activeSpk) {
+    await safeWriteBlockedTransitionLog({
+      module: "production",
+      entityType: "unit",
+      entityId: unitId,
+      details: {
+        action: "completeConstruction_blocked_manual_ready_stock",
+        unitId,
+        readyStockSource: unit.readyStockSource,
+        reason: "Manual Ready Stock tanpa SPK aktif tidak dapat diselesaikan melalui completeConstruction. Gunakan alur manual override dengan alasan dan audit log.",
+      },
+    });
+    throw new Error(
+      "Manual Ready Stock tanpa SPK aktif tidak dapat diselesaikan melalui completeConstruction. Gunakan alur manual override dengan alasan dan audit log."
+    );
+  }
+
+  if (unit.readyStockSource === "manual_ready_stock" && activeSpk && !reason) {
+    throw new Error("Alasan (reason) manual override wajib diisi untuk unit dengan sumber Manual Ready Stock.");
+  }
+
+  // P2: construction_flow BAST vendor check
+  if (unit.readyStockSource === "construction_flow" && !bastAttachmentId) {
+    await safeWriteBlockedTransitionLog({
+      module: "production",
+      entityType: "unit",
+      entityId: unitId,
+      details: {
+        action: "completeConstruction_blocked_missing_bast",
+        unitId,
+        readyStockSource: unit.readyStockSource,
+        reason: "BAST Vendor ke Developer wajib diunggah sebelum konstruksi dapat diselesaikan.",
+      },
+    });
+    throw new Error(
+      "BAST Vendor ke Developer wajib diunggah sebelum konstruksi dapat diselesaikan."
+    );
+  }
+
+  // P2: Verify attachment exists if provided
+  if (bastAttachmentId) {
+    const attachment = await db.select().from(attachments).where(eq(attachments.id, bastAttachmentId)).limit(1).get();
+    if (!attachment) {
+      throw new Error("Lampiran BAST tidak ditemukan. Silakan unggah berkas kembali.");
+    }
+  }
 
   let newStatus: "sold" | "kpr_process" | "booking" | "available" = "available";
   if (booking) {
@@ -2209,6 +2298,94 @@ export async function notifyNewSpkCreated(spkId: string, isAuto = false) {
   } catch (err) {
     console.error("[Notification] Failed to notify on new SPK:", err);
   }
+}
+
+export async function completeVendorSpk(spkId: string) {
+  const activeUser = await requireAuth();
+  const roleInfo = await getSessionRole(activeUser.id);
+
+  // 1. Fetch SPK
+  const [spk] = await db.select().from(spks).where(eq(spks.id, spkId)).limit(1).all();
+  if (!spk) throw new Error("SPK tidak ditemukan.");
+
+  // 2. Validate permissions: Super Admin, Admin Kantor, Pengawas, or the specific Vendor assigned to this SPK
+  let hasAccess = roleInfo.isSuperAdmin || roleInfo.isAdminKantor || roleInfo.isPengawas;
+  if (!hasAccess && roleInfo.isVendor) {
+    // Check if the SPK vendor matches this user's vendorId
+    const [profile] = await db
+      .select({ vendorId: vendorProfiles.vendorId })
+      .from(vendorProfiles)
+      .where(eq(vendorProfiles.userId, activeUser.id))
+      .limit(1)
+      .all();
+    if (profile && profile.vendorId === spk.vendorId) {
+      hasAccess = true;
+    }
+  }
+
+  if (!hasAccess) {
+    throw new Error("Anda tidak memiliki wewenang untuk menyelesaikan SPK ini.");
+  }
+
+  // 3. Validate status
+  if (spk.status !== "proses_konstruksi" && spk.status !== "overdue") {
+    throw new Error("Hanya SPK berstatus Proses Konstruksi atau Terlambat yang dapat diselesaikan.");
+  }
+
+  // 4. Validate progress is 100%
+  if (spk.progressPct !== 100) {
+    throw new Error("Pembangunan SPK belum mencapai 100% progres SLA fisik.");
+  }
+
+  // 5. Update SPK status to selesai_konstruksi
+  await db
+    .update(spks)
+    .set({
+      status: "selesai_konstruksi",
+      updatedAt: new Date(),
+    })
+    .where(eq(spks.id, spkId))
+    .run();
+
+  // 6. Log audit trail
+  await writeAuditLog({
+    action: "update",
+    module: "production",
+    entityId: spkId,
+    entityType: "spk",
+    details: {
+      spkNumber: spk.spkNumber,
+      title: spk.title,
+      status: "selesai_konstruksi",
+      completedBy: activeUser.id,
+      role: roleInfo.isVendor ? "vendor" : "internal",
+    },
+  });
+
+  // 7. Notify internal team (Pengawas Lapangan & Admin)
+  try {
+    const [vendor] = await db.select().from(vendors).where(eq(vendors.id, spk.vendorId)).limit(1).all();
+    const [unit] = await db.select().from(units).where(eq(units.id, spk.unitId)).limit(1).all();
+    const vendorName = vendor?.name || "Kontraktor";
+    const unitCode = unit?.code || "Unit Kavling";
+
+    await notifyUsersWithRoles({
+      roleNames: ["Pengawas Lapangan", "Super Admin", "Admin Kantor"],
+      type: "info",
+      title: `SPK Dinyatakan Selesai oleh Vendor`,
+      message: `Kontraktor "${vendorName}" menyatakan pembangunan untuk SPK ${spk.spkNumber} (${spk.title}) di unit ${unitCode} telah selesai. Silakan lakukan pemeriksaan fisik lapangan dan unggah berkas BAST Developer.`,
+      entityId: spkId,
+      entityType: "spk",
+    });
+  } catch (err) {
+    console.error("[Notification] Failed to send notification for completeVendorSpk:", err);
+  }
+
+  revalidatePath("/production/spk");
+  revalidatePath("/production");
+  revalidatePath("/dashboard");
+
+  return { success: true };
 }
 
 

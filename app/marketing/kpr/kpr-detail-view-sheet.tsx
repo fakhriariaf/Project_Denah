@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { useI18n } from "@/lib/i18n";
+import { KprMilestoneTracker } from "./kpr-milestone-tracker";
 
 interface Props {
   kpr: any;
@@ -206,6 +207,19 @@ export default function KprDetailViewSheet({
                 Booking Ref: #{kpr.bookingNumber}
               </span>
             </div>
+          </div>
+          
+          <div className="mt-4 pt-4 border-t border-[#D6DED2]/50 overflow-hidden">
+            <KprMilestoneTracker 
+              data={{
+                unitStatus: kpr.unitStatus,
+                kprStatus: kpr.status,
+                isReadyStock: kpr.isReadyStock,
+                readyStockSource: kpr.readyStockSource || null,
+                constructionProgress: kpr.constructionProgress
+              }}
+              orientation="horizontal"
+            />
           </div>
         </div>
 

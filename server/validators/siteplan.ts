@@ -16,10 +16,10 @@ export const shapeCoordinateSchema = z.object({
 
 export const siteplanShapeSchema = z.object({
   siteplanId: z.string().min(1),
-  unitId: z.string().optional(),
+  unitId: z.string().optional().nullable(),
   shapeType: z.enum(["polygon", "rect", "path"]).default("polygon"),
   coordinates: z.array(shapeCoordinateSchema).min(3, "Polygon butuh minimal 3 titik"),
-  label: z.string().trim().optional(),
-  colorOverride: z.string().trim().optional(),
+  label: z.string().trim().optional().nullable(),
+  colorOverride: z.string().trim().optional().nullable(),
 });
 export type SiteplanShapeInput = z.infer<typeof siteplanShapeSchema>;

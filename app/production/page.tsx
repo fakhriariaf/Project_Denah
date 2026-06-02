@@ -240,6 +240,7 @@ export default async function ProductionPage({
       activeUser={activeUser}
       isSuperAdmin={sessionRoleInfo.isSuperAdmin || sessionRoleInfo.isAdminKantor || sessionRoleInfo.isKeuangan}
       isPengawas={sessionRoleInfo.isPengawas}
+      isVendor={sessionRoleInfo.isVendor}
       projects={projectsList}
       units={unitsList}
       customers={customersList}

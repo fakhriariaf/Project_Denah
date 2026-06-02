@@ -95,6 +95,8 @@ import {
   getCustomerBastForUnit,
   uploadCustomerBastFromProduction,
   deleteCustomerBastDocument,
+  deleteProgressLog,
+  completeVendorSpk,
 } from "@/server/actions/production";
 import { CustomerComplaintResolveDialog } from "@/components/dashboard/customer-complaint-resolve-dialog";
 
@@ -185,6 +187,7 @@ interface ProductionShellProps {
   dpPaidUnitIds: string[];
   isSuperAdmin?: boolean;
   isPengawas?: boolean;
+  isVendor?: boolean;
   defaultTab?: "spk" | "progress" | "materials" | "complaints";
 }
 
@@ -192,6 +195,7 @@ export default function ProductionShell({
   activeUser,
   isSuperAdmin = false,
   isPengawas = false,
+  isVendor = false,
   projects,
   units,
   customers,
@@ -235,11 +239,14 @@ export default function ProductionShell({
 
   // BAST Upload Dialog states
   const [bastDialogOpen, setBastDialogOpen] = React.useState(false);
+  const [progressTab, setProgressTab] = React.useState<string>("form");
   const [bastUnit, setBastUnit] = React.useState<any | null>(null);
   const [bastSpk, setBastSpk] = React.useState<any | null>(null);
   const [bastPdfFile, setBastPdfFile] = React.useState<File | null>(null);
   const [activeUnitBast, setActiveUnitBast] = React.useState<any | null>(null);
   const [customerBast, setCustomerBast] = React.useState<any | null>(null);
+  const [vendorCompleteConfirmOpen, setVendorCompleteConfirmOpen] = React.useState(false);
+  const [spkToCompleteVendor, setSpkToCompleteVendor] = React.useState<any | null>(null);
 
   // New TUGAS 9 states
   const [materialStep, setMaterialStep] = React.useState(1);
@@ -922,6 +929,31 @@ export default function ProductionShell({
     }
   };
 
+  // Handle SPK completion by Vendor
+  const handleCompleteVendorSpk = async () => {
+    if (!spkToCompleteVendor) return;
+
+    setIsSubmitting(true);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    try {
+      const res = await completeVendorSpk(spkToCompleteVendor.id);
+      if (res.success) {
+        setSuccessMessage(`Pernyataan selesai pembangunan SPK "${spkToCompleteVendor.spkNumber}" berhasil diajukan! Status SPK kini "Selesai Konstruksi" dan siap diverifikasi oleh Pengawas/Admin.`);
+        setVendorCompleteConfirmOpen(false);
+        setSpkToCompleteVendor(null);
+        router.refresh();
+      } else {
+        throw new Error("Gagal menyelesaikan pembangunan SPK.");
+      }
+    } catch (e: any) {
+      setErrorMessage(e.message || "Gagal menyelesaikan pembangunan SPK.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   // Fetch SPK details dynamically — data real dari DB
   const handleViewSpkDetails = async (spkId: string) => {
     setSelectedSpkId(spkId);
@@ -1544,21 +1576,96 @@ export default function ProductionShell({
                               {t("production.btn_start_work")}
                             </Button>
                           )}
-                          {(spk.status === "proses_konstruksi" || spk.status === "overdue") && (
-                            <Button
-                              size="sm"
-                              onClick={() => {
-                                setNewProgress(prev => ({ ...prev, spkId: spk.id }));
-                                handleViewSpkDetails(spk.id);
-                                setProgressOpen(true);
-                              }}
-                              className="bg-[#4F6F52] hover:bg-[#3D563F] text-white font-semibold text-xs h-9"
-                            >
-                              <Wrench className="mr-1.5 h-3.5 w-3.5" />
-                              {t("production.btn_input_progress")}
-                            </Button>
-                          )}
+                           {(spk.status === "proses_konstruksi" || spk.status === "overdue") && (
+                             <div className="flex flex-wrap items-center gap-2">
+                               <Button
+                                 size="sm"
+                                 onClick={() => {
+                                   setNewProgress(prev => ({ ...prev, spkId: spk.id }));
+                                   handleViewSpkDetails(spk.id);
+                                   setProgressTab("form");
+                                   setProgressOpen(true);
+                                 }}
+                                 className="bg-[#4F6F52] hover:bg-[#3D563F] text-white font-semibold text-xs h-9 rounded-xl shadow-sm"
+                               >
+                                 <Wrench className="mr-1.5 h-3.5 w-3.5" />
+                                 {t("production.btn_input_progress") || "Catat Progress"}
+                               </Button>
+ 
+                               <Button
+                                 size="sm"
+                                 variant="outline"
+                                 onClick={() => {
+                                   setNewProgress(prev => ({ ...prev, spkId: spk.id }));
+                                   handleViewSpkDetails(spk.id);
+                                   setProgressTab("history");
+                                   setProgressOpen(true);
+                                 }}
+                                 className="border-amber-600/40 text-amber-700 hover:bg-amber-50/50 hover:text-amber-800 font-semibold text-xs h-9 rounded-xl"
+                               >
+                                 <Clock className="mr-1.5 h-3.5 w-3.5 text-amber-600" />
+                                 {"Revisi / Riwayat"}
+                               </Button>
+                             </div>
+                           )}
 
+                           {(() => {
+                             const unit = units.find(u => u.id === spk.unitId);
+                             const isReadyToComplete = unit && (
+                               unit.status === "construction_done" ||
+                               ((unit.status === "construction" || unit.status === "overdue") && unit.constructionProgress === 100)
+                             );
+                             
+                             if (isVendor) {
+                               // Vendor sees completion declaration button when their SPK is at 100% and active/overdue
+                               const canVendorDeclareComplete = spk.progressPct === 100 && 
+                                 (spk.status === "proses_konstruksi" || spk.status === "overdue");
+                               
+                               if (canVendorDeclareComplete) {
+                                 return (
+                                   <Button
+                                     size="sm"
+                                     onClick={() => {
+                                       setSpkToCompleteVendor(spk);
+                                       setVendorCompleteConfirmOpen(true);
+                                     }}
+                                     className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs h-9 rounded-xl flex items-center gap-1.5 shadow-[0_4px_12px_rgba(16,185,129,0.25)] transition-all animate-pulse"
+                                   >
+                                     <CheckCircle2 className="h-4 w-4" />
+                                     Selesai Membangun (Vendor)
+                                   </Button>
+                                 );
+                               }
+                               return null;
+                             }
+
+                             // For Admin / Pengawas:
+                             // Skenario A: SPK masih aktif/overdue, dan unit siap diselesaikan
+                             const showDirectComplete = isReadyToComplete && 
+                               (spk.status === "proses_konstruksi" || spk.status === "overdue");
+                             
+                             // Skenario B: Vendor sudah menyatakan "selesai_konstruksi", Admin/Pengawas tinggal upload BAST
+                             const showUploadBastOnly = spk.status === "selesai_konstruksi" && unit && unit.status !== "construction_done";
+
+                             if (showDirectComplete || showUploadBastOnly) {
+                               return (
+                                 <Button
+                                   size="sm"
+                                   onClick={() => {
+                                     setBastUnit(unit);
+                                     setBastSpk(spk);
+                                     setBastPdfFile(null);
+                                     setBastDialogOpen(true);
+                                   }}
+                                   className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs h-9 rounded-xl flex items-center gap-1.5 shadow-[0_4px_12px_rgba(16,185,129,0.25)] transition-all animate-pulse ml-2"
+                                 >
+                                   <CheckCircle2 className="h-4 w-4" />
+                                   {spk.status === "selesai_konstruksi" ? "Upload BAST & Selesaikan Unit" : "Selesai Membangun (Upload BAST)"}
+                                 </Button>
+                               );
+                             }
+                             return null;
+                           })()}
                         </div>
                       </div>
 
@@ -2618,6 +2725,7 @@ export default function ProductionShell({
                     {units
                       .filter(u => 
                         (u.projectId === newSpk.projectId && 
+                         !u.isReadyStock &&
                          u.status !== "belum_siap" &&
                          (u.status !== "construction" || !spks.some(s => s.unitId === u.id && s.status !== "cancelled")) && 
                          u.status !== "construction_done" && 
@@ -2840,7 +2948,7 @@ export default function ProductionShell({
             </DialogHeader>
           </div>
 
-          <Tabs defaultValue="form" className="w-full">
+          <Tabs value={progressTab} onValueChange={setProgressTab} className="w-full">
             <div className="px-6 pt-3 border-b border-border bg-[#F7F8F3]/50">
               <TabsList className="grid grid-cols-2 w-full h-9 bg-muted/60 p-0.5 rounded-lg border border-[#D6DED2]">
                 <TabsTrigger value="form" className="text-xs font-semibold rounded-md py-1.5 data-[state=active]:bg-white data-[state=active]:text-primary data-[state=active]:shadow-sm">
@@ -3147,6 +3255,7 @@ export default function ProductionShell({
 
               {spkLogs && spkLogs.length > 0 ? (
                 (() => {
+                  const currentSpk = spks.find(s => s.id === newProgress.spkId);
                   // Filter logs if a component is selected, otherwise show all
                   const filteredLogs = newProgress.workItemId 
                     ? spkLogs.filter(l => l.log.workItemId === newProgress.workItemId)
@@ -3167,9 +3276,42 @@ export default function ProductionShell({
                           <div key={item.log.id} className="p-3.5 bg-[#8FAF9A]/5 border border-[#8FAF9A]/20 rounded-xl space-y-2 text-xs">
                             <div className="flex justify-between items-center font-bold text-foreground">
                               <span className="text-[#4F6F52]">{item.workItem?.name || "Komponen Pekerjaan"}</span>
-                              <Badge className="bg-[#DDE8D8] text-[#4F6F52] font-semibold border border-[#8FAF9A]/25 rounded-md hover:bg-[#DDE8D8]">
-                                +{item.log.percentageAdded}% &rarr; {item.log.currentTotalPct}%
-                              </Badge>
+                              <div className="flex items-center gap-2">
+                                <Badge className="bg-[#DDE8D8] text-[#4F6F52] font-semibold border border-[#8FAF9A]/25 rounded-md hover:bg-[#DDE8D8]">
+                                  +{item.log.percentageAdded}% &rarr; {item.log.currentTotalPct}%
+                                </Badge>
+                                {(currentSpk && (currentSpk.status === "active" || currentSpk.status === "proses_konstruksi" || currentSpk.status === "overdue")) && (
+                                  <button
+                                    type="button"
+                                    title="Hapus / Revisi log progres ini"
+                                    onClick={async () => {
+                                      const confirmed = window.confirm(
+                                        `Apakah Anda yakin ingin menghapus log progres (+${item.log.percentageAdded}%) untuk "${item.workItem?.name}" ini?\n\nTindakan ini akan mengkalkulasi ulang progres pembangunan unit.`
+                                      );
+                                      if (!confirmed) return;
+                                      
+                                      setIsSubmitting(true);
+                                      try {
+                                        const res = await deleteProgressLog(item.log.id);
+                                        if (res.success) {
+                                          setSuccessMessage("✓ Log progres berhasil dihapus dan dikalkulasi ulang.");
+                                          if (currentSpk.unitId) {
+                                            await handleViewUnitProgress(currentSpk.unitId);
+                                          }
+                                        }
+                                      } catch (err: any) {
+                                        setErrorMessage(err.message || "Gagal menghapus log progres.");
+                                      } finally {
+                                        setIsSubmitting(false);
+                                      }
+                                    }}
+                                    disabled={isSubmitting}
+                                    className="p-1 text-slate-400 hover:text-rose-600 transition-colors rounded-lg hover:bg-slate-100 disabled:opacity-50"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                )}
+                              </div>
                             </div>
                             <div className="text-muted-foreground leading-relaxed">
                               {item.log.notes ? `"${item.log.notes}"` : <span className="italic">Tidak ada catatan lapangan.</span>}
@@ -3848,6 +3990,82 @@ export default function ProductionShell({
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* DIALOG 7: CONFIRM VENDOR SPK COMPLETION */}
+      <Dialog open={vendorCompleteConfirmOpen} onOpenChange={setVendorCompleteConfirmOpen}>
+        <DialogContent className="sm:max-w-md rounded-3xl bg-white/98 backdrop-blur-md border border-[#D6DED2] shadow-[0_8px_30px_rgb(143,175,154,0.15)] p-0 overflow-hidden font-sans">
+          <div className="bg-gradient-to-r from-[#DDE8D8]/70 via-white/80 to-transparent p-6 border-b border-[#D6DED2]">
+            <DialogHeader>
+              <DialogTitle className="text-primary font-bold text-lg flex items-center gap-2">
+                <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                Nyatakan Selesai Konstruksi (Vendor)
+              </DialogTitle>
+              <DialogDescription className="text-xs">
+                Apakah Anda yakin telah menyelesaikan semua pekerjaan pada SPK ini dengan progress fisik 100%?
+              </DialogDescription>
+            </DialogHeader>
+          </div>
+          <div className="p-6 space-y-4 pt-4">
+            {spkToCompleteVendor && (
+              <div className="p-3.5 bg-[#8FAF9A]/5 border border-[#8FAF9A]/20 rounded-2xl space-y-2 text-xs font-semibold text-foreground">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Pekerjaan:</span>
+                  <span className="text-[#243028] font-bold">{spkToCompleteVendor.title}</span>
+                </div>
+                <div className="flex justify-between border-t border-[#8FAF9A]/10 pt-1.5">
+                  <span className="text-muted-foreground">Nomor SPK:</span>
+                  <span className="font-mono text-primary font-bold">{spkToCompleteVendor.spkNumber}</span>
+                </div>
+                <div className="flex justify-between border-t border-[#8FAF9A]/10 pt-1.5">
+                  <span className="text-muted-foreground">Kavling / Unit:</span>
+                  <span className="font-mono">{spkToCompleteVendor.unitCode}</span>
+                </div>
+                <div className="flex justify-between border-t border-[#8FAF9A]/10 pt-1.5">
+                  <span className="text-muted-foreground">Progress Fisik:</span>
+                  <span className="text-emerald-700 font-extrabold">{spkToCompleteVendor.progressPct}%</span>
+                </div>
+              </div>
+            )}
+
+            <div className="text-xs text-muted-foreground leading-relaxed bg-amber-50 border border-amber-200/50 rounded-2xl p-3 flex gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+              <span>
+                <strong>Perhatian:</strong> Mengajukan selesai pembangunan akan mengubah status SPK menjadi <strong>Selesai Konstruksi</strong>.
+                Pengawas Lapangan &amp; Admin Developer akan melakukan verifikasi fisik di lokasi sebelum menandatangani BAST resmi dan menyelesaikan status unit.
+              </span>
+            </div>
+
+            <DialogFooter className="pt-2 border-t border-[#8FAF9A]/10 mt-4 flex items-center justify-end gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setVendorCompleteConfirmOpen(false)}
+                className="text-xs text-muted-foreground hover:text-foreground rounded-xl"
+              >
+                Batal
+              </Button>
+              <Button
+                type="button"
+                disabled={isSubmitting}
+                onClick={handleCompleteVendorSpk}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-sm px-4 flex items-center gap-1.5"
+              >
+                {isSubmitting ? (
+                  <span className="flex items-center gap-1">
+                    <span className="h-3 w-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Memproses...
+                  </span>
+                ) : (
+                  <>
+                    <CheckCircle2 className="h-4 w-4 text-white" />
+                    Ya, Nyatakan Selesai
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
 

@@ -28,7 +28,7 @@ import {
 import { requireAnyRole, getSessionRole, getUserRole } from "../permissions";
 import { eq, and, sql, inArray, desc, lte, isNotNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { writeAuditLog } from "./audit";
+import { writeAuditLog, safeWriteBlockedTransitionLog } from "./audit";
 import { createNotification, notifyUsersWithRoles } from "./notification";
 
 // --- LEADS ---
@@ -569,6 +569,71 @@ export async function cancelBooking(id: string, reason: string) {
     if (!booking) throw new Error("Booking tidak ditemukan.");
     if (booking.status === "cancelled") throw new Error("Booking sudah dibatalkan sebelumnya.");
 
+    // P0 Guard: Check if there are any invoices with status "paid" or "partial" linked to this booking
+    const paidInvoices = await tx
+      .select({ id: invoices.id })
+      .from(invoices)
+      .where(
+        and(
+          eq(invoices.bookingId, id),
+          inArray(invoices.status, ["paid", "partial"])
+        )
+      )
+      .all();
+
+    if (paidInvoices.length > 0) {
+      await safeWriteBlockedTransitionLog({
+        module: "marketing",
+        entityType: "booking",
+        entityId: id,
+        details: {
+          action: "cancelBooking_blocked_paid_invoice",
+          bookingId: id,
+          reason: "Booking ini sudah memiliki kuitansi lunas/sebagian. Pembatalan langsung ditolak.",
+        },
+      });
+      throw new Error(
+        "Booking ini sudah memiliki kuitansi pembayaran terverifikasi atau lunas sebagian. Pembatalan langsung tidak diperbolehkan. Silakan buat pengajuan refund atau pembatalan dengan persetujuan Direksi."
+      );
+    }
+
+    // Also check if any payment is "verified"
+    const bookingInvoices = await tx
+      .select({ id: invoices.id })
+      .from(invoices)
+      .where(eq(invoices.bookingId, id))
+      .all();
+    
+    const invoiceIds = bookingInvoices.map(r => r.id);
+    if (invoiceIds.length > 0) {
+      const verifiedPayments = await tx
+        .select({ id: payments.id })
+        .from(payments)
+        .where(
+          and(
+            inArray(payments.invoiceId, invoiceIds),
+            eq(payments.status, "verified")
+          )
+        )
+        .all();
+
+      if (verifiedPayments.length > 0) {
+        await safeWriteBlockedTransitionLog({
+          module: "marketing",
+          entityType: "booking",
+          entityId: id,
+          details: {
+            action: "cancelBooking_blocked_verified_payment",
+            bookingId: id,
+            reason: "Booking ini memiliki pembayaran yang berstatus verified. Pembatalan langsung ditolak.",
+          },
+        });
+        throw new Error(
+          "Booking ini sudah memiliki kuitansi pembayaran terverifikasi. Pembatalan langsung tidak diperbolehkan. Silakan ajukan proses refund atau pembatalan melalui persetujuan Direksi."
+        );
+      }
+    }
+
     projectId = booking.projectId;
 
     // 2. Update Booking status to cancelled
@@ -631,6 +696,172 @@ export async function cancelBooking(id: string, reason: string) {
   return { success: true };
 }
 
+export async function isPhysicalReadyForKprAkad(unit: any, tx?: any) {
+  const executor = tx || db;
+  const dbUnit = await executor.select().from(units).where(eq(units.id, unit.id)).get();
+  if (!dbUnit) {
+    return {
+      ready: false,
+      reason: "Unit tidak ditemukan.",
+    };
+  }
+
+  const isReadyStock =
+    dbUnit.isReadyStock === true ||
+    dbUnit.isReadyStock === 1 ||
+    dbUnit.readyStockSource === "legacy_ready_stock" ||
+    dbUnit.readyStockSource === "manual_ready_stock";
+
+  if (isReadyStock) {
+    return {
+      ready: true,
+      reason: "Unit sudah Ready Stock.",
+    };
+  }
+
+  const isConstructionOrIndent =
+    dbUnit.status === "construction" ||
+    dbUnit.status === "overdue" ||
+    dbUnit.status === "construction_done" ||
+    dbUnit.status === "kpr_process" ||
+    dbUnit.status === "booking";
+
+  if (isConstructionOrIndent) {
+    const progressDone = (dbUnit.constructionProgress ?? 0) === 100;
+
+    return {
+      ready: progressDone,
+      reason: progressDone
+        ? "Progress fisik unit sudah 100%."
+        : "Akad KPR untuk unit indent hanya dapat dilakukan setelah progress fisik 100%.",
+    };
+  }
+
+  return {
+    ready: false,
+    reason: `Status fisik unit (${dbUnit.status}) belum valid untuk Akad KPR.`,
+  };
+}
+
+export async function validateKprStateTransition(
+  tx: any,
+  kprId: string,
+  targetStatus: string,
+  payload: {
+    documentStatus?: string;
+    approvedBankPartnerId?: string | null;
+  }
+) {
+  // 1. Fetch KPR process
+  const kpr = await tx.select().from(kprProcesses).where(eq(kprProcesses.id, kprId)).get();
+  if (!kpr) throw new Error("Proses KPR tidak ditemukan.");
+
+  // 2. Fetch booking
+  const booking = await tx.select().from(bookings).where(eq(bookings.id, kpr.bookingId)).get();
+  if (!booking) throw new Error("Data booking tidak ditemukan.");
+
+  if (["cancelled", "rejected"].includes(booking.status)) {
+    throw new Error("Booking sudah batal/ditolak. Transaksi KPR tidak dapat diproses.");
+  }
+
+  const currentStatus = kpr.status;
+  const newStatus = targetStatus;
+
+  // Enforce one-way gates
+  const BACKWARD_FROM_APPROVED = ["bi_checking", "pemberkasan", "proses_bank", "offering"];
+  if (currentStatus === "approved" && BACKWARD_FROM_APPROVED.includes(newStatus)) {
+    throw new Error(
+      "KPR yang sudah berstatus Approved tidak dapat dikembalikan ke tahap sebelumnya. " +
+      "Dari Approved, alur hanya dapat maju ke tahap Akad."
+    );
+  }
+
+  const BACKWARD_FROM_REALISASI = ["bi_checking", "pemberkasan", "proses_bank", "offering", "approved", "akad"];
+  if (currentStatus === "realisasi" && BACKWARD_FROM_REALISASI.includes(newStatus)) {
+    throw new Error(
+      "Status Realisasi tidak dapat dikembalikan ke tahap sebelumnya. " +
+      "Dana KPR yang sudah dicairkan tidak dapat dibatalkan melalui sistem ini."
+    );
+  }
+
+  if (newStatus === "rejected" && currentStatus === "approved") {
+    throw new Error(
+      "KPR yang sudah berstatus Approved tidak dapat dikembalikan ke Ditolak (Rejected). " +
+      "Hubungi Super Admin jika diperlukan penanganan khusus."
+    );
+  }
+
+  // 3. Validation for Pemberkasan / Proses Bank: Documents must be complete
+  const finalDocStatus = payload.documentStatus ?? kpr.documentStatus;
+  if ((newStatus === "pemberkasan" || newStatus === "proses_bank") && finalDocStatus !== "complete") {
+    throw new Error("Berkas berkas KPR belum lengkap. Silakan lengkapi berkas di berkas checklist KPR terlebih dahulu.");
+  }
+
+  // Validation for Proses Bank: requires verified bank submission
+  if (newStatus === "proses_bank") {
+    const verifiedOrHigher = await tx.select().from(bankSubmissions).where(
+      and(
+        eq(bankSubmissions.kprProcessId, kprId),
+        inArray(bankSubmissions.status, ["verified", "offering", "approved"])
+      )
+    ).limit(1).all();
+
+    if (verifiedOrHigher.length === 0) {
+      throw new Error("Tidak dapat memindahkan status ke Proses Bank. Pengajuan ke bank partner harus berstatus minimal 'Verified' (Diverifikasi oleh analis bank) terlebih dahulu.");
+    }
+  }
+
+  // 4. Validation for Offering / Approved / Akad: Requires corresponding bank submissions
+  if (newStatus === "offering") {
+    const offeringOrApproved = await tx.select().from(bankSubmissions).where(
+      and(
+        eq(bankSubmissions.kprProcessId, kprId),
+        inArray(bankSubmissions.status, ["offering", "approved"])
+      )
+    ).limit(1).all();
+
+    if (offeringOrApproved.length === 0) {
+      throw new Error("Tidak dapat memindahkan status ke Offering. Harus ada pengajuan bank yang berstatus minimal 'Offering' terlebih dahulu.");
+    }
+  }
+
+  if (newStatus === "approved") {
+    const approved = await tx.select().from(bankSubmissions).where(
+      and(
+        eq(bankSubmissions.kprProcessId, kprId),
+        eq(bankSubmissions.status, "approved")
+      )
+    ).limit(1).all();
+
+    if (approved.length === 0) {
+      throw new Error("Tidak dapat memindahkan status ke Approved. Pengajuan KPR harus sudah disetujui secara resmi oleh minimal satu bank rekanan (status pengajuan bank adalah 'Approved').");
+    }
+  }
+
+  if (newStatus === "akad") {
+    const approved = await tx.select().from(bankSubmissions).where(
+      and(
+        eq(bankSubmissions.kprProcessId, kprId),
+        eq(bankSubmissions.status, "approved")
+      )
+    ).limit(1).all();
+
+    if (approved.length === 0) {
+      throw new Error("Tidak dapat memindahkan ke Akad. Pengajuan KPR belum disetujui oleh bank rekanan (SP3K belum disetujui).");
+    }
+
+    const unitForAkad = await tx.select().from(units).where(eq(units.id, booking.unitId)).get();
+    if (unitForAkad) {
+      const physical = await isPhysicalReadyForKprAkad(unitForAkad, tx);
+      if (!physical.ready) {
+        throw new Error(physical.reason);
+      }
+    }
+  }
+
+  return { kpr, booking };
+}
+
 export async function updateKprProcess(id: string, data: unknown) {
   const user = await requireAnyRole(["Super Admin", "Admin Kantor", "Marketing", "Marketing Manager"]);
   // Use kprUpdateSchema (no bookingId required — resolved from DB by id)
@@ -647,12 +878,29 @@ export async function updateKprProcess(id: string, data: unknown) {
   let bookingIdToTransition = "";
 
   await db.transaction(async (tx) => {
+    // Call KPR State Transition validator first, logging blocked attempts
+    try {
+      await validateKprStateTransition(tx, id, parsed.status, {
+        documentStatus: parsed.documentStatus,
+        approvedBankPartnerId: parsed.approvedBankPartnerId,
+      });
+    } catch (err: any) {
+      await safeWriteBlockedTransitionLog({
+        module: "marketing",
+        entityType: "kpr_process",
+        entityId: id,
+        details: {
+          action: "updateKprProcess_blocked_transition",
+          kprProcessId: id,
+          targetStatus: parsed.status,
+          reason: err.message,
+        },
+      });
+      throw err;
+    }
+
     const kpr = await tx.select().from(kprProcesses).where(eq(kprProcesses.id, id)).get();
-    if (!kpr) throw new Error("Proses KPR tidak ditemukan.");
-
     const booking = await tx.select().from(bookings).where(eq(bookings.id, kpr.bookingId)).get();
-    if (!booking) throw new Error("Data booking tidak ditemukan.");
-
     bookingProjectId = booking.projectId;
 
     // Update KPR row status
@@ -680,25 +928,15 @@ export async function updateKprProcess(id: string, data: unknown) {
         )
         .get();
 
-      if (!existingSub) {
-        throw new Error("Bank rekanan terpilih belum pernah diajukan berkas KPR-nya.");
+      if (existingSub) {
+        await tx.update(bankSubmissions)
+          .set({
+            plafondAmount: parsed.approvedPlafond !== undefined ? parsed.approvedPlafond : existingSub.plafondAmount,
+            tenorYear: parsed.approvedTenor !== undefined ? (parsed.approvedTenor ? Math.round(parsed.approvedTenor) : null) : existingSub.tenorYear,
+          })
+          .where(eq(bankSubmissions.id, existingSub.id))
+          .run();
       }
-
-      if ((parsed.status === "approved" || parsed.status === "akad") && existingSub.status !== "approved") {
-        throw new Error("Pengajuan untuk bank rekanan terpilih belum disetujui (Approved). Silakan ubah status pengajuan bank terlebih dahulu pada tab 'Pengajuan Bank'.");
-      }
-
-      if (parsed.status === "offering" && existingSub.status !== "offering" && existingSub.status !== "approved") {
-        throw new Error("Pengajuan untuk bank rekanan terpilih belum berstatus Offering atau Approved. Silakan ubah status pengajuan bank terlebih dahulu pada tab 'Pengajuan Bank'.");
-      }
-
-      await tx.update(bankSubmissions)
-        .set({
-          plafondAmount: parsed.approvedPlafond !== undefined ? parsed.approvedPlafond : existingSub.plafondAmount,
-          tenorYear: parsed.approvedTenor !== undefined ? (parsed.approvedTenor ? Math.round(parsed.approvedTenor) : null) : existingSub.tenorYear,
-        })
-        .where(eq(bankSubmissions.id, existingSub.id))
-        .run();
     }
 
     // If step shifts to Akad, set unit and booking status to finalized
@@ -706,28 +944,12 @@ export async function updateKprProcess(id: string, data: unknown) {
       const currentUnit = await tx.select().from(units).where(eq(units.id, booking.unitId)).get();
       if (!currentUnit) throw new Error("Unit tidak ditemukan.");
 
-      // Validasi fisik: Jika Ready Stock, pastikan fisik sudah 100% sebelum Akad
-      if (currentUnit.isReadyStock && (currentUnit.constructionProgress || 0) < 100) {
-        throw new Error("Unit Ready Stock belum selesai dibangun (Progress < 100%). Selesaikan pembangunan fisik di modul Produksi sebelum lanjut ke proses Akad Jual Beli.");
-      }
-
-      // Unit = sold
+      // Keep unit status unchanged (do not set to "sold" yet), but link customer & booking
       await tx.update(units).set({
-        status: "sold",
         currentCustomerId: booking.customerId,
         currentBookingId: booking.id,
         updatedAt: new Date(),
       }).where(eq(units.id, booking.unitId)).run();
-
-      await tx.insert(unitStatusHistories).values({
-        id: crypto.randomUUID(),
-        unitId: booking.unitId,
-        previousStatus: "kpr_process",
-        newStatus: "sold",
-        reason: "Proses Akad terverifikasi",
-        changedBy: user.id,
-        changedAt: new Date(),
-      }).run();
 
       // Customer = buyer
       await tx.update(customers).set({
@@ -812,131 +1034,28 @@ export async function updateKprStatusDirect(id: string, newStatus: string, revis
   let bookingIdToTransition = "";
 
   await db.transaction(async (tx) => {
-    // 1. Fetch KPR process
-    const kpr = await tx.select().from(kprProcesses).where(eq(kprProcesses.id, id)).get();
-    if (!kpr) throw new Error("Proses KPR tidak ditemukan.");
+    // Call KPR State Transition validator first, logging blocked attempts
+    try {
+      await validateKprStateTransition(tx, id, newStatus, {});
+    } catch (err: any) {
+      await safeWriteBlockedTransitionLog({
+        module: "marketing",
+        entityType: "kpr_process",
+        entityId: id,
+        details: {
+          action: "updateKprStatusDirect_blocked_transition",
+          kprProcessId: id,
+          targetStatus: newStatus,
+          reason: err.message,
+        },
+      });
+      throw err;
+    }
 
-    // 2. Fetch booking
+    const kpr = await tx.select().from(kprProcesses).where(eq(kprProcesses.id, id)).get();
     const booking = await tx.select().from(bookings).where(eq(bookings.id, kpr.bookingId)).get();
-    if (!booking) throw new Error("Data booking tidak ditemukan.");
 
     bookingProjectId = booking.projectId;
-
-    // 3. Validation for Pemberkasan / Proses Bank: Documents must be complete
-    if ((newStatus === "pemberkasan" || newStatus === "proses_bank") && kpr.documentStatus !== "complete") {
-      throw new Error("Berkas berkas KPR belum lengkap. Silakan lengkapi berkas di berkas checklist KPR terlebih dahulu.");
-    }
-
-    // Validation for Proses Bank: requires verified bank submission
-    if (newStatus === "proses_bank") {
-      const verifiedOrHigher = await tx.select().from(bankSubmissions).where(
-        and(
-          eq(bankSubmissions.kprProcessId, id),
-          inArray(bankSubmissions.status, ["verified", "offering", "approved"])
-        )
-      ).limit(1).all();
-
-      if (verifiedOrHigher.length === 0) {
-        throw new Error("Tidak dapat memindahkan status ke Proses Bank. Pengajuan ke bank partner harus berstatus minimal 'Verified' (Diverifikasi oleh analis bank) terlebih dahulu.");
-      }
-    }
-
-    // 4. Validation for Offering / Approved / Akad: Requires corresponding bank submissions
-    if (newStatus === "offering") {
-      const offeringOrApproved = await tx.select().from(bankSubmissions).where(
-        and(
-          eq(bankSubmissions.kprProcessId, id),
-          inArray(bankSubmissions.status, ["offering", "approved"])
-        )
-      ).limit(1).all();
-
-      if (offeringOrApproved.length === 0) {
-        throw new Error("Tidak dapat memindahkan status ke Offering. Harus ada pengajuan bank yang berstatus minimal 'Offering' terlebih dahulu.");
-      }
-    }
-
-    if (newStatus === "approved") {
-      const approved = await tx.select().from(bankSubmissions).where(
-        and(
-          eq(bankSubmissions.kprProcessId, id),
-          eq(bankSubmissions.status, "approved")
-        )
-      ).limit(1).all();
-
-      if (approved.length === 0) {
-        throw new Error("Tidak dapat memindahkan status ke Approved. Pengajuan KPR harus sudah disetujui secara resmi oleh minimal satu bank rekanan (status pengajuan bank adalah 'Approved').");
-      }
-    }
-
-    // Guard: approved is a one-way gate — cannot go backward
-    const BACKWARD_FROM_APPROVED = ["bi_checking", "pemberkasan", "proses_bank", "offering"];
-    if (kpr.status === "approved" && BACKWARD_FROM_APPROVED.includes(newStatus)) {
-      throw new Error(
-        "KPR yang sudah berstatus Approved tidak dapat dikembalikan ke tahap sebelumnya. " +
-        "Dari Approved, alur hanya dapat maju ke tahap Akad."
-      );
-    }
-
-    // Guard: realisasi is a one-way gate — RULE 7: cannot go backward at all
-    const BACKWARD_FROM_REALISASI = ["bi_checking", "pemberkasan", "proses_bank", "offering", "approved", "akad"];
-    if (kpr.status === "realisasi" && BACKWARD_FROM_REALISASI.includes(newStatus)) {
-      throw new Error(
-        "Status Realisasi tidak dapat dikembalikan ke tahap sebelumnya. " +
-        "Dana KPR yang sudah dicairkan tidak dapat dibatalkan melalui sistem ini."
-      );
-    }
-
-    // Guard: approved KPR cannot be moved to rejected
-    if (newStatus === "rejected" && kpr.status === "approved") {
-      throw new Error(
-        "KPR yang sudah berstatus Approved tidak dapat dikembalikan ke Ditolak (Rejected). " +
-        "Hubungi Super Admin jika diperlukan penanganan khusus."
-      );
-    }
-
-    if (newStatus === "akad") {
-      const approved = await tx.select().from(bankSubmissions).where(
-        and(
-          eq(bankSubmissions.kprProcessId, id),
-          eq(bankSubmissions.status, "approved")
-        )
-      ).limit(1).all();
-
-      if (approved.length === 0) {
-        throw new Error("Tidak dapat memindahkan ke Akad. Pengajuan KPR belum disetujui oleh bank rekanan (SP3K belum disetujui).");
-      }
-
-      // Guard: construction must be complete before Akad
-      const unitForAkad = await tx.select().from(units).where(eq(units.id, booking.unitId)).get();
-      if (unitForAkad?.status === "construction" && (unitForAkad.constructionProgress ?? 0) < 100) {
-        throw new Error(
-          `Tidak dapat memindahkan ke Akad. Pembangunan fisik unit ${unitForAkad.code} masih berjalan ` +
-          `(${unitForAkad.constructionProgress ?? 0}%). ` +
-          "Selesaikan pembangunan fisik di modul Produksi terlebih dahulu sebelum proses Akad dilakukan."
-        );
-      }
-
-      // Guard: BAST (developer → customer) must be uploaded and verified
-      const bastDoc = await tx.select().from(customerDocuments)
-        .where(
-          and(
-            eq(customerDocuments.bookingId, booking.id),
-            eq(customerDocuments.documentType, "bast")
-          )
-        ).get();
-      if (!bastDoc) {
-        throw new Error(
-          "Tidak dapat memindahkan ke Akad. Dokumen BAST (Berita Acara Serah Terima) dari Developer ke Konsumen " +
-          "belum diunggah. Silakan unggah BAST terlebih dahulu di modul Berkas Konsumen."
-        );
-      }
-      if (bastDoc.status !== "verified") {
-        throw new Error(
-          "Tidak dapat memindahkan ke Akad. Dokumen BAST sudah diunggah namun belum diverifikasi oleh Admin. " +
-          "Minta Admin untuk memverifikasi BAST sebelum melanjutkan proses Akad."
-        );
-      }
-    }
 
     // Parse and update bankNotes if revision notes are provided
     let updatedNotes = kpr.bankNotes;
@@ -968,26 +1087,12 @@ export async function updateKprStatusDirect(id: string, newStatus: string, revis
       const currentUnit = await tx.select().from(units).where(eq(units.id, booking.unitId)).get();
       if (!currentUnit) throw new Error("Unit tidak ditemukan.");
 
-      if (currentUnit.isReadyStock && (currentUnit.constructionProgress || 0) < 100) {
-        throw new Error("Unit Ready Stock belum selesai dibangun (Progress < 100%). Selesaikan pembangunan fisik di modul Produksi sebelum lanjut ke proses Akad Jual Beli.");
-      }
-
+      // Keep unit status unchanged (do not set to "sold" yet), but link customer & booking
       await tx.update(units).set({
-        status: "sold",
         currentCustomerId: booking.customerId,
         currentBookingId: booking.id,
         updatedAt: new Date(),
       }).where(eq(units.id, booking.unitId)).run();
-
-      await tx.insert(unitStatusHistories).values({
-        id: crypto.randomUUID(),
-        unitId: booking.unitId,
-        previousStatus: kpr.status,
-        newStatus: "sold",
-        reason: "Proses Akad terverifikasi via Kanban",
-        changedBy: user.id,
-        changedAt: new Date(),
-      }).run();
 
       await tx.update(customers).set({
         status: "buyer",
@@ -2181,11 +2286,11 @@ export async function realizeKprFunds(data: unknown) {
     unitId = unit.id;
     oldUnitStatus = unit.status;
 
-    const ALLOWED_UNIT_STATUSES = ["sold", "payment_pending", "menunggu_serah_terima"];
+    const ALLOWED_UNIT_STATUSES = ["sold", "payment_pending", "menunggu_serah_terima", "construction", "construction_done", "kpr_process", "booking"];
     if (!ALLOWED_UNIT_STATUSES.includes(unit.status)) {
       throw new Error(
         `Status unit "${unit.status}" tidak valid untuk realisasi KPR. ` +
-        `Unit harus berstatus "sold" atau "payment_pending".`
+        `Unit harus berstatus "sold", "payment_pending", "construction", atau "construction_done".`
       );
     }
     if (unit.status === "handover_complete") {

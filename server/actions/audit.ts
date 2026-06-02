@@ -130,3 +130,23 @@ export async function writeAuditLog({
     console.warn("[AuditLog] Failed to write audit log:", err);
   }
 }
+
+export async function safeWriteBlockedTransitionLog(payload: {
+  module: string;
+  entityType: string;
+  entityId: string;
+  details: Record<string, unknown>;
+}) {
+  try {
+    await writeAuditLog({
+      action: "blocked_transition",
+      module: payload.module,
+      entityType: payload.entityType,
+      entityId: payload.entityId,
+      details: payload.details,
+    });
+  } catch (err) {
+    console.error("Failed to write blocked transition audit log:", err);
+  }
+}
+

@@ -9,7 +9,7 @@ import { spks, spmbs } from "@/db/schema/production";
 import { transactions, budgetLines } from "@/db/schema/finance";
 import { eq, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { writeAuditLog } from "./audit";
+import { writeAuditLog, safeWriteBlockedTransitionLog } from "./audit";
 import { user as userTable, vendorProfiles } from "@/db/schema/auth";
 import { auth } from "@/server/auth";
 import { notifyNewSpkCreated } from "./production";
@@ -169,6 +169,59 @@ export async function updateUnit(id: string, data: unknown) {
     // Check existing SPK
     const existingUnit = await tx.select().from(units).where(eq(units.id, id)).get();
     if (!existingUnit) throw new Error("Unit not found");
+
+    const TRANSACTIONAL_STATUSES = [
+      "booking",
+      "kpr_process",
+      "payment_pending",
+      "sold",
+      "menunggu_serah_terima",
+      "handover_complete",
+      "construction",
+      "construction_done",
+      "overdue",
+    ];
+
+    const currentStatus = existingUnit.status;
+    const newStatus = parsed.status;
+
+    if (newStatus !== currentStatus) {
+      const isReadyStockConstructionBypass = parsed.isReadyStock && newStatus === "construction";
+      
+      if (TRANSACTIONAL_STATUSES.includes(newStatus) && !isReadyStockConstructionBypass) {
+        await safeWriteBlockedTransitionLog({
+          module: "master",
+          entityType: "unit",
+          entityId: id,
+          details: {
+            action: "updateUnit_blocked_trans_status",
+            currentStatus,
+            attemptedStatus: newStatus,
+            reason: "Status transaksional tidak dapat diubah langsung dari Master Unit.",
+          },
+        });
+        throw new Error(
+          "Status transaksional tidak dapat diubah langsung dari Master Unit. Gunakan workflow modul terkait."
+        );
+      }
+
+      if (TRANSACTIONAL_STATUSES.includes(currentStatus)) {
+        await safeWriteBlockedTransitionLog({
+          module: "master",
+          entityType: "unit",
+          entityId: id,
+          details: {
+            action: "updateUnit_blocked_edit_trans_unit",
+            currentStatus,
+            attemptedStatus: newStatus,
+            reason: "Unit sedang berada dalam alur transaksi. Status tidak dapat diubah dari Master Unit.",
+          },
+        });
+        throw new Error(
+          "Unit sedang berada dalam alur transaksi. Status tidak dapat diubah dari Master Unit."
+        );
+      }
+    }
 
     const ALLOWED_TO_BECOME_AVAILABLE = ["available", "belum_siap", "cancelled"];
     if (parsed.status === "available" && !ALLOWED_TO_BECOME_AVAILABLE.includes(existingUnit.status) && parsed.readyStockSource === "construction_flow" && !existingUnit.isReadyStock) {

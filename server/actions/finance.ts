@@ -951,7 +951,7 @@ export async function approveExpense(transactionId: string, notes?: string) {
 
     if (currentAccountBalance < transaction.amount) {
       // Mark as insufficient balance and block approval
-      tx
+      await tx
         .update(transactions)
         .set({
           approvalStatus: "insufficient_balance",
@@ -969,7 +969,7 @@ export async function approveExpense(transactionId: string, notes?: string) {
     // No mutation of financeAccounts.openingBalance needed.
 
     // 4. Update transaction status
-    tx
+    await tx
       .update(transactions)
       .set({
         approvalStatus: "approved",
@@ -981,7 +981,7 @@ export async function approveExpense(transactionId: string, notes?: string) {
       .run();
 
     // 4b. Update corresponding auto-generated invoice status to paid
-    tx
+    await tx
       .update(invoices)
       .set({
         status: "paid",
@@ -1033,7 +1033,7 @@ export async function approveExpense(transactionId: string, notes?: string) {
         const newUsed = line.usedAmount + transaction.amount;
         const newRemaining = line.allocatedAmount - newUsed;
 
-        tx
+        await tx
           .update(budgetLines)
           .set({
             usedAmount: newUsed,
@@ -1113,7 +1113,7 @@ export async function rejectExpense(transactionId: string, notes: string) {
     }
 
     // 2. Update status to rejected
-    tx
+    await tx
       .update(transactions)
       .set({
         approvalStatus: "rejected",
@@ -1124,7 +1124,7 @@ export async function rejectExpense(transactionId: string, notes: string) {
       .run();
 
     // 2b. Update corresponding auto-generated invoice status to cancelled
-    tx
+    await tx
       .update(invoices)
       .set({
         status: "cancelled",
@@ -1671,7 +1671,7 @@ export async function getFinancePageData() {
   }
   for (const trx of transactionsList) {
     if (!(trx.accountId in balanceMap)) balanceMap[trx.accountId] = 0;
-    if (trx.type === "income" && trx.approvalStatus === "approved") {
+    if (trx.type === "income" && (trx.approvalStatus === "approved" || trx.approvalStatus === "not_required")) {
       balanceMap[trx.accountId] += trx.amount;
     } else if (trx.type === "expense" && trx.approvalStatus === "approved") {
       balanceMap[trx.accountId] -= trx.amount;

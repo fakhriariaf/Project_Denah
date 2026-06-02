@@ -124,51 +124,57 @@ function getUnitStockType(unit: any) {
   if (!unit) return "unknown";
   const isReady = unit.isReadyStock === true || unit.isReadyStock === 1;
 
-  if (unit.status === "available" && isReady) {
-    return "available_ready_stock";
+  if (isReady) {
+    if (unit.status === "available") {
+      return "available_ready_stock";
+    }
+    if (["construction", "overdue"].includes(unit.status)) {
+      return "building_for_ready_stock";
+    }
+    if (unit.status === "construction_done") {
+      return "construction_done_ready_stock";
+    }
+    if (unit.status === "booking") {
+      return "booking_ready_stock";
+    }
+    if (unit.status === "kpr_process") {
+      return "kpr_process_ready_stock";
+    }
+    if (unit.status === "sold") {
+      return "sold_ready_stock";
+    }
+    if (unit.status === "menunggu_serah_terima") {
+      return "menunggu_serah_terima_ready_stock";
+    }
+    if (unit.status === "handover_complete") {
+      return "handover_complete_ready_stock";
+    }
   }
 
-  if (unit.status === "available" && !isReady) {
+  // Indent (non-ready stock)
+  if (unit.status === "available") {
     return "available";
-  }
-
-  if (
-    ["construction", "overdue"].includes(unit.status) &&
-    (unit.targetStockType === "ready_stock" || isReady)
-  ) {
-    return "building_for_ready_stock";
   }
 
   if (["construction", "overdue"].includes(unit.status)) {
     return "construction";
   }
 
-  if (unit.status === "construction_done" && isReady) {
-    return "construction_done_ready_stock";
-  }
-
   if (unit.status === "construction_done") {
     return "construction_done";
   }
 
-  // Post-construction statuses (sold, booked, KPR, handover).
-  // These occur AFTER completeConstruction() which transitions the unit
-  // from construction_done → sold/kpr_process/booking/available.
-  // Physical construction is definitionally complete at this point.
+  if (["booking", "kpr_process"].includes(unit.status)) {
+    return "booking";
+  }
+
   const isPostConstruction = [
     "sold",
-    "kpr_process",
-    "booking",
     "menunggu_serah_terima",
     "handover_complete",
   ].includes(unit.status);
 
-  if (isPostConstruction && isReady) {
-    return "available_ready_stock"; // Treat as ready stock — physical done
-  }
-
   if (isPostConstruction) {
-    // Indent unit that has been sold/in-KPR — physical is already done
     return "construction_done";
   }
 
@@ -230,8 +236,18 @@ function getFinancialReadiness(activeBooking: any, invoices: any[], kprProcess: 
 function getPhysicalReadiness(unit: any, selectedSpkBast: any) {
   const unitStockType = getUnitStockType(unit);
 
-  // Ready stock units that are available or post-construction are always physically ready
-  if (unitStockType === "available_ready_stock" || unitStockType === "construction_done_ready_stock") {
+  const isReadyStockType = [
+    "available_ready_stock",
+    "booking_ready_stock",
+    "kpr_process_ready_stock",
+    "sold_ready_stock",
+    "menunggu_serah_terima_ready_stock",
+    "handover_complete_ready_stock",
+    "construction_done_ready_stock",
+  ].includes(unitStockType);
+
+  // Ready stock units are always physically ready
+  if (isReadyStockType) {
     return {
       ready: true,
       reason: "Unit sudah Ready Stock.",
@@ -920,6 +936,16 @@ export function SiteplanViewer({
     }
 
     const unitStockType = getUnitStockType(unit);
+    const isReadyStockUnit = [
+      "available_ready_stock",
+      "booking_ready_stock",
+      "kpr_process_ready_stock",
+      "sold_ready_stock",
+      "menunggu_serah_terima_ready_stock",
+      "handover_complete_ready_stock",
+      "construction_done_ready_stock",
+    ].includes(unitStockType);
+
     const bookingInvoices = invoices.filter((invoice) => invoice.bookingId === activeBooking.id);
     const bfInvoice = bookingInvoices.find((invoice) => invoice.type === "booking_fee");
     const bfPaid = bfInvoice?.status === "paid";
@@ -950,7 +976,7 @@ export function SiteplanViewer({
     if (paymentScheme === "cash") {
       const isCashPaid = bookingInvoices.length > 0 && bookingInvoices.every((invoice) => invoice.status === "paid");
 
-      if (unitStockType === "available_ready_stock" || unitStockType === "construction_done_ready_stock") {
+      if (isReadyStockUnit) {
         const steps = [
           { key: "available", label: "Tersedia - Ready Stock", desc: "Unit Ready Stock siap dipasarkan", done: true, active: false },
           { key: "booking_fee", label: "Booking Fee", desc: "Pembayaran booking fee awal", done: bfPaid, active: !bfPaid },
@@ -998,7 +1024,7 @@ export function SiteplanViewer({
     if (paymentScheme === "installment" || paymentScheme === "cash_bertahap") {
       const allInvoicesPaid = bookingInvoices.length > 0 && bookingInvoices.every((invoice) => invoice.status === "paid");
 
-      if (unitStockType === "available_ready_stock" || unitStockType === "construction_done_ready_stock") {
+      if (isReadyStockUnit) {
         const steps = [
           { key: "available", label: "Tersedia - Ready Stock", desc: "Unit Ready Stock siap dipasarkan", done: true, active: false },
           { key: "booking_fee", label: "Booking Fee", desc: "Pembayaran booking fee awal", done: bfPaid, active: !bfPaid },
@@ -1055,7 +1081,7 @@ export function SiteplanViewer({
     const kprApproved = kprStatus === "approved" || kprStatus === "offering" || kprAkad;
     const kprProsesBank = kprStatus === "proses_bank" || kprApproved;
 
-    if (unitStockType === "available_ready_stock" || unitStockType === "construction_done_ready_stock") {
+    if (isReadyStockUnit) {
       const steps = [
         { key: "available", label: "Tersedia - Ready Stock", desc: "Unit Ready Stock siap dipasarkan", done: true, active: false },
         { key: "booking_fee", label: "Booking Fee", desc: "Pembayaran booking fee awal", done: bfPaid, active: !bfPaid },
@@ -1825,6 +1851,16 @@ export function SiteplanViewer({
                         <div className="text-xs font-medium text-[#66736A] leading-relaxed space-y-2">
                           {(() => {
                             const stockType = getUnitStockType(unit);
+                            const isReadyStockUnit = [
+                              "available_ready_stock",
+                              "booking_ready_stock",
+                              "kpr_process_ready_stock",
+                              "sold_ready_stock",
+                              "menunggu_serah_terima_ready_stock",
+                              "handover_complete_ready_stock",
+                              "construction_done_ready_stock",
+                            ].includes(stockType);
+
                             if (stockType === "available") {
                               return (
                                 <p>
@@ -1833,7 +1869,7 @@ export function SiteplanViewer({
                                 </p>
                               );
                             }
-                            if (stockType === "available_ready_stock" || stockType === "construction_done_ready_stock") {
+                            if (isReadyStockUnit) {
                               return (
                                 <p>
                                   Unit Ready Stock dan belum terjual.<br />

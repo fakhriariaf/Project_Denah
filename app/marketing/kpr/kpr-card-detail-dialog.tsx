@@ -59,6 +59,7 @@ import {
 import { useI18n } from "@/lib/i18n";
 import { Translate } from "@/components/translate";
 import { Progress } from "@/components/ui/progress";
+import { KprMilestoneTracker } from "./kpr-milestone-tracker";
 
 interface Props {
   kpr: any;
@@ -252,7 +253,7 @@ export default function KprCardDetailDialog({
   const hasApprovedSubmission = submissions.some(sub => sub.status === "approved");
   const hasOfferingSubmission = submissions.some(sub => sub.status === "offering" || sub.status === "approved");
   const hasVerifiedSubmission = submissions.some(sub => sub.status === "verified" || sub.status === "offering" || sub.status === "approved");
-  const isReadyStockUnfinished = kpr.isReadyStock && (kpr.constructionProgress || 0) < 100;
+  const isReadyStockUnfinished = false;
   const isConstructionPending =
     kpr.unitStatus === "construction" && (kpr.constructionProgress ?? 0) < 100;
   const isBiCheckRejected = biCheckStatus === "rejected_refund" || biCheckStatus === "rejected_no_refund";
@@ -841,29 +842,45 @@ export default function KprCardDetailDialog({
         {/* Header */}
         <div className="bg-gradient-to-r from-[#DDE8D8]/70 via-white/80 to-transparent p-5 border-b border-[#D6DED2] shrink-0">
           <SheetHeader>
-            <div className="flex items-center gap-3.5">
-              <div className="h-10 w-10 rounded-xl bg-white border border-[#D6DED2] flex items-center justify-center shadow-sm shrink-0">
-                <CreditCard className="h-5.5 w-5.5 text-[#4F6F52]" />
-              </div>
-              <div className="min-w-0">
-                <SheetTitle className="text-base font-black text-[#243028] tracking-tight truncate">
-                  {t("kpr_dialog.title", { name: kpr.customerName })}
-                </SheetTitle>
-                <div className="flex flex-wrap items-center gap-2 mt-0.5">
-                  <span className="text-xs text-[#66736A] font-semibold">
-                    {t("kpr_dialog.unit")}{" "}
-                    <span className="font-mono font-bold text-[#243028] bg-[#DDE8D8] px-1.5 py-0.5 rounded">
-                      {kpr.unitCode}
-                    </span>
-                  </span>
-                  <span className="text-[10px] text-[#A8B0AA] font-bold">•</span>
-                  <span className="text-xs text-[#66736A] font-bold">{kpr.projectName}</span>
-                  {kpr.isReadyStock && (
-                    <Badge className="bg-[#4B286D]/15 text-[#4B286D] hover:bg-[#4B286D]/20 border-none font-extrabold text-[9px] px-2 py-0.5 rounded-full shrink-0">
-                      Ready Stock
-                    </Badge>
-                  )}
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center gap-3.5">
+                <div className="h-10 w-10 rounded-xl bg-white border border-[#D6DED2] flex items-center justify-center shadow-sm shrink-0">
+                  <CreditCard className="h-5.5 w-5.5 text-[#4F6F52]" />
                 </div>
+                <div className="min-w-0">
+                  <SheetTitle className="text-base font-black text-[#243028] tracking-tight truncate">
+                    {t("kpr_dialog.title", { name: kpr.customerName })}
+                  </SheetTitle>
+                  <div className="flex flex-wrap items-center gap-2 mt-0.5">
+                    <span className="text-xs text-[#66736A] font-semibold">
+                      {t("kpr_dialog.unit")}{" "}
+                      <span className="font-mono font-bold text-[#243028] bg-[#DDE8D8] px-1.5 py-0.5 rounded">
+                        {kpr.unitCode}
+                      </span>
+                    </span>
+                    <span className="text-[10px] text-[#A8B0AA] font-bold">•</span>
+                    <span className="text-xs text-[#66736A] font-bold">{kpr.projectName}</span>
+                    {kpr.isReadyStock && (
+                      <Badge className="bg-[#4B286D]/15 text-[#4B286D] hover:bg-[#4B286D]/20 border-none font-extrabold text-[9px] px-2 py-0.5 rounded-full shrink-0">
+                        Ready Stock
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Milestone Tracker Area */}
+              <div className="pt-2 border-t border-[#D6DED2]/50">
+                <KprMilestoneTracker 
+                  data={{
+                    unitStatus: kpr.unitStatus,
+                    kprStatus: kpr.status,
+                    isReadyStock: kpr.isReadyStock,
+                    readyStockSource: kpr.readyStockSource || null,
+                    constructionProgress: kpr.constructionProgress
+                  }}
+                  orientation="horizontal"
+                />
               </div>
             </div>
           </SheetHeader>

@@ -56,6 +56,7 @@ export default async function KprPipelinePage() {
     unitCode: unitsTable.code,
     price: unitsTable.price,
     isReadyStock: unitsTable.isReadyStock,
+    readyStockSource: unitsTable.readyStockSource,
     constructionProgress: unitsTable.constructionProgress,
     unitStatus: unitsTable.status,
     marketingName: userTable.name,

@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { notifications } from "@/db/schema/system";
 import { user as userTable } from "@/db/schema/auth";
 import { roles as rolesTable } from "@/db/schema/access";
-import { requireAuth } from "@/server/permissions";
+import { getCurrentUser, getUserRoleDetails } from "@/server/permissions";
 import { eq, and, desc, inArray, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
@@ -106,7 +106,11 @@ export async function notifyUsersWithRoles({
 
 export async function getNotifications(isUnreadOnly = false, page = 1, pageSize = 50) {
   try {
-    const activeUser = await requireAuth();
+    const activeUser = await getCurrentUser();
+    if (!activeUser) return [];
+
+    const details = await getUserRoleDetails(activeUser.id);
+    if (details && details.status !== "active") return [];
 
     const conditions = [eq(notifications.userId, activeUser.id)];
     if (isUnreadOnly) {
@@ -132,7 +136,11 @@ export async function getNotifications(isUnreadOnly = false, page = 1, pageSize 
 
 export async function getUnreadCount() {
   try {
-    const activeUser = await requireAuth();
+    const activeUser = await getCurrentUser();
+    if (!activeUser) return 0;
+
+    const details = await getUserRoleDetails(activeUser.id);
+    if (details && details.status !== "active") return 0;
 
     const [result] = await db
       .select({ count: sql<number>`count(*)` })
@@ -153,7 +161,11 @@ export async function getUnreadCount() {
 
 export async function markAsRead(notificationId: string) {
   try {
-    const activeUser = await requireAuth();
+    const activeUser = await getCurrentUser();
+    if (!activeUser) return { success: false, error: "Unauthorized" };
+
+    const details = await getUserRoleDetails(activeUser.id);
+    if (details && details.status !== "active") return { success: false, error: "Unauthorized" };
 
     await db
       .update(notifications)
@@ -175,7 +187,11 @@ export async function markAsRead(notificationId: string) {
 
 export async function markAllAsRead() {
   try {
-    const activeUser = await requireAuth();
+    const activeUser = await getCurrentUser();
+    if (!activeUser) return { success: false, error: "Unauthorized" };
+
+    const details = await getUserRoleDetails(activeUser.id);
+    if (details && details.status !== "active") return { success: false, error: "Unauthorized" };
 
     await db
       .update(notifications)
