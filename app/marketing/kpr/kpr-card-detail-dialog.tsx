@@ -306,14 +306,8 @@ export default function KprCardDetailDialog({
       `Pembangunan fisik unit ${kpr.unitCode} masih berjalan (${kpr.constructionProgress ?? 0}%). ` +
       "Proses Akad hanya bisa dilakukan setelah pembangunan fisik selesai 100%. " +
       "Pantau progress di modul Produksi.";
-  } else if (status === "akad" && !hasBastDoc) {
-    clientValidationError =
-      "Dokumen BAST (Berita Acara Serah Terima) dari Developer ke Konsumen belum diunggah. " +
-      "Silakan unggah BAST terlebih dahulu di tab 'Berkas Konsumen' sebelum melanjutkan ke Akad.";
-  } else if (status === "akad" && !hasBastVerified) {
-    clientValidationError =
-      "Dokumen BAST sudah diunggah namun belum diverifikasi oleh Admin. " +
-      "Minta Admin untuk memverifikasi BAST sebelum melanjutkan ke Akad.";
+  // NOTE: BAST gate removed — BAST diupload SETELAH akad/realisasi, bukan sebelum akad.
+  // Urutan benar: KPR approved → Akad → Realisasi → Upload BAST → Verifikasi BAST → Serah Terima
   } else if (status === "rejected" && kpr.status === "approved") {
     clientValidationError =
       "KPR yang sudah berstatus Approved tidak dapat dikembalikan ke Ditolak (Rejected). " +
@@ -451,9 +445,12 @@ export default function KprCardDetailDialog({
     e.preventDefault();
     if (clientValidationError) return;
 
-    // Check for unverified files
-    const hasUnverifiedDocs = docsList.some(d => d.status !== "verified");
-    if (status !== kpr.status && (hasUnverifiedDocs || docsList.length === 0)) {
+    // Check for unverified files — only mandatory KPR docs (KTP, NPWP, Slip Gaji, KK)
+    // Supporting docs like BAST, SPJB, kpr_doc are uploaded AFTER akad/realisasi — do NOT gate here
+    const MANDATORY_DOC_TYPES = ["ktp", "npwp", "slip_gaji", "kk"];
+    const mandatoryDocs = docsList.filter(d => MANDATORY_DOC_TYPES.includes(d.documentType));
+    const hasUnverifiedDocs = mandatoryDocs.some(d => d.status !== "verified");
+    if (status !== kpr.status && (hasUnverifiedDocs || mandatoryDocs.length === 0)) {
       alert(
         "Pemberitahuan: Berkas ada yang belum terverifikasi, coba check terlebih dahulu untuk memastikan.\n\n" +
         "Pihak yang perlu/berwenang memverifikasi berkas tersebut adalah:\n" +

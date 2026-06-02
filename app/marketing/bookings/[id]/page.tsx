@@ -501,6 +501,7 @@ export default async function BookingDetailPage({
             <BookingAttachmentsList
               bookingId={id}
               initialAttachments={bfAttachments as any}
+              canDelete={canUploadProof}
             />
 
             {canUploadProof && (
@@ -523,6 +524,7 @@ export default async function BookingDetailPage({
             <BookingAttachmentsList
               bookingId={id}
               initialAttachments={dpAttachments as any}
+              canDelete={canUploadProof}
             />
 
             {canUploadProof && (

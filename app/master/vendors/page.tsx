@@ -14,6 +14,7 @@ import { SearchInput } from "@/components/ui/search-input"
 import { getTableColumns, eq, sql } from "drizzle-orm"
 import { user as userTable, vendorProfiles } from "@/db/schema/auth"
 import { VendorAccountButton } from "./vendor-account-button"
+import { DataTablePagination } from "@/components/ui/data-table-pagination"
 
 export const revalidate = 0
 
@@ -25,7 +26,7 @@ const STATUS_MAP: Record<string, { label: string; className: string }> = {
 export default async function VendorsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; status?: string }>
+  searchParams: Promise<{ q?: string; status?: string; page?: string }>
 }) {
   const activeUser = await requireAuth()
   const {
@@ -44,7 +45,9 @@ export default async function VendorsPage({
     redirect("/unauthorized")
   }
 
-  const { q = "", status = "" } = await searchParams
+  const { q = "", status = "", page = "" } = await searchParams
+  const currentPage = Number(page) || 1;
+  const itemsPerPage = 20;
 
   const data = await db
     .select({
@@ -68,6 +71,9 @@ export default async function VendorsPage({
   const totalVendors = data.length
   const activeCount = data.filter((v) => v.status === "active").length
   const inactiveCount = data.filter((v) => v.status === "inactive").length
+
+  const totalFilteredItems = filtered.length;
+  const paginatedVendors = filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   return (
     <div className="flex flex-col gap-6">
@@ -229,7 +235,7 @@ export default async function VendorsPage({
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#D6DED2]/60 text-sm">
-                {filtered.map((v) => {
+                {paginatedVendors.map((v) => {
                   const initials = v.name.slice(0, 2).toUpperCase()
                   const st = STATUS_MAP[v.status]
                   return (
@@ -306,6 +312,7 @@ export default async function VendorsPage({
                 })}
               </tbody>
             </table>
+            <DataTablePagination totalItems={totalFilteredItems} itemsPerPage={itemsPerPage} />
           </div>
         )}
       </div>

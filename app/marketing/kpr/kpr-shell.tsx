@@ -123,7 +123,7 @@ export function KprShell({
     }
 
     if (k.status === "realisasi") {
-      const bastDoc = documents.find(d => d.customerId === k.customerId && d.documentType === "bast");
+      const bastDoc = documents.find(d => d.bookingId === k.bookingId && d.documentType === "bast");
       if (bastDoc) {
         if (bastDoc.status === "verified") {
           return "handover_done";
@@ -140,7 +140,7 @@ export function KprShell({
     }
 
     if (k.unitStatus === "menunggu_serah_terima") {
-      const bastDoc = documents.find(d => d.customerId === k.customerId && d.documentType === "bast");
+      const bastDoc = documents.find(d => d.bookingId === k.bookingId && d.documentType === "bast");
       if (bastDoc) {
         if (bastDoc.status === "verified") {
           return "handover_done";
@@ -243,9 +243,9 @@ export function KprShell({
     const id = e.dataTransfer.getData("text/plain") || draggingId;
     if (!id) return;
 
-    const TERMINAL_COLUMNS = ["physical_waiting", "handover_waiting", "bast_developer", "handover_done"];
+    const TERMINAL_COLUMNS = ["realisasi", "physical_waiting", "handover_waiting", "bast_developer", "handover_done"];
     if (TERMINAL_COLUMNS.includes(targetStatus)) {
-      alert("Tahapan pasca-Realisasi dan Serah Terima dikelola melalui Tombol Aksi di Detail Kelola KPR, bukan dengan geser kartu.");
+      alert("Tahapan ini tidak dapat diubah dengan geser kartu.\n\n• Realisasi Dana → gunakan Form Realisasi di 'Kelola Berkas KPR'\n• Cek Fisik / Serah Terima → dikelola otomatis oleh sistem");
       setDraggingId(null);
       return;
     }
@@ -253,19 +253,22 @@ export function KprShell({
     const targetCard = initialKpr.find(k => k.id === id);
     if (!targetCard || targetCard.status === targetStatus) return;
 
-    // Check for unverified files
-    const clientDocs = documents.filter(d => d.customerId === targetCard.customerId);
-    const hasUnverifiedDocs = clientDocs.some(d => d.status !== "verified");
+    // Check for unverified files — only mandatory KPR docs (KTP, NPWP, Slip Gaji, KK)
+    // Supporting docs (BAST, SPJB, kpr_doc) are uploaded AFTER akad/realisasi — do NOT gate here
+    const MANDATORY_DOC_TYPES = ["ktp", "npwp", "slip_gaji", "kk"];
+    const allClientDocs = documents.filter(d => d.customerId === targetCard.customerId);
+    const mandatoryClientDocs = allClientDocs.filter(d => MANDATORY_DOC_TYPES.includes(d.documentType));
+    const hasUnverifiedDocs = mandatoryClientDocs.some(d => d.status !== "verified");
 
-    if (hasUnverifiedDocs || clientDocs.length === 0) {
+    if (hasUnverifiedDocs || mandatoryClientDocs.length === 0) {
       alert(
-        "Pemberitahuan: Berkas ada yang belum terverifikasi, coba check terlebih dahulu untuk memastikan.\n\n" +
+        "Pemberitahuan: Berkas wajib KPR (KTP, NPWP, Slip Gaji, KK) belum lengkap atau belum terverifikasi.\n\n" +
         "Pihak yang perlu/berwenang memverifikasi berkas tersebut adalah:\n" +
         "- Super Admin\n" +
         "- Admin Kantor\n" +
         "- Admin Keuangan\n" +
         "- Direksi / Manager\n\n" +
-        "Proses pemindahan ditolak karena seluruh berkas konsumen wajib diverifikasi terlebih dahulu!"
+        "Proses pemindahan ditolak karena seluruh berkas wajib konsumen harus diverifikasi terlebih dahulu!"
       );
       setDraggingId(null);
       return;

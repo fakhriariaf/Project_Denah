@@ -18,9 +18,10 @@ interface Attachment {
 interface Props {
   bookingId: string;
   initialAttachments: Attachment[];
+  canDelete?: boolean;
 }
 
-export default function BookingAttachmentsList({ bookingId, initialAttachments }: Props) {
+export default function BookingAttachmentsList({ bookingId, initialAttachments, canDelete = false }: Props) {
   const { t } = useI18n();
   const [attachmentsList, setAttachmentsList] = useState<Attachment[]>(initialAttachments);
   const [loadingId, setLoadingId] = useState<string | null>(null);
@@ -112,15 +113,17 @@ export default function BookingAttachmentsList({ bookingId, initialAttachments }
               </a>
             )}
 
-            <button
-              type="button"
-              disabled={loadingId === att.id}
-              onClick={() => handleDeleteClick(att.id, att.fileName)}
-              className="h-7 w-7 rounded-lg bg-rose-50 text-rose-500 hover:bg-rose-100 flex items-center justify-center transition-colors disabled:opacity-50"
-              title={t("booking_proof.delete")}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
+            {canDelete && (
+              <button
+                type="button"
+                disabled={loadingId === att.id}
+                onClick={() => handleDeleteClick(att.id, att.fileName)}
+                className="h-7 w-7 rounded-lg bg-rose-50 text-rose-500 hover:bg-rose-100 flex items-center justify-center transition-colors disabled:opacity-50"
+                title={t("booking_proof.delete")}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
         </div>
       ))}

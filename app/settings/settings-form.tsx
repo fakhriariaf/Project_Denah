@@ -86,10 +86,21 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
   };
 
   const handleResetData = async (mode: "transactions_only" | "all_data") => {
-    if (!confirm(mode === "all_data" 
-      ? t("settings.msg_wipe_warn") 
-      : t("settings.msg_reset_warn")
-    )) return;
+    // First confirmation
+    const confirmMsg = mode === "all_data"
+      ? t("settings.msg_wipe_warn")
+      : t("settings.msg_reset_warn");
+
+    if (!confirm(confirmMsg)) return;
+
+    // Second confirmation for all_data (destructive-irreversible)
+    if (mode === "all_data") {
+      const typeConfirm = prompt(t("settings.wipe_type_confirm"));
+      if (typeConfirm !== "HAPUS SEMUA") {
+        alert(t("settings.wipe_mismatch"));
+        return;
+      }
+    }
 
     setResetLoading(true);
     setError(null);

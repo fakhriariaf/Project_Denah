@@ -58,45 +58,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { updateShape } from "@/server/actions/siteplan";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-// Helper to generate cohesive CRM and payment status details dynamically per unit code
-const getMockBuyerData = (code: string) => {
-  const names = [
-    "Hendra Kusuma",
-    "Siti Rahayu",
-    "Budi Hermawan",
-    "Laras Citra",
-    "Achmad Fauzi",
-    "Dewi Lestari",
-    "Yusuf Subagja",
-    "Mega Utami",
-    "Dedi Wahyudi",
-    "Rina Amelia"
-  ];
-  const phones = [
-    "0812-8765-4321",
-    "0857-1122-3344",
-    "0819-3344-5566",
-    "0821-4455-6677",
-    "0813-9988-7766"
-  ];
-  const banks = ["BCA Syariah", "Bank Mandiri", "BTN", "BRI", "BNI"];
-  
-  // Deterministic seed based on unit code characters
-  const charSum = code.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
-  const name = names[charSum % names.length];
-  const phone = phones[charSum % phones.length];
-  const bank = banks[charSum % banks.length];
-  const scheme = charSum % 3 === 0 ? "Cash Keras" : charSum % 3 === 1 ? "Cash Bertahap" : `KPR - ${bank}`;
-  
-  return {
-    name,
-    phone,
-    scheme,
-    sp3kStatus: charSum % 2 === 0 ? "Disetujui" : "Proses Review",
-    paymentProgress: charSum % 4 === 0 ? 100 : charSum % 4 === 1 ? 60 : 25,
-  };
-};
-
 export type ShapeWithUnit = {
   id: string;
   shapeType: "polygon" | "rect" | "path";
@@ -270,11 +231,11 @@ function getPhysicalReadiness(unit: any, selectedSpkBast: any) {
   }
 
   if (unitStockType === "available") {
+    // Indent unit that is "available" (not yet booked or construction started)
+    // No physical building yet — physical check gate applies after construction completes
     return {
-      ready: unit.hasPhysicalBuilding ? unit.constructionProgress === 100 : true,
-      reason: unit.hasPhysicalBuilding
-        ? "Menunggu fisik unit selesai."
-        : "Unit kavling siap dipasarkan.",
+      ready: false,
+      reason: "Unit belum melewati tahap pembangunan fisik.",
     };
   }
 
@@ -919,19 +880,46 @@ export function SiteplanViewer({
     invoices: any[];
   }) => {
     if (!activeBooking) {
-      // Return a preview/unbooked timeline as requested:
-      // Tersedia -> Menunggu Booking Konsumen -> Booking/Penjualan -> Pembayaran sesuai skema -> Pembangunan fisik jika diperlukan -> Menunggu Serah Terima -> BAST Developer ke Konsumen -> Serah Terima Selesai
-      // Note: "Tahap setelah 'Menunggu Booking Konsumen' tidak boleh ditandai active atau done sebelum ada booking aktif."
       const isReadyVal = unit.isReadyStock === true || unit.isReadyStock === 1;
+      const isBuilding = unit.status === "construction" || unit.status === "overdue";
+
+      // "Sedang Dibangun untuk Ready Stock" — internal construction, no buyer yet
+      if (isReadyVal && isBuilding) {
+        return [
+          { key: "building_rs",     label: "Sedang Dibangun untuk Ready Stock", desc: `Konstruksi internal berjalan (${unit.constructionProgress ?? 0}%)`, done: false, active: true },
+          { key: "waiting_booking", label: "Menunggu Booking Konsumen",         desc: "Unit akan siap dipasarkan setelah fisik selesai", done: false, active: false },
+          { key: "booking",         label: "Booking / Penjualan",               desc: "Pendaftaran transaksi konsumen", done: false, active: false },
+          { key: "payment",         label: "Pembayaran sesuai skema",           desc: "Cash, Cash Bertahap, atau KPR", done: false, active: false },
+          { key: "physical_check",  label: "Cek Fisik & BAST Vendor",           desc: "Progress 100% dan BAST Vendor diupload", done: false, active: false },
+          { key: "handover_waiting",label: "Menunggu Serah Terima",             desc: "Fisik & Finansial selesai divalidasi", done: false, active: false },
+          { key: "bast_developer",  label: "BAST Developer ke Konsumen",        desc: "Penandatanganan berita acara serah terima", done: false, active: false },
+          { key: "handover_done",   label: "Serah Terima Selesai",              desc: "Kunci fisik unit diserahkan", done: false, active: false },
+        ];
+      }
+
+      // "Tersedia - Ready Stock" — unit already done, waiting buyer
+      if (isReadyVal) {
+        return [
+          { key: "available",       label: "Tersedia - Ready Stock",   desc: "Unit Ready Stock siap dipasarkan — fisik sudah selesai", done: true, active: true },
+          { key: "waiting_booking", label: "Menunggu Booking Konsumen", desc: "Menunggu minat calon konsumen", done: false, active: false },
+          { key: "booking",         label: "Booking / Penjualan",       desc: "Pendaftaran transaksi konsumen", done: false, active: false },
+          { key: "payment",         label: "Pembayaran sesuai skema",   desc: "Cash, Cash Bertahap, atau KPR", done: false, active: false },
+          { key: "handover_waiting",label: "Menunggu Serah Terima",     desc: "Finansial selesai divalidasi — fisik sudah siap", done: false, active: false },
+          { key: "bast_developer",  label: "BAST Developer ke Konsumen",desc: "Penandatanganan berita acara serah terima", done: false, active: false },
+          { key: "handover_done",   label: "Serah Terima Selesai",      desc: "Kunci fisik unit diserahkan", done: false, active: false },
+        ];
+      }
+
+      // "Tersedia" — indent unit, belum ada buyer, belum dibangun
       return [
-        { key: "available", label: isReadyVal ? "Ready Stock" : "Tersedia", desc: isReadyVal ? "Unit Ready Stock siap dipasarkan" : "Unit siap dipasarkan", done: true, active: true },
-        { key: "waiting_booking", label: "Menunggu Booking Konsumen", desc: "Menunggu minat calon konsumen", done: false, active: false },
-        { key: "booking", label: "Booking / Penjualan", desc: "Pendaftaran transaksi konsumen", done: false, active: false },
-        { key: "payment", label: "Pembayaran sesuai skema", desc: "Cash, Cash Bertahap, atau KPR", done: false, active: false },
-        { key: "construction", label: "Pembangunan fisik jika diperlukan", desc: "Pembangunan unit non-ready stock", done: false, active: false },
-        { key: "handover_waiting", label: "Menunggu Serah Terima", desc: "Fisik & Finansial selesai divalidasi", done: false, active: false },
-        { key: "bast_developer", label: "BAST Developer ke Konsumen", desc: "Penandatanganan berita acara serah terima", done: false, active: false },
-        { key: "handover_done", label: "Serah Terima Selesai", desc: "Kunci fisik unit diserahkan", done: false, active: false },
+        { key: "available",       label: "Tersedia",                           desc: "Unit siap dipasarkan", done: true, active: true },
+        { key: "waiting_booking", label: "Menunggu Booking Konsumen",          desc: "Menunggu minat calon konsumen", done: false, active: false },
+        { key: "booking",         label: "Booking / Penjualan",                desc: "Pendaftaran transaksi konsumen", done: false, active: false },
+        { key: "payment",         label: "Pembayaran sesuai skema",            desc: "Cash, Cash Bertahap, atau KPR", done: false, active: false },
+        { key: "construction",    label: "Pembangunan fisik",                  desc: "Pembangunan unit dimulai setelah syarat terpenuhi", done: false, active: false },
+        { key: "handover_waiting",label: "Menunggu Serah Terima",              desc: "Fisik & Finansial selesai divalidasi", done: false, active: false },
+        { key: "bast_developer",  label: "BAST Developer ke Konsumen",         desc: "Penandatanganan berita acara serah terima", done: false, active: false },
+        { key: "handover_done",   label: "Serah Terima Selesai",               desc: "Kunci fisik unit diserahkan", done: false, active: false },
       ];
     }
 
@@ -1082,52 +1070,67 @@ export function SiteplanViewer({
     const kprProsesBank = kprStatus === "proses_bank" || kprApproved;
 
     if (isReadyStockUnit) {
+      const kprBiChecking3 = kprStatus === "bi_checking";
+      const kprPemberkasan3 = kprStatus === "pemberkasan" || kprProsesBank;
+
       const steps = [
-        { key: "available", label: "Tersedia - Ready Stock", desc: "Unit Ready Stock siap dipasarkan", done: true, active: false },
-        { key: "booking_fee", label: "Booking Fee", desc: "Pembayaran booking fee awal", done: bfPaid, active: !bfPaid },
-        { key: "dp_kpr", label: "DP / Dokumen KPR", desc: "Pembayaran DP & kelengkapan dokumen KPR", done: dpPaid, active: bfPaid && !dpPaid },
-        { key: "proses_bank", label: "Proses Bank", desc: "Analisis KPR oleh bank", done: kprProsesBank, active: dpPaid && !kprProsesBank },
-        { key: "sp3k_approval", label: "Approval / SP3K", desc: "Surat Penegasan Persetujuan KPR", done: kprApproved, active: kprProsesBank && !kprApproved },
-        { key: "akad_kredit", label: "Akad Kredit", desc: "Tanda tangan akad kredit konsumen", done: kprAkad, active: kprApproved && !kprAkad },
-        { key: "realisasi_dana", label: "Realisasi Dana Bank", desc: "Pencairan dana KPR ke developer", done: kprRealized, active: kprAkad && !kprRealized },
-        { key: "handover_waiting", label: "Menunggu Serah Terima", desc: "Fisik & Finansial selesai divalidasi", done: isHandoverWaiting || isHandoverComplete, active: isHandoverWaiting },
-        { key: "bast_developer", label: "BAST Developer ke Konsumen", desc: "Penandatanganan berita acara serah terima", done: isHandoverComplete, active: isHandoverWaiting },
-        { key: "handover_done", label: "Serah Terima Selesai", desc: "Kunci fisik unit diserahkan", done: isHandoverComplete, active: isHandoverComplete },
+        { key: "available",        label: "Tersedia - Ready Stock",      desc: "Unit Ready Stock siap dipasarkan",                    done: true,                                    active: false },
+        { key: "booking_fee",      label: "Booking Fee",                 desc: "Pembayaran booking fee awal",                        done: bfPaid,                                  active: !bfPaid },
+        { key: "bi_checking",      label: "BI Checking",                 desc: "Pemeriksaan BI/SLIK konsumen",                       done: kprPemberkasan3,                         active: bfPaid && kprBiChecking3 },
+        { key: "pemberkasan",      label: "Pemberkasan",                 desc: "Upload & verifikasi dokumen KPR (KTP/NPWP/Slip/KK)", done: kprProsesBank,                           active: bfPaid && kprStatus === "pemberkasan" },
+        { key: "proses_bank",      label: "Proses Bank",                 desc: "Analisis KPR oleh bank",                             done: kprApproved,                             active: dpPaid && kprStatus === "proses_bank" },
+        { key: "offering",         label: "Offering Letter",             desc: "Bank menerbitkan penawaran SP3K",                    done: kprApproved,                             active: kprStatus === "offering" },
+        { key: "approved",         label: "Approval / SP3K",             desc: "Surat Penegasan Persetujuan KPR",                    done: kprAkad,                                 active: kprStatus === "approved" },
+        { key: "akad",             label: "Akad Kredit",                 desc: "Tanda tangan akad kredit konsumen",                  done: kprRealized,                             active: kprStatus === "akad" },
+        { key: "realisasi",        label: "Realisasi Dana Bank",         desc: "Pencairan dana KPR ke developer",                    done: kprRealized,                             active: kprStatus === "realisasi" },
+        { key: "handover_waiting", label: "Menunggu Serah Terima",       desc: "Fisik & Finansial selesai divalidasi",               done: isHandoverWaiting || isHandoverComplete, active: isHandoverWaiting },
+        { key: "bast_developer",   label: "BAST Developer ke Konsumen",  desc: "Penandatanganan berita acara serah terima",           done: isHandoverComplete,                      active: isHandoverWaiting },
+        { key: "handover_done",    label: "Serah Terima Selesai",        desc: "Kunci fisik unit diserahkan",                        done: isHandoverComplete,                      active: isHandoverComplete },
       ];
       return overrideIfHandoverComplete(steps);
     }
 
     if (unitStockType === "building_for_ready_stock") {
+      const kprBiChecking2 = kprStatus === "bi_checking";
+      const kprPemberkasan2 = kprStatus === "pemberkasan" || kprProsesBank;
+
       const steps = [
-        { key: "available", label: "Sedang Dibangun untuk Ready Stock", desc: "Unit sedang dalam konstruksi internal", done: true, active: false },
-        { key: "booking_fee", label: "Booking Fee", desc: "Pembayaran booking fee awal", done: bfPaid, active: !bfPaid },
-        { key: "dp_kpr", label: "DP / Dokumen KPR", desc: "Pembayaran DP & kelengkapan dokumen KPR", done: dpPaid, active: bfPaid && !dpPaid },
-        { key: "proses_bank", label: "Proses Bank", desc: "Analisis KPR oleh bank", done: kprProsesBank, active: dpPaid && !kprProsesBank },
-        { key: "sp3k_approval", label: "Approval / SP3K", desc: "Surat Penegasan Persetujuan KPR", done: kprApproved, active: kprProsesBank && !kprApproved },
-        { key: "akad_kredit", label: "Akad Kredit", desc: "Tanda tangan akad kredit konsumen", done: kprAkad, active: kprApproved && !kprAkad },
-        { key: "realisasi_dana", label: "Realisasi Dana Bank", desc: "Pencairan dana KPR ke developer", done: kprRealized, active: kprAkad && !kprRealized },
-        { key: "physical_waiting", label: "Menunggu Fisik Selesai", desc: "Progress 100% & BAST Vendor approved", done: physicalReady, active: kprRealized && !physicalReady },
-        { key: "handover_waiting", label: "Menunggu Serah Terima", desc: "Fisik & Finansial selesai divalidasi", done: isHandoverWaiting || isHandoverComplete, active: isHandoverWaiting },
-        { key: "bast_developer", label: "BAST Developer ke Konsumen", desc: "Penandatanganan berita acara serah terima", done: isHandoverComplete, active: isHandoverWaiting },
-        { key: "handover_done", label: "Serah Terima Selesai", desc: "Kunci fisik unit diserahkan", done: isHandoverComplete, active: isHandoverComplete },
+        { key: "available",        label: "Sedang Dibangun untuk Ready Stock", desc: "Unit sedang dalam konstruksi internal",              done: true,                                    active: false },
+        { key: "booking_fee",      label: "Booking Fee",                       desc: "Pembayaran booking fee awal",                        done: bfPaid,                                  active: !bfPaid },
+        { key: "bi_checking",      label: "BI Checking",                       desc: "Pemeriksaan BI/SLIK konsumen",                       done: kprPemberkasan2,                         active: bfPaid && kprBiChecking2 },
+        { key: "pemberkasan",      label: "Pemberkasan",                       desc: "Upload & verifikasi dokumen KPR (KTP/NPWP/Slip/KK)", done: kprProsesBank,                           active: bfPaid && kprStatus === "pemberkasan" },
+        { key: "proses_bank",      label: "Proses Bank",                       desc: "Analisis KPR oleh bank",                             done: kprApproved,                             active: dpPaid && kprStatus === "proses_bank" },
+        { key: "offering",         label: "Offering Letter",                   desc: "Bank menerbitkan penawaran SP3K",                    done: kprApproved,                             active: kprStatus === "offering" },
+        { key: "approved",         label: "Approval / SP3K",                   desc: "Surat Penegasan Persetujuan KPR",                    done: kprAkad,                                 active: kprStatus === "approved" },
+        { key: "akad",             label: "Akad Kredit",                       desc: "Tanda tangan akad kredit konsumen",                  done: kprRealized,                             active: kprStatus === "akad" },
+        { key: "realisasi",        label: "Realisasi Dana Bank",               desc: "Pencairan dana KPR ke developer",                    done: kprRealized && physicalReady,            active: kprStatus === "realisasi" && !physicalReady },
+        { key: "physical_waiting", label: "Menunggu Fisik Selesai",            desc: "Progress 100% & BAST Vendor approved",               done: physicalReady,                           active: kprRealized && !physicalReady },
+        { key: "handover_waiting", label: "Menunggu Serah Terima",             desc: "Fisik & Finansial selesai divalidasi",               done: isHandoverWaiting || isHandoverComplete, active: isHandoverWaiting },
+        { key: "bast_developer",   label: "BAST Developer ke Konsumen",        desc: "Penandatanganan berita acara serah terima",           done: isHandoverComplete,                      active: isHandoverWaiting },
+        { key: "handover_done",    label: "Serah Terima Selesai",              desc: "Kunci fisik unit diserahkan",                        done: isHandoverComplete,                      active: isHandoverComplete },
       ];
       return overrideIfHandoverComplete(steps);
     }
 
     // Default / Tersedia non-ready stock / Kavling
+    const kprBiChecking = kprStatus === "bi_checking";
+    const kprPemberkasan = kprStatus === "pemberkasan" || kprProsesBank;
+    const docComplete = kprProcess?.documentStatus === "complete";
+
     const steps = [
-      { key: "available", label: "Tersedia", desc: "Unit siap dipasarkan", done: true, active: false },
-      { key: "booking_fee", label: "Booking Fee", desc: "Pembayaran booking fee awal", done: bfPaid, active: !bfPaid },
-      { key: "booking_pemberkasan", label: "Booking & Pemberkasan", desc: "Verifikasi kas & berkas konsumen", done: bfPaid, active: bfPaid && !dpPaid },
-      { key: "dp_kpr", label: "DP / Dokumen KPR", desc: "Pembayaran DP & kelengkapan dokumen KPR", done: dpPaid, active: bfPaid && !dpPaid },
-      { key: "proses_bank", label: "Proses Bank", desc: "Analisis KPR oleh bank", done: kprProsesBank, active: dpPaid && !kprProsesBank },
-      { key: "sp3k_approval", label: "Approval / SP3K", desc: "Surat Penegasan Persetujuan KPR", done: kprApproved, active: kprProsesBank && !kprApproved },
-      { key: "akad_kredit", label: "Akad Kredit", desc: "Tanda tangan akad kredit konsumen", done: kprAkad, active: kprApproved && !kprAkad },
-      { key: "realisasi_dana", label: "Realisasi Dana Bank", desc: "Pencairan dana KPR ke developer", done: kprRealized, active: kprAkad && !kprRealized },
-      { key: "physical_waiting", label: "Cek Fisik Unit", desc: "Menunggu pembangunan fisik selesai", done: physicalReady, active: kprRealized && !physicalReady },
-      { key: "handover_waiting", label: "Menunggu Serah Terima", desc: "Fisik & Finansial selesai divalidasi", done: isHandoverWaiting || isHandoverComplete, active: isHandoverWaiting },
-      { key: "bast_developer", label: "BAST Developer ke Konsumen", desc: "Penandatanganan berita acara serah terima", done: isHandoverComplete, active: isHandoverWaiting },
-      { key: "handover_done", label: "Serah Terima Selesai", desc: "Kunci fisik unit diserahkan", done: isHandoverComplete, active: isHandoverComplete },
+      { key: "available",        label: "Tersedia",                      desc: "Unit siap dipasarkan",                                done: true,                                    active: false },
+      { key: "booking_fee",      label: "Booking Fee",                   desc: "Pembayaran booking fee awal",                         done: bfPaid,                                  active: !bfPaid },
+      { key: "bi_checking",      label: "BI Checking",                   desc: "Pemeriksaan BI/SLIK konsumen",                        done: kprPemberkasan,                          active: bfPaid && kprBiChecking },
+      { key: "pemberkasan",      label: "Pemberkasan",                   desc: "Upload & verifikasi dokumen KPR (KTP/NPWP/Slip/KK)",  done: kprProsesBank,                           active: bfPaid && kprStatus === "pemberkasan" },
+      { key: "proses_bank",      label: "Proses Bank",                   desc: "Analisis KPR oleh bank",                              done: kprApproved,                             active: dpPaid && kprStatus === "proses_bank" },
+      { key: "offering",         label: "Offering Letter",               desc: "Bank menerbitkan penawaran SP3K",                     done: kprApproved,                             active: kprStatus === "offering" },
+      { key: "approved",         label: "Approval / SP3K",               desc: "Surat Penegasan Persetujuan KPR",                     done: kprAkad,                                 active: kprStatus === "approved" },
+      { key: "akad",             label: "Akad Kredit",                   desc: "Tanda tangan akad kredit konsumen",                   done: kprRealized,                             active: kprStatus === "akad" },
+      { key: "realisasi",        label: "Realisasi Dana Bank",           desc: "Pencairan dana KPR ke developer",                     done: kprRealized && physicalReady,            active: kprStatus === "realisasi" && !physicalReady },
+      { key: "physical_waiting", label: "Cek Fisik Unit",                desc: "Menunggu pembangunan fisik selesai",                   done: physicalReady,                           active: kprRealized && !physicalReady },
+      { key: "handover_waiting", label: "Menunggu Serah Terima",         desc: "Fisik & Finansial selesai divalidasi",                done: isHandoverWaiting || isHandoverComplete, active: isHandoverWaiting },
+      { key: "bast_developer",   label: "BAST Developer ke Konsumen",    desc: "Penandatanganan berita acara serah terima",            done: isHandoverComplete,                      active: isHandoverWaiting },
+      { key: "handover_done",    label: "Serah Terima Selesai",          desc: "Kunci fisik unit diserahkan",                         done: isHandoverComplete,                      active: isHandoverComplete },
     ];
     return overrideIfHandoverComplete(steps);
   };
@@ -1928,11 +1931,13 @@ export function SiteplanViewer({
                             : "Cash Keras";
                         paymentProgress = activeBooking.status === "akad" || activeBooking.status === "completed" ? 100 : 25;
                       } else {
-                        const mockBuyer = getMockBuyerData(unit.code);
-                        buyerName = mockBuyer.name;
-                        buyerPhone = mockBuyer.phone;
-                        buyerScheme = mockBuyer.scheme;
-                        paymentProgress = mockBuyer.paymentProgress;
+                        // Customer data not found — show placeholder, not fake data
+                        buyerName = "Data konsumen tidak tersedia";
+                        buyerPhone = "-";
+                        buyerScheme = activeBooking.paymentScheme === "kpr" ? "KPR"
+                          : activeBooking.paymentScheme === "installment" ? "Cash Bertahap"
+                          : "Cash Keras";
+                        paymentProgress = 0;
                       }
 
                       // Adjust buyerScheme display

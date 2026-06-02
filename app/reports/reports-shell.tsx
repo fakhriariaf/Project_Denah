@@ -189,22 +189,22 @@ export default function ReportsShell({
 
   // Filtration
   const filteredUnits = unitData.filter(item => 
-    item.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    item.block.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    item.cluster.toLowerCase().includes(searchQuery.toLowerCase())
+    (item.code ?? "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (item.block ?? "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (item.cluster ?? "").toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const filteredSales = salesData.filter(item => 
-    item.bookingNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    item.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    item.unitCode.toLowerCase().includes(searchQuery.toLowerCase())
+    (item.bookingNumber ?? "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (item.customerName ?? "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (item.unitCode ?? "").toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const filteredProduction = productionData.filter(item => 
-    item.spkNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    item.vendorName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    item.unitCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    item.title.toLowerCase().includes(searchQuery.toLowerCase())
+    (item.spkNumber ?? "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (item.vendorName ?? "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (item.unitCode ?? "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (item.title ?? "").toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   if (!mounted) {

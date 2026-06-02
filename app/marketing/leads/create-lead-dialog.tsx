@@ -88,6 +88,9 @@ export default function CreateLeadDialog({ projects, units, customers, marketing
     }
   });
 
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("");
+  const [phoneWarning, setPhoneWarning] = useState<string | null>(null);
+
   const onSubmit = async (data: any) => {
     setLoading(true);
     setError(null);
@@ -173,7 +176,13 @@ export default function CreateLeadDialog({ projects, units, customers, marketing
               <Label htmlFor="interestedProjectId" className="text-xs font-semibold text-[#243028] font-inter">{t("lead_form.project")}</Label>
               <select
                 id="interestedProjectId"
-                {...register("interestedProjectId")}
+                {...register("interestedProjectId", {
+                  onChange: (e) => {
+                    setSelectedProjectId(e.target.value || "");
+                    // Reset unit when project changes
+                    (document.getElementById("interestedUnitId") as HTMLSelectElement)?.value === "" || true;
+                  }
+                })}
                 className="flex h-10 w-full rounded-lg border border-[#D6DED2] bg-[#F7F8F3]/60 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8FAF9A]/40"
               >
                 <option value="">{t("lead_form.project_placeholder")}</option>
@@ -183,8 +192,24 @@ export default function CreateLeadDialog({ projects, units, customers, marketing
               </select>
             </div>
 
-            {/* Row 3, Col 1: Sumber Lead */}
-            <div className="space-y-1">
+            {/* Row 3 full-width: Unit yang Diminati (filtered by project) */}
+            {selectedProjectId && (
+              <div className="col-span-2 space-y-1">
+                <Label htmlFor="interestedUnitId" className="text-xs font-semibold text-[#243028] font-inter">Unit / Kavling yang Diminati <span className="text-[#8FAF9A] font-normal">(Opsional)</span></Label>
+                <select
+                  id="interestedUnitId"
+                  {...register("interestedUnitId")}
+                  className="flex h-10 w-full rounded-lg border border-[#D6DED2] bg-[#F7F8F3]/60 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8FAF9A]/40 font-mono"
+                >
+                  <option value="">-- Pilih unit/kavling yang diminati --</option>
+                  {units.filter((u) => u.projectId === selectedProjectId && u.status === "available").map((u) => (
+                    <option key={u.id} value={u.id}>{u.code}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Row 3+, Col 1: Sumber Lead */}            <div className="space-y-1">
               <Label htmlFor="source" className="text-xs font-semibold text-[#243028] font-inter">{t("lead_form.source")}</Label>
               <select
                 id="source"

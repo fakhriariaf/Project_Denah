@@ -508,7 +508,7 @@ export default function ProductionShell({
     setSuccessMessage(null);
     try {
       const res = await checkOverdueSpks();
-      setSuccessMessage(`Scanner selesai! Berhasil memperbarui ${res.updatedCount} SPK & Unit menjadi Terlambat (Overdue).`);
+      setSuccessMessage(t("production.scanner_done").replace("{{count}}", res.updatedCount.toString()));
       router.refresh();
     } catch (e: any) {
       setErrorMessage(e.message || "Gagal menjalankan scanner.");
@@ -609,7 +609,7 @@ export default function ProductionShell({
           targetEndDate: new Date(newSpk.targetEndDate),
           customWeights: formWeights,
         });
-        setSuccessMessage(`Surat Perintah Kerja (SPK) berhasil diperbarui!`);
+        setSuccessMessage(editingSpkId ? t("production.spk_updated") : t("production.spk_created"));
       } else {
         // Create SPK Mode
         await createSpk({
@@ -624,9 +624,8 @@ export default function ProductionShell({
           targetEndDate: new Date(newSpk.targetEndDate),
           customWeights: formWeights,
         });
-        setSuccessMessage("Surat Perintah Kerja (SPK) baru berhasil diterbitkan dengan status AKTIF!");
+        setSuccessMessage(t("production.spk_created"));
       }
-      
       setSpkFormError(null);
       setSpkOpen(false);
       setEditingSpkId(null);
@@ -668,7 +667,7 @@ export default function ProductionShell({
     setSuccessMessage(null);
     try {
       await activateSpk(spkId);
-      setSuccessMessage("Pembangunan unit berhasil dimulai dan Surat Perintah Mulai Bekerja (SPMB) diterbitkan secara otomatis!");
+      setSuccessMessage(t("production.construction_started"));
       router.refresh();
     } catch (e: any) {
       setErrorMessage(e.message || "Gagal memulai konstruksi.");
@@ -732,7 +731,7 @@ export default function ProductionShell({
         notes: newProgress.notes || null,
       });
 
-      setSuccessMessage("Progress lapangan berhasil dicatat dan bobot total terupdate!");
+      setSuccessMessage(t("production.progress_saved"));
       setProgressOpen(false);
       setUploadedPhotos([]); // Clear photos on success
       setSelectedFiles([]); // Clear raw files on success
@@ -773,7 +772,7 @@ export default function ProductionShell({
         description: newMaterial.description,
         estimatedAmount: Number(newMaterial.estimatedAmount),
       });
-      setSuccessMessage("Request kebutuhan material baru berhasil diajukan dengan status DRAFT!");
+      setSuccessMessage(t("production.material_submitted"));
       setMaterialOpen(false);
       setNewMaterial({
         spkId: "",
@@ -798,7 +797,7 @@ export default function ProductionShell({
     setSuccessMessage(null);
     try {
       await submitMaterialRequest(requestId);
-      setSuccessMessage("Request material berhasil diteruskan ke departemen Keuangan untuk persetujuan Kas Keluar (Expense)!");
+      setSuccessMessage(t("production.material_forwarded"));
       router.refresh();
     } catch (e: any) {
       setErrorMessage(e.message || "Gagal meneruskan request ke keuangan.");
@@ -814,7 +813,7 @@ export default function ProductionShell({
     setErrorMessage(null);
     try {
       await createCustomerComplaint(newComplaint);
-      setSuccessMessage("Komplain kualitas/keterlambatan berhasil dimasukkan ke sistem!");
+      setSuccessMessage(t("production.complaint_created"));
       setComplaintOpen(false);
       setNewComplaint({
         customerId: "",
@@ -850,7 +849,7 @@ export default function ProductionShell({
         estimatedHandoverDate: new Date(newHandover.estimatedHandoverDate),
         calculationNote: newHandover.calculationNote || null,
       });
-      setSuccessMessage("Kalkulasi estimasi serah terima unit berhasil disimpan!");
+      setSuccessMessage(t("production.handover_est_saved"));
       setHandoverOpen(false);
       setNewHandover({
         unitId: "",

@@ -3,7 +3,9 @@ import { z } from "zod";
 export const leadSchema = z.object({
   customerId: z.string().nullable().optional(),
   name: z.string().min(2, "val.marketing_name"),
-  phone: z.string().min(8, "val.marketing_phone"),
+  phone: z.string()
+    .min(8, "val.marketing_phone")
+    .regex(/^[0-9+\-\s()]{8,20}$/, "val.marketing_phone_format"),
   source: z.string().min(1, "val.marketing_source"), // walk_in, ads, referral, etc.
   interestedProjectId: z.string().nullable().optional(),
   interestedUnitId: z.string().nullable().optional(),

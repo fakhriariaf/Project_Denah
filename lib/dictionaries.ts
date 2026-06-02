@@ -1102,6 +1102,71 @@ export const dictionaries = {
     "lead_form.save_add": "Simpan Lead",
     "lead_form.save_edit": "Simpan Perubahan",
     "lead_form.saving": "Menyimpan...",
+    "lead_form.error_duplicate_phone": "Nomor HP {{phone}} sudah terdaftar sebagai lead aktif. Gunakan nomor yang berbeda atau cari lead yang sudah ada.",
+
+    // Common feedback strings (used across multiple forms)
+    "common.saved_success": "Berhasil disimpan!",
+    "common.updated_success": "Berhasil diperbarui!",
+    "common.deleted_success": "Berhasil dihapus!",
+    "common.error_save": "Gagal menyimpan. Silakan coba lagi.",
+    "common.error_delete": "Gagal menghapus. Silakan coba lagi.",
+    "common.error_update": "Gagal memperbarui. Silakan coba lagi.",
+    "common.confirm_delete": "Apakah Anda yakin ingin menghapus data ini? Tindakan ini tidak dapat dibatalkan.",
+    "common.confirm_delete_permanent": "Apakah Anda yakin ingin menghapus secara permanen dari sistem?",
+    "common.irrev_action": "Tindakan ini tidak dapat dibatalkan",
+    "common.account_self": "Akun Saya",
+
+    // Project form
+    "proj_form.save_success_create": "Data proyek berhasil disimpan!",
+    "proj_form.save_success_update": "Data proyek berhasil diperbarui!",
+    "proj_form.public_enabled_label": "Tampilkan Publik",
+    "proj_form.public_enabled_desc": "Izinkan calon konsumen melihat siteplan proyek ini tanpa login.",
+    "proj_form.featured_label": "Unggulan Publik (Featured)",
+    "proj_form.featured_desc": "Tampilkan proyek ini sebagai default saat membuka halaman public view. Wajib aktifkan Tampilkan Publik terlebih dahulu.",
+
+    // Vendor form
+    "vendor_form.save_success_create": "Data vendor berhasil disimpan!",
+    "vendor_form.save_success_update": "Data vendor berhasil diperbarui!",
+    "vendor_form.credential_email_label": "Email Login",
+    "vendor_form.credential_pwd_label": "Password Sementara",
+    "vendor_form.credential_warn": "Berikan credential ini kepada vendor. Vendor disarankan segera mengganti password setelah login pertama.",
+    "vendor_form.copy_credential": "Salin Credential",
+    "vendor_form.copied": "Tersalin!",
+
+    // Cancel booking
+    "booking_form.cancel_irrev": "Tindakan ini tidak dapat dibatalkan",
+    "booking_form.cancel_success": "Booking unit/kavling berhasil dibatalkan!",
+
+    // Settings confirmation
+    "settings.wipe_type_confirm": "Ketik \"HAPUS SEMUA\" untuk konfirmasi penghapusan seluruh data:",
+    "settings.wipe_mismatch": "Konfirmasi tidak cocok. Operasi dibatalkan.",
+
+    // Finance Shell feedback
+    "finance.invoice_created": "Invoice baru berhasil dibuat!",
+    "finance.payment_recorded": "Bukti pembayaran berhasil dicatat!",
+    "finance.payment_verified": "Pembayaran berhasil diverifikasi!",
+    "finance.payment_rejected": "Pembayaran berhasil ditolak!",
+    "finance.payment_deleted": "Bukti pembayaran berhasil dihapus!",
+    "finance.invoice_deleted": "Invoice berhasil dihapus!",
+    "finance.expense_submitted": "Pengajuan kas keluar berhasil dibuat!",
+    "finance.expense_approved": "Pengajuan kas keluar berhasil disetujui!",
+    "finance.expense_rejected_msg": "Pengajuan kas keluar berhasil ditolak!",
+    "finance.budget_created": "Anggaran baru berhasil disimpan!",
+    "finance.handover_triggered": "Seluruh invoice telah lunas. Status unit berubah menjadi: Menunggu Serah Terima. Notifikasi telah dikirim ke Marketing dan Admin terkait.",
+
+    // Production Shell feedback
+    "production.spk_created": "Surat Perintah Kerja (SPK) baru berhasil diterbitkan dengan status AKTIF!",
+    "production.spk_updated": "Surat Perintah Kerja (SPK) berhasil diperbarui!",
+    "production.spk_deleted": "Surat Perintah Kerja (SPK) berhasil dihapus.",
+    "production.construction_started": "Pembangunan unit berhasil dimulai dan Surat Perintah Mulai Bekerja (SPMB) diterbitkan secara otomatis!",
+    "production.progress_saved": "Progress lapangan berhasil dicatat dan bobot total terupdate!",
+    "production.material_submitted": "Request kebutuhan material baru berhasil diajukan dengan status DRAFT!",
+    "production.material_forwarded": "Request material berhasil diteruskan ke departemen Keuangan untuk persetujuan Kas Keluar (Expense)!",
+    "production.complaint_created": "Komplain kualitas/keterlambatan berhasil dimasukkan ke sistem!",
+    "production.handover_est_saved": "Kalkulasi estimasi serah terima unit berhasil disimpan!",
+    "production.scanner_done": "Scanner selesai! Berhasil memperbarui {{count}} SPK & Unit menjadi Terlambat (Overdue).",
+    "production.unit_construction_done": "Unit berhasil dinyatakan selesai pembangunan dan status berubah menjadi Tersedia - Ready Stock!",
+    "production.vendor_spk_complete": "Pernyataan selesai pembangunan SPK berhasil diajukan! Status SPK kini Selesai Konstruksi dan siap diverifikasi oleh Pengawas/Admin.",
 
     // Marketing Bookings
     "booking.title": "Transaksi Pemesanan Kavling",
@@ -1462,6 +1527,7 @@ export const dictionaries = {
 
     "val.marketing_name": "Nama minimal 2 karakter",
     "val.marketing_phone": "Nomor HP minimal 8 karakter",
+    "val.marketing_phone_format": "Format nomor HP tidak valid. Gunakan angka (08xx atau +62xx)",
     "val.marketing_source": "Sumber lead wajib dipilih",
     "val.followup_result": "Hasil follow-up minimal 3 karakter",
     "val.booking_project": "Project wajib dipilih",

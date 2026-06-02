@@ -40,7 +40,7 @@ export default function CancelBookingDialog({ booking }: Props) {
     try {
       const res = await cancelBooking(booking.id, reason);
       if (res.success) {
-        alert("Booking unit/kavling berhasil dibatalkan!");
+        alert(t("booking_form.cancel_success"));
         setOpen(false);
         setReason("");
         window.location.reload();
@@ -70,7 +70,7 @@ export default function CancelBookingDialog({ booking }: Props) {
               <div>
                 <DialogTitle className="text-lg font-black text-[#243028] tracking-tight">{t("booking_form.cancel_title")}</DialogTitle>
                 <DialogDescription className="text-xs text-rose-600 mt-0.5 font-semibold">
-                  Tindakan ini tidak dapat dibatalkan
+                  {t("booking_form.cancel_irrev")}
                 </DialogDescription>
               </div>
             </div>

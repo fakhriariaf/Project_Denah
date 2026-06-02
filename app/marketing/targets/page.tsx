@@ -8,7 +8,7 @@ import { eq } from "drizzle-orm"
 import { redirect } from "next/navigation"
 import { Badge } from "@/components/ui/badge"
 import { Target, TrendingUp, TrendingDown, Users, Calendar } from "lucide-react"
-import { AddMarketingTargetDialog } from "./add-target-dialog"
+import { AddMarketingTargetDialog, EditMarketingTargetDialog } from "./add-target-dialog"
 import { DeleteConfirm } from "@/components/delete-confirm"
 import { deleteMarketingTarget } from "@/server/actions/waiting-list"
 import { getI18n } from "@/lib/i18n-server"
@@ -164,13 +164,30 @@ export default async function MarketingTargetsPage() {
                       </td>
                       <td className="py-3 px-4 text-xs font-mono text-[#66736A]">{fmtRp(target.targetAmount)}</td>
                       <td className="py-3 px-4">
-                        {session.isSuperAdmin || session.isAdminKantor || session.isMarketingManager ? (
-                          <DeleteConfirm
-                            label={t("targets.delete_label", { marketing: target.marketingName || "", month: MONTHS[target.periodMonth-1] })}
-                            description={t("targets.delete_desc")}
-                            onConfirm={async () => { "use server"; return deleteMarketingTarget(target.id) }}
-                          />
-                        ) : null}
+                        <div className="flex items-center gap-1.5">
+                          {session.isSuperAdmin || session.isAdminKantor || session.isMarketingManager ? (
+                            <>
+                              <EditMarketingTargetDialog
+                                projects={projectList}
+                                marketings={marketingUsers}
+                                target={{
+                                  id: target.id,
+                                  marketingId: target.marketingId,
+                                  projectId: target.projectId,
+                                  periodMonth: target.periodMonth,
+                                  periodYear: target.periodYear,
+                                  targetUnits: target.targetUnits,
+                                  targetAmount: target.targetAmount,
+                                }}
+                              />
+                              <DeleteConfirm
+                                label={t("targets.delete_label", { marketing: target.marketingName || "", month: MONTHS[target.periodMonth-1] })}
+                                description={t("targets.delete_desc")}
+                                onConfirm={async () => { "use server"; return deleteMarketingTarget(target.id) }}
+                              />
+                            </>
+                          ) : null}
+                        </div>
                       </td>
                     </tr>
                   )

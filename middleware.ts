@@ -39,7 +39,8 @@ export async function middleware(request: NextRequest) {
   const isPublicRoute =
     pathname === "/siteplan-public" ||
     pathname.startsWith("/siteplan-public/") ||
-    pathname === "/api/public/siteplan";
+    pathname === "/api/public/siteplan" ||
+    pathname.startsWith("/api/cron/");
 
   if (isPublicRoute) {
     return NextResponse.next();

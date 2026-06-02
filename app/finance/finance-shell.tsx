@@ -386,7 +386,7 @@ export default function FinanceShell({
       });
       if (res.success) {
         // Reset and close
-        alert("Invoice baru berhasil dibuat!");
+        alert(t("finance.invoice_created"));
         setInvoiceForm(f => ({ ...f, amount: "", notes: "", dueDate: "" }));
         setInvoiceOpen(false);
         window.location.reload();
@@ -413,7 +413,7 @@ export default function FinanceShell({
         paymentMethod: paymentForm.paymentMethod,
       });
       if (res.success) {
-        alert("Bukti pembayaran berhasil dicatat!");
+        alert(t("finance.payment_recorded"));
         setPaymentForm(f => ({ ...f, amount: "", invoiceId: "", unitId: "", customerId: "" }));
         setPaymentOpen(false);
         window.location.reload();
@@ -439,14 +439,9 @@ export default function FinanceShell({
       if (res.success) {
         // Sprint 3: Structured feedback — tampilkan info handover jika triggered
         if (isApproved && res.handoverTriggered) {
-          alert(
-            `✅ Pembayaran berhasil diverifikasi.\n\n` +
-            `📋 Seluruh invoice telah lunas.\n` +
-            `Status unit berubah menjadi: Menunggu Serah Terima.\n\n` +
-            `Notifikasi telah dikirim ke Marketing dan Admin terkait.`
-          );
+          alert(`✅ ${t("finance.payment_verified")}\n\n${t("finance.handover_triggered")}`);
         } else {
-          alert(isApproved ? "Pembayaran berhasil diverifikasi!" : "Pembayaran berhasil ditolak!");
+          alert(isApproved ? t("finance.payment_verified") : t("finance.payment_rejected"));
         }
         setSelectedPayment(null);
         setVerificationNotes("");
@@ -468,7 +463,7 @@ export default function FinanceShell({
     try {
       const res = await deletePayment(selectedPayment.id);
       if (res.success) {
-        alert("Bukti pembayaran berhasil dihapus!");
+        alert(t("finance.payment_deleted"));
         setSelectedPayment(null);
         window.location.reload();
       }
@@ -487,7 +482,7 @@ export default function FinanceShell({
     try {
       const res = await deleteInvoice(invoiceId);
       if (res.success) {
-        alert("Invoice berhasil dihapus!");
+        alert(t("finance.invoice_deleted"));
         window.location.reload();
       }
     } catch (err: any) {
@@ -512,7 +507,7 @@ export default function FinanceShell({
         paymentMethod: expenseForm.paymentMethod,
       });
       if (res.success) {
-        alert("Pengajuan kas keluar (expense request) berhasil dibuat!");
+        alert(t("finance.expense_submitted"));
         setExpenseForm(f => ({ ...f, amount: "", description: "" }));
         window.location.reload();
       }
@@ -535,7 +530,7 @@ export default function FinanceShell({
         res = await rejectExpense(selectedExpense.id, approvalNotes);
       }
       if (res.success) {
-        alert(isApproved ? "Pengajuan kas keluar berhasil disetujui!" : "Pengajuan kas keluar berhasil ditolak!");
+        alert(isApproved ? t("finance.expense_approved") : t("finance.expense_rejected_msg"));
         setSelectedExpense(null);
         setApprovalNotes("");
         window.location.reload();
@@ -566,7 +561,7 @@ export default function FinanceShell({
         ],
       });
       if (res.success) {
-        alert("Anggaran baru berhasil disimpan!");
+        alert(t("finance.budget_created"));
         setBudgetForm(f => ({ ...f, name: "", totalAmount: "", allocatedAmount: "" }));
         setBudgetOpen(false);
         window.location.reload();

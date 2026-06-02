@@ -615,11 +615,41 @@ async function triggerMenungguSerahTerima(
   changedById: string
 ) {
   const unit = await db
-    .select({ id: units.id, code: units.code, status: units.status })
+    .select({ id: units.id, code: units.code, status: units.status, isReadyStock: units.isReadyStock, constructionProgress: units.constructionProgress, currentSpkId: units.currentSpkId })
     .from(units)
     .where(eq(units.id, unitId))
     .get();
   if (!unit) return;
+
+  // For non-ready-stock (indent) units: physical construction must be 100% complete
+  if (!unit.isReadyStock && unit.constructionProgress < 100) {
+    console.warn(
+      `[triggerMenungguSerahTerima] Skip: unit ${unit.code} (indent) constructionProgress=${unit.constructionProgress}% < 100%. ` +
+      `Pembayaran lunas tapi fisik belum selesai. Status tidak diubah.`
+    );
+    return;
+  }
+
+  // For indent units: SPK must also be officially completed (BAST Vendor uploaded)
+  // This ensures the vendor → developer handover is formally closed before consumer handover
+  if (!unit.isReadyStock && unit.currentSpkId) {
+    const { spks } = await import("@/db/schema/production");
+    const activeSpk = await db
+      .select({ status: spks.status })
+      .from(spks)
+      .where(eq(spks.id, unit.currentSpkId))
+      .get();
+
+    // Only block if SPK is still in active/in-progress state (not yet completed)
+    const SPK_NOT_DONE_STATUSES = ["active", "proses_konstruksi", "overdue"];
+    if (activeSpk && SPK_NOT_DONE_STATUSES.includes(activeSpk.status)) {
+      console.warn(
+        `[triggerMenungguSerahTerima] Skip: unit ${unit.code} (indent) SPK status=${activeSpk.status}. ` +
+        `SPK belum diselesaikan (BAST Vendor belum diupload). Status tidak diubah ke menunggu_serah_terima.`
+      );
+      return;
+    }
+  }
 
   const booking = await db
     .select({

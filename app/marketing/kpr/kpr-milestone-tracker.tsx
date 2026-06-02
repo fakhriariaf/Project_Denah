@@ -21,16 +21,17 @@ export function KprMilestoneTracker({
   const isReady = data.isReadyStock === true || data.readyStockSource === "legacy_ready_stock" || data.readyStockSource === "manual_ready_stock";
   const physicalReady = (data.constructionProgress || 0) === 100;
 
-  // Build the stages array to match the site plan exactly
+  // Steps mirror kanban COLUMNS exactly (same IDs, same order, same conditions)
   const steps = [
-    { key: "available", label: isReady ? "Tersedia - Ready Stock" : "Tersedia" },
-    { key: "booking_fee", label: "Booking Fee" },
-    { key: "booking_pemberkasan", label: "Booking & Pemberkasan" },
-    { key: "dp_kpr", label: "DP / Dokumen KPR" },
-    { key: "proses_bank", label: "Proses Bank" },
-    { key: "sp3k_approval", label: "Approval / SP3K" },
-    { key: "akad_kredit", label: "Akad Kredit" },
-    { key: "realisasi_dana", label: "Realisasi Dana Bank" },
+    { key: "available",        label: isReady ? "Tersedia - Ready Stock" : "Tersedia" },
+    { key: "booking_fee",      label: "Booking Fee" },
+    { key: "bi_checking",      label: "BI Checking" },
+    { key: "pemberkasan",      label: "Pemberkasan" },
+    { key: "proses_bank",      label: "Proses Bank" },
+    { key: "offering",         label: "Offering Letter" },
+    { key: "approved",         label: "Approval / SP3K" },
+    { key: "akad",             label: "Akad Kredit" },
+    { key: "realisasi",        label: "Realisasi Dana Bank" },
   ];
 
   if (!isReady) {
@@ -39,37 +40,44 @@ export function KprMilestoneTracker({
 
   steps.push(
     { key: "handover_waiting", label: "Menunggu Serah Terima" },
-    { key: "bast_developer", label: "BAST Developer ke Konsumen" },
-    { key: "handover_done", label: "Serah Terima Selesai" }
+    { key: "bast_developer",   label: "BAST Developer ke Konsumen" },
+    { key: "handover_done",    label: "Serah Terima Selesai" }
   );
 
-  // Determine current active stage index
+  // Map kprStatus to the correct step index — mirrors getCardKanbanColumn() logic
   let currentIndex = 0;
   const getIndex = (key: string) => steps.findIndex(s => s.key === key);
 
   if (data.unitStatus === "handover_complete") {
     currentIndex = getIndex("handover_done");
   } else if (data.unitStatus === "menunggu_serah_terima") {
+    const bastExists = false; // tracker doesn't have doc data — show handover_waiting
     currentIndex = getIndex("handover_waiting");
   } else if (data.kprStatus === "realisasi") {
     if (!isReady && !physicalReady) {
       currentIndex = getIndex("physical_waiting");
     } else {
-      currentIndex = getIndex("realisasi_dana");
+      currentIndex = getIndex("realisasi");
     }
   } else if (data.kprStatus === "akad") {
-    currentIndex = getIndex("akad_kredit");
-  } else if (data.kprStatus === "approved" || data.kprStatus === "offering") {
-    currentIndex = getIndex("sp3k_approval");
+    currentIndex = getIndex("akad");
+  } else if (data.kprStatus === "approved") {
+    currentIndex = getIndex("approved");
+  } else if (data.kprStatus === "offering") {
+    currentIndex = getIndex("offering");
   } else if (data.kprStatus === "proses_bank") {
     currentIndex = getIndex("proses_bank");
-  } else if (data.kprStatus === "bi_checking" || data.kprStatus === "pemberkasan" || data.kprStatus === "rejected") {
-    currentIndex = getIndex("dp_kpr");
+  } else if (data.kprStatus === "pemberkasan") {
+    currentIndex = getIndex("pemberkasan");
+  } else if (data.kprStatus === "rejected") {
+    currentIndex = getIndex("pemberkasan"); // rejected stays at pemberkasan level visually
+  } else if (data.kprStatus === "bi_checking") {
+    currentIndex = getIndex("bi_checking");
+  } else {
+    currentIndex = getIndex("booking_fee");
   }
 
-  if (currentIndex === -1) {
-    currentIndex = 0;
-  }
+  if (currentIndex === -1) currentIndex = 0;
 
   return (
     <div className={`flex ${orientation === "vertical" ? "flex-col" : "flex-row overflow-x-auto pb-4"} gap-0 relative w-full`}>

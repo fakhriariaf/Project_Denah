@@ -32,9 +32,17 @@ export async function generateMetadata({ params }: Props) {
 }
 
 export default async function PrintBastKonsumenPage({ params }: Props) {
-  await requireAuth();
+  const activeUser = await requireAuth();
   const { id } = await params;
   const { t } = await getI18n();
+
+  // RBAC: hanya role yang berwenang yang bisa cetak BAST
+  const { isSuperAdmin, isAdminKantor, isMarketing, isMarketingManager, isDireksi } = await import("@/server/permissions").then(m => m.getSessionRole(activeUser.id));
+  const canPrint = isSuperAdmin || isAdminKantor || isMarketing || isMarketingManager || isDireksi;
+  if (!canPrint) {
+    const { redirect } = await import("next/navigation");
+    redirect("/unauthorized");
+  }
 
   // Fetch booking and related data
   const booking = await db
@@ -44,6 +52,7 @@ export default async function PrintBastKonsumenPage({ params }: Props) {
       bookingDate: bookingsTable.bookingDate,
       paymentScheme: bookingsTable.paymentScheme,
       status: bookingsTable.status,
+      marketingId: bookingsTable.marketingId,
       projectName: projectsTable.name,
       unitCode: unitsTable.code,
       unitStatus: unitsTable.status,
@@ -63,6 +72,14 @@ export default async function PrintBastKonsumenPage({ params }: Props) {
     .then(r => r[0]);
 
   if (!booking) notFound();
+
+  // Marketing Biasa hanya boleh cetak BAST untuk booking yang di-assign ke mereka
+  if (isMarketing && !isMarketingManager && !isAdminKantor && !isSuperAdmin && !isDireksi) {
+    if (booking.marketingId !== activeUser.id) {
+      const { redirect } = await import("next/navigation");
+      redirect("/unauthorized");
+    }
+  }
 
   // Enforce BAST Developer to Consumer can only be printed if unit construction is finished/sold.
   // After completeConstruction(), unit status transitions to: sold, kpr_process, booking, or available

@@ -73,7 +73,14 @@ export default async function LeadsPage({
   // Super Admin / Admin Kantor / Direksi / Keuangan: sees all
   const isBiasaRole = sessionRoleInfo.isMarketing && !sessionRoleInfo.isMarketingManager && !sessionRoleInfo.isAdminKantor && !sessionRoleInfo.isSuperAdmin;
 
-  // Build query
+  // Build query — push RBAC scope to DB WHERE, not in-memory filter
+  const rbacConditions = [];
+  if (isBiasaRole) {
+    rbacConditions.push(eq(leadsTable.assignedMarketingId, activeUser.id));
+  } else if (mineFilter) {
+    rbacConditions.push(eq(leadsTable.assignedMarketingId, activeUser.id));
+  }
+
   const allLeadsQuery = db.select({
     id: leadsTable.id,
     name: leadsTable.name,
@@ -94,18 +101,13 @@ export default async function LeadsPage({
   .leftJoin(projectsTable, eq(leadsTable.interestedProjectId, projectsTable.id))
   .leftJoin(unitsTable, eq(leadsTable.interestedUnitId, unitsTable.id))
   .leftJoin(userTable, eq(leadsTable.assignedMarketingId, userTable.id))
+  .where(rbacConditions.length > 0 ? and(...rbacConditions) : undefined)
   .orderBy(desc(leadsTable.createdAt));
 
   const allLeads = await allLeadsQuery;
 
-  // 3. Apply RBAC filter: Marketing Biasa only sees own assigned leads
-  let scopedLeads = allLeads;
-  if (isBiasaRole) {
-    scopedLeads = allLeads.filter(l => l.assignedMarketingId === activeUser.id);
-  } else if (mineFilter) {
-    // "Leads Saya" filter: show only leads assigned to current user
-    scopedLeads = allLeads.filter(l => l.assignedMarketingId === activeUser.id);
-  }
+  // scopedLeads = already filtered by DB — no further in-memory RBAC filter needed
+  const scopedLeads = allLeads;
 
   // 4. Search + status filter
   const filteredLeads = scopedLeads.filter(lead => {

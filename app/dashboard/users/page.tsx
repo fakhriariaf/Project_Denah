@@ -120,11 +120,17 @@ export default async function UsersPage() {
                           >
                             <Translate namespace="users" translationKey="btn_profile" />
                           </Link>
-                          <DeleteConfirm
-                            label={`"${u.name}"`}
-                            description={t("users.delete_desc")}
-                            onConfirm={deleteUser.bind(null, u.id)}
-                          />
+                          {u.id !== activeUser.id ? (
+                            <DeleteConfirm
+                              label={`"${u.name}"`}
+                              description={t("users.delete_desc")}
+                              onConfirm={deleteUser.bind(null, u.id)}
+                            />
+                          ) : (
+                            <span className="text-[10px] text-[#A8B0AA] font-bold px-2 py-1 bg-[#F7F8F3] rounded-lg border border-[#D6DED2]">
+                              {t("common.account_self")}
+                            </span>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>

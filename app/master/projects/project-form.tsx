@@ -54,10 +54,10 @@ export function ProjectForm({
       try {
         if (id) {
           await updateProject(id, data);
-          alert("Data proyek berhasil diperbarui!");
+          alert(t("proj_form.save_success_update"));
         } else {
           await createProject(data);
-          alert("Data proyek berhasil disimpan!");
+          alert(t("proj_form.save_success_create"));
         }
         setOpen(false);
         if (!id) reset();
@@ -161,23 +161,31 @@ export function ProjectForm({
               <input
                 id="publicEnabled"
                 type="checkbox"
-                {...register("publicEnabled")}
+                {...register("publicEnabled", {
+                  onChange: (e) => {
+                    // If publicEnabled is turned off, isFeaturedPublic must also be false
+                    if (!e.target.checked) {
+                      setValue("isFeaturedPublic", false);
+                    }
+                  }
+                })}
                 className="w-5 h-5 rounded-lg border-[#D6DED2] text-[#4F6F52] focus:ring-[#8FAF9A] rounded cursor-pointer accent-[#4F6F52]"
               />
             </div>
 
-            <div className="flex items-center justify-between p-3 bg-[#F7F8F3] rounded-2xl border border-[#D6DED2]/60">
+            <div className={`flex items-center justify-between p-3 bg-[#F7F8F3] rounded-2xl border border-[#D6DED2]/60 transition-opacity ${!watch("publicEnabled") ? "opacity-40 pointer-events-none" : ""}`}>
               <div className="space-y-0.5">
                 <Label htmlFor="isFeaturedPublic" className="text-xs font-bold text-[#243028] cursor-pointer">
                   Unggulan Publik (Featured)
                 </Label>
                 <p className="text-[10px] text-[#66736A] font-medium leading-tight">
-                  Tampilkan proyek ini sebagai default saat membuka halaman public view.
+                  Tampilkan proyek ini sebagai default saat membuka halaman public view. Wajib aktifkan "Tampilkan Publik" terlebih dahulu.
                 </p>
               </div>
               <input
                 id="isFeaturedPublic"
                 type="checkbox"
+                disabled={!watch("publicEnabled")}
                 {...register("isFeaturedPublic")}
                 className="w-5 h-5 rounded-lg border-[#D6DED2] text-[#4F6F52] focus:ring-[#8FAF9A] rounded cursor-pointer accent-[#4F6F52]"
               />

@@ -38,6 +38,21 @@ export async function createLead(data: unknown) {
   const id = crypto.randomUUID();
   const targetPicId = parsed.assignedMarketingId || user.id;
 
+  // Duplicate phone guard — block if active lead with same phone already exists
+  const existingLeadByPhone = await db
+    .select({ id: leads.id, name: leads.name, status: leads.status })
+    .from(leads)
+    .where(and(eq(leads.phone, parsed.phone), inArray(leads.status, ["new", "contacted", "follow_up"])))
+    .limit(1)
+    .get();
+
+  if (existingLeadByPhone) {
+    throw new Error(
+      `Nomor HP ${parsed.phone} sudah terdaftar sebagai lead aktif atas nama "${existingLeadByPhone.name}". ` +
+      `Gunakan nomor yang berbeda atau edit lead yang sudah ada.`
+    );
+  }
+
   await db.insert(leads).values({
     id,
     ...parsed,
@@ -764,6 +779,29 @@ export async function validateKprStateTransition(
     throw new Error("Booking sudah batal/ditolak. Transaksi KPR tidak dapat diproses.");
   }
 
+  // Booking Fee must be verified before any KPR processing can begin
+  // Gate applies from pemberkasan onwards (bi_checking is just a status flag, not a process gate)
+  const KPR_PROCESS_STAGES = ["pemberkasan", "proses_bank", "offering", "approved", "akad", "realisasi"];
+  if (KPR_PROCESS_STAGES.includes(targetStatus)) {
+    const bfInvoice = await tx
+      .select({ id: invoices.id, status: invoices.status })
+      .from(invoices)
+      .where(
+        and(
+          eq(invoices.bookingId, booking.id),
+          eq(invoices.type, "booking_fee")
+        )
+      )
+      .get();
+
+    if (!bfInvoice || bfInvoice.status !== "paid") {
+      throw new Error(
+        "Booking Fee belum diverifikasi lunas oleh Admin Keuangan. " +
+        "Proses KPR tidak dapat dilanjutkan sebelum Booking Fee dikonfirmasi."
+      );
+    }
+  }
+
   const currentStatus = kpr.status;
   const newStatus = targetStatus;
 
@@ -795,6 +833,16 @@ export async function validateKprStateTransition(
   const finalDocStatus = payload.documentStatus ?? kpr.documentStatus;
   if ((newStatus === "pemberkasan" || newStatus === "proses_bank") && finalDocStatus !== "complete") {
     throw new Error("Berkas berkas KPR belum lengkap. Silakan lengkapi berkas di berkas checklist KPR terlebih dahulu.");
+  }
+
+  // Must pass through "pemberkasan" before reaching "proses_bank"
+  // Direct jump from bi_checking → proses_bank is not allowed
+  const STAGES_BEFORE_PROSES_BANK = ["bi_checking"];
+  if (newStatus === "proses_bank" && STAGES_BEFORE_PROSES_BANK.includes(currentStatus)) {
+    throw new Error(
+      "Tidak dapat langsung ke Proses Bank dari BI Checking. " +
+      "Wajib melewati tahap Pemberkasan (pengumpulan & verifikasi dokumen) terlebih dahulu."
+    );
   }
 
   // Validation for Proses Bank: requires verified bank submission
@@ -972,8 +1020,13 @@ export async function updateKprProcess(id: string, data: unknown) {
         // Early KPR stages remain as booking
         unitState = "booking";
       } else if (parsed.status === "approved") {
-        // Approved KPR transitions unit to construction (proses bangun)
-        unitState = "construction";
+        // Approved KPR transitions unit to construction ONLY for non-ready-stock (indent) units.
+        // Ready stock units bypass construction phase entirely (BR-22).
+        const unitForApproved = await tx.select({ isReadyStock: units.isReadyStock }).from(units).where(eq(units.id, booking.unitId)).get();
+        if (!unitForApproved?.isReadyStock) {
+          unitState = "construction";
+        }
+        // else: keep unitState = "kpr_process" for ready stock — handover gate handled separately
       }
 
       const currentUnit = await tx.select().from(units).where(eq(units.id, booking.unitId)).get();
@@ -1029,6 +1082,15 @@ export async function updateKprProcess(id: string, data: unknown) {
 
 export async function updateKprStatusDirect(id: string, newStatus: string, revisionNotes?: string) {
   const user = await requireAnyRole(["Super Admin", "Admin Kantor", "Marketing", "Marketing Manager"]);
+
+  // "realisasi" MUST go through realizeKprFunds() which records kas masuk + memo attachment.
+  // Blocking here prevents accidental drag-drop that would change unit status without financial records.
+  if (newStatus === "realisasi") {
+    throw new Error(
+      "Status 'Realisasi Dana' tidak dapat diubah melalui drag-and-drop. " +
+      "Gunakan Form Realisasi KPR di dialog 'Kelola Berkas KPR' untuk mencatat pencairan dana bank beserta rincian keuangannya."
+    );
+  }
   
   let bookingProjectId = "";
   let bookingIdToTransition = "";
@@ -1239,11 +1301,14 @@ export async function approveBastKonsumen(bookingId: string) {
     .get();
   if (!unit) throw new Error("Unit tidak ditemukan.");
 
-  // RULE 11: unit harus sold atau menunggu_serah_terima
-  if (unit.status !== "sold" && unit.status !== "menunggu_serah_terima") {
+  // RULE 11: unit harus menunggu_serah_terima
+  // "sold" no longer accepted — unit must go through the proper menunggu_serah_terima gate
+  // (set by realizeKprFunds for KPR, or triggerMenungguSerahTerima for cash/installment)
+  if (unit.status !== "menunggu_serah_terima") {
     throw new Error(
       `Status unit (${unit.status}) tidak valid untuk serah terima. ` +
-      "Unit harus berstatus 'sold' atau 'menunggu_serah_terima'."
+      "Unit harus berstatus 'Menunggu Serah Terima' sebelum dapat diserahterimakan. " +
+      "Pastikan realisasi dana / pelunasan sudah diproses terlebih dahulu."
     );
   }
 
@@ -1616,8 +1681,11 @@ export async function upgradeBookingToAkad(bookingId: string) {
 
   await db.transaction(async (tx) => {
     await tx.update(bookings).set({ status: "akad", updatedAt: new Date() }).where(eq(bookings.id, bookingId)).run();
+    // Do NOT set unit to "sold" yet — unit stays at current status.
+    // For non-KPR: unit reaches "menunggu_serah_terima" via triggerMenungguSerahTerima
+    // after all invoices paid. For KPR: via realizeKprFunds.
+    // Final "handover_complete" only via approveBastKonsumen.
     await tx.update(units).set({
-      status: "sold",
       currentCustomerId: booking.customerId,
       currentBookingId: bookingId,
       updatedAt: new Date()
@@ -2035,6 +2103,11 @@ export async function checkAndTransitionToConstruction(tx: any, bookingId: strin
   const unit = await tx.select().from(units).where(eq(units.id, booking.unitId)).get();
   if (!unit) return;
 
+  // Ready stock units bypass construction phase entirely (BR-22)
+  if (unit.isReadyStock) {
+    return;
+  }
+
   // If unit is already in construction or sold status, do nothing
   if (["construction", "construction_done", "sold", "overdue"].includes(unit.status)) {
     return;
@@ -2043,13 +2116,19 @@ export async function checkAndTransitionToConstruction(tx: any, bookingId: strin
   // Find invoices
   const bookingInvoices = await tx.select().from(invoices).where(eq(invoices.bookingId, bookingId)).all();
 
-  // Booking fee is paid if paid status
+  // Booking fee must exist AND be paid (not absent)
+  // If BF invoice was never created (bookingFee = 0), treat as not paid — require explicit payment
   const bfInvoice = bookingInvoices.find((i: any) => i.type === "booking_fee");
-  const bfPaid = !bfInvoice || bfInvoice.status === "paid";
+  const bfPaid = !!bfInvoice && bfInvoice.status === "paid";
 
-  // DP is paid if paid status
+  // DP must exist AND be paid, OR explicitly no DP invoice was created because dpAmount = 0
+  // For KPR: DP is conditional (bank may waive it). Only treat as "not required" if
+  // dpAmount was explicitly 0 at booking time (no invoice generated).
+  // If invoice exists but unpaid → block.
   const dpInvoice = bookingInvoices.find((i: any) => i.type === "dp");
   const dpPaid = !dpInvoice || dpInvoice.status === "paid";
+  // Note: !dpInvoice = developer set dpAmount = 0 at booking = dp not required for this deal.
+  // If dpInvoice exists but unpaid = dp required but not yet paid = block.
 
   // Check KPR status
   let kprApproved = true;
@@ -2121,14 +2200,14 @@ export async function startPhysicalConstructionManual(unitId: string) {
     // Find invoices
     const bookingInvoices = await tx.select().from(invoices).where(eq(invoices.bookingId, booking.id)).all();
 
-    // Booking fee is paid if paid status
+    // Booking fee must exist AND be paid
     const bfInvoice = bookingInvoices.find((i: any) => i.type === "booking_fee");
-    const bfPaid = !bfInvoice || bfInvoice.status === "paid";
+    const bfPaid = !!bfInvoice && bfInvoice.status === "paid";
     if (!bfPaid) {
       throw new Error("Booking Fee belum divalidasi Lunas oleh Keuangan.");
     }
 
-    // DP is paid if paid status
+    // DP: only block if invoice exists but unpaid. If no invoice = dpAmount was 0 = ok.
     const dpInvoice = bookingInvoices.find((i: any) => i.type === "dp");
     const dpPaid = !dpInvoice || dpInvoice.status === "paid";
     if (!dpPaid) {

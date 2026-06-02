@@ -12,6 +12,7 @@ import {
 import { WaitingListActions } from "./waiting-list-actions"
 import { AddToWaitingListDialog } from "./add-waiting-list-dialog"
 import { Translate } from "@/components/translate"
+import { DataTablePagination } from "@/components/ui/data-table-pagination"
 
 export const revalidate = 0
 
@@ -24,7 +25,14 @@ const STATUS_CONFIG: Record<string, { labelKey: string; className: string; icon:
 
 const KPI_KEYS = ["kpi_total", "kpi_waiting", "kpi_offered", "kpi_converted"] as const
 
-export default async function WaitingListPage() {
+export default async function WaitingListPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ page?: string }>;
+}) {
+  const { page } = searchParams ? await searchParams : { page: undefined };
+  const currentPage = Number(page) || 1;
+  const itemsPerPage = 20;
   const activeUser = await requireAuth()
   const session = await getSessionRole(activeUser.id)
 
@@ -40,6 +48,9 @@ export default async function WaitingListPage() {
   const activeCount    = waitList.filter(w => w.status === "waiting").length
   const offeredCount   = waitList.filter(w => w.status === "offered").length
   const convertedCount = waitList.filter(w => w.status === "converted").length
+
+  const totalFilteredItems = waitList.length;
+  const paginatedList = waitList.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const kpiValues = [waitList.length, activeCount, offeredCount, convertedCount]
   const kpiIcons  = [ListFilter, Clock, Tag, CheckCircle2]
@@ -119,8 +130,9 @@ export default async function WaitingListPage() {
             <p className="text-xs text-[#66736A] mt-1"><Translate namespace="waiting" translationKey="empty_desc" /></p>
           </div>
         ) : (
-          <div className="divide-y divide-[#D6DED2]/60">
-            {waitList.map((item) => {
+          <>
+            <div className="divide-y divide-[#D6DED2]/60">
+              {paginatedList.map((item) => {
               const statusCfg = STATUS_CONFIG[item.status]
               const StatusIcon = statusCfg.icon
               return (
@@ -176,7 +188,9 @@ export default async function WaitingListPage() {
                 </div>
               )
             })}
-          </div>
+            </div>
+            <DataTablePagination totalItems={totalFilteredItems} itemsPerPage={itemsPerPage} />
+          </>
         )}
       </div>
     </div>

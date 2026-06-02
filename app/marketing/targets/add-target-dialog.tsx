@@ -9,8 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { createMarketingTarget } from "@/server/actions/waiting-list";
-import { PlusCircle, Target, AlertCircle, Loader2 } from "lucide-react";
+import { createMarketingTarget, updateMarketingTarget } from "@/server/actions/waiting-list";
+import { PlusCircle, Target, AlertCircle, Loader2, Pencil } from "lucide-react";
 import { parseServerError } from "@/lib/error-parser";
 import { useI18n } from "@/lib/i18n";
 import { Translate } from "@/components/translate";
@@ -32,6 +32,114 @@ interface Props {
   marketings: { id: string; name: string }[];
 }
 
+interface EditProps extends Props {
+  target: {
+    id: string;
+    marketingId: string;
+    projectId: string;
+    periodMonth: number;
+    periodYear: number;
+    targetUnits: number;
+    targetAmount: number;
+  };
+}
+
+function TargetForm({
+  projects, marketings, defaultValues, onSubmit, loading, errorMsg, isEdit
+}: {
+  projects: Props["projects"];
+  marketings: Props["marketings"];
+  defaultValues: FormValues;
+  onSubmit: (values: FormValues) => Promise<void>;
+  loading: boolean;
+  errorMsg: string | null;
+  isEdit?: boolean;
+}) {
+  const { t } = useI18n();
+
+  const form = useForm<any>({
+    resolver: zodResolver(schema),
+    defaultValues,
+  });
+
+  const mktVal   = form.watch("marketingId") as string;
+  const projVal  = form.watch("projectId") as string;
+  const monthVal = String(form.watch("periodMonth") ?? 1);
+
+  return (
+    <form onSubmit={form.handleSubmit(onSubmit)} className="p-6 space-y-4 pt-3 overflow-y-auto max-h-[75vh]">
+      {errorMsg && (
+        <div className="flex items-start gap-2 p-3 bg-rose-50 border border-rose-100 text-rose-700 text-xs font-semibold rounded-xl">
+          <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />{errorMsg.startsWith("targets_form.") ? t(errorMsg as any) : errorMsg}
+        </div>
+      )}
+
+      <div className="space-y-1.5">
+        <Label className="text-sm font-medium text-[#243028]">{t("targets_form.marketing")} <span className="text-rose-500">*</span></Label>
+        <Select value={mktVal} onValueChange={(v: string | null) => form.setValue("marketingId", v ?? "")} disabled={isEdit}>
+          <SelectTrigger className="border-[#D6DED2] focus:ring-[#8FAF9A]/50">
+            <SelectValue placeholder={t("targets_form.marketing_ph")}>
+              {mktVal ? marketings.find(m => m.id === mktVal)?.name : undefined}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent className="rounded-xl border-[#D6DED2] bg-white/95 backdrop-blur-md">
+            {marketings.map(m => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label className="text-sm font-medium text-[#243028]">{t("targets_form.project")} <span className="text-rose-500">*</span></Label>
+        <Select value={projVal} onValueChange={(v: string | null) => form.setValue("projectId", v ?? "")} disabled={isEdit}>
+          <SelectTrigger className="border-[#D6DED2] focus:ring-[#8FAF9A]/50">
+            <SelectValue placeholder={t("targets_form.project_ph")}>
+              {projVal ? projects.find(p => p.id === projVal)?.name : undefined}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent className="rounded-xl border-[#D6DED2] bg-white/95 backdrop-blur-md">
+            {projects.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <Label className="text-sm font-medium text-[#243028]">{t("targets_form.month")}</Label>
+          <Select value={monthVal} onValueChange={(v: string | null) => form.setValue("periodMonth", parseInt(v ?? "1"))} disabled={isEdit}>
+            <SelectTrigger className="border-[#D6DED2] focus:ring-[#8FAF9A]/50">
+              <SelectValue>{monthVal ? MONTHS[parseInt(monthVal) - 1] : undefined}</SelectValue>
+            </SelectTrigger>
+            <SelectContent className="rounded-xl border-[#D6DED2] bg-white/95 backdrop-blur-md">
+              {MONTHS.map((m, i) => <SelectItem key={i+1} value={String(i+1)}>{m}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-sm font-medium text-[#243028]">{t("targets_form.year")}</Label>
+          <Input type="number" {...form.register("periodYear")} className="border-[#D6DED2] font-mono" disabled={isEdit} />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <Label className="text-sm font-medium text-[#243028]">{t("targets_form.target_unit")} <span className="text-red-500">*</span></Label>
+          <Input type="number" required min={0} {...form.register("targetUnits")} className="border-[#D6DED2] font-mono" />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-sm font-medium text-[#243028]">{t("targets_form.target_amount")} <span className="text-red-500">*</span></Label>
+          <Input type="number" required step="1000000" min={0} {...form.register("targetAmount")} placeholder="0" className="border-[#D6DED2] font-mono placeholder:text-[#A8B0AA]" />
+        </div>
+      </div>
+
+      <DialogFooter className="pt-2 gap-2">
+        <Button type="submit" disabled={loading} className="btn-premium bg-[#4F6F52] hover:bg-[#3D563F] text-white gap-2">
+          {loading && <Loader2 className="h-4 w-4 animate-spin" />}{isEdit ? "Simpan Perubahan" : t("targets_form.btn_submit")}
+        </Button>
+      </DialogFooter>
+    </form>
+  );
+}
+
 export function AddMarketingTargetDialog({ projects, marketings }: Props) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
@@ -39,19 +147,12 @@ export function AddMarketingTargetDialog({ projects, marketings }: Props) {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const currentYear = new Date().getFullYear();
 
-  const form = useForm<any>({
-    resolver: zodResolver(schema),
-    defaultValues: {
-      marketingId: "", projectId: "",
-      periodMonth: new Date().getMonth() + 1,
-      periodYear: currentYear,
-      targetUnits: 0, targetAmount: 0,
-    },
-  });
-
-  const mktVal  = form.watch("marketingId") as string;
-  const projVal = form.watch("projectId") as string;
-  const monthVal= String(form.watch("periodMonth") ?? 1);
+  const defaultValues = {
+    marketingId: "", projectId: "",
+    periodMonth: new Date().getMonth() + 1,
+    periodYear: currentYear,
+    targetUnits: 0, targetAmount: 0,
+  };
 
   async function onSubmit(values: FormValues) {
     setLoading(true);
@@ -60,7 +161,6 @@ export function AddMarketingTargetDialog({ projects, marketings }: Props) {
       await createMarketingTarget(values);
       alert("Target marketing berhasil disimpan!");
       setOpen(false);
-      form.reset();
       window.location.reload();
     } catch (err: unknown) {
       setErrorMsg(parseServerError(err));
@@ -74,7 +174,6 @@ export function AddMarketingTargetDialog({ projects, marketings }: Props) {
       <Button onClick={() => setOpen(true)} className="btn-premium bg-[#4F6F52] hover:bg-[#3D563F] text-white gap-2 shrink-0">
         <PlusCircle className="h-4 w-4" /> {t("targets_form.btn_add")}
       </Button>
-
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-lg rounded-3xl bg-white/98 backdrop-blur-md border border-[#D6DED2] shadow-[0_8px_30px_rgb(143,175,154,0.15)] p-0 overflow-hidden font-sans">
           <div className="bg-gradient-to-r from-[#DDE8D8]/70 via-white/80 to-transparent p-6 border-b border-[#D6DED2]">
@@ -90,80 +189,71 @@ export function AddMarketingTargetDialog({ projects, marketings }: Props) {
               </div>
             </DialogHeader>
           </div>
+          <TargetForm projects={projects} marketings={marketings} defaultValues={defaultValues} onSubmit={onSubmit} loading={loading} errorMsg={errorMsg} />
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
 
-          <form onSubmit={form.handleSubmit(onSubmit)} className="p-6 space-y-4 pt-3 overflow-y-auto max-h-[75vh]">
-            {errorMsg && (
-              <div className="flex items-start gap-2 p-3 bg-rose-50 border border-rose-100 text-rose-700 text-xs font-semibold rounded-xl">
-                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />{errorMsg.startsWith("targets_form.") ? t(errorMsg as any) : errorMsg}
+export function EditMarketingTargetDialog({ projects, marketings, target }: EditProps) {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const defaultValues: FormValues = {
+    marketingId: target.marketingId,
+    projectId: target.projectId,
+    periodMonth: target.periodMonth,
+    periodYear: target.periodYear,
+    targetUnits: target.targetUnits,
+    targetAmount: target.targetAmount,
+  };
+
+  async function onSubmit(values: FormValues) {
+    setLoading(true);
+    setErrorMsg(null);
+    try {
+      await updateMarketingTarget(target.id, values);
+      alert("Target berhasil diperbarui!");
+      setOpen(false);
+      window.location.reload();
+    } catch (err: unknown) {
+      setErrorMsg(parseServerError(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => setOpen(true)}
+        className="h-7 w-7 p-0 rounded-lg border border-[#D6DED2] text-[#4F6F52] hover:bg-[#DDE8D8]/30"
+        title="Edit Target"
+      >
+        <Pencil className="h-3.5 w-3.5" />
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-lg rounded-3xl bg-white/98 backdrop-blur-md border border-[#D6DED2] shadow-[0_8px_30px_rgb(143,175,154,0.15)] p-0 overflow-hidden font-sans">
+          <div className="bg-gradient-to-r from-[#DDE8D8]/70 via-white/80 to-transparent p-6 border-b border-[#D6DED2]">
+            <DialogHeader>
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-[#DDE8D8] flex items-center justify-center shadow-inner">
+                  <Pencil className="h-5 w-5 text-[#4F6F52]" />
+                </div>
+                <div>
+                  <DialogTitle className="text-xl font-black text-[#243028] tracking-tight">Edit Target Marketing</DialogTitle>
+                  <DialogDescription className="text-xs text-[#66736A] mt-1 leading-relaxed">
+                    Ubah jumlah target unit dan nominal. Marketing, proyek, dan periode tidak bisa diubah.
+                  </DialogDescription>
+                </div>
               </div>
-            )}
-
-            <div className="space-y-1.5">
-              <Label className="text-sm font-medium text-[#243028]">{t("targets_form.marketing")} <span className="text-rose-500">*</span></Label>
-              <Select value={mktVal} onValueChange={(v: string | null) => form.setValue("marketingId", v ?? "")}>
-                <SelectTrigger className="border-[#D6DED2] focus:ring-[#8FAF9A]/50">
-                  <SelectValue placeholder={t("targets_form.marketing_ph")}>
-                    {mktVal ? marketings.find(m => m.id === mktVal)?.name : undefined}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent className="rounded-xl border-[#D6DED2] bg-white/95 backdrop-blur-md">
-                  {marketings.map(m => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-sm font-medium text-[#243028]">{t("targets_form.project")} <span className="text-rose-500">*</span></Label>
-              <Select value={projVal} onValueChange={(v: string | null) => form.setValue("projectId", v ?? "")}>
-                <SelectTrigger className="border-[#D6DED2] focus:ring-[#8FAF9A]/50">
-                  <SelectValue placeholder={t("targets_form.project_ph")}>
-                    {projVal ? projects.find(p => p.id === projVal)?.name : undefined}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent className="rounded-xl border-[#D6DED2] bg-white/95 backdrop-blur-md">
-                  {projects.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-sm font-medium text-[#243028]">{t("targets_form.month")}</Label>
-                <Select value={monthVal} onValueChange={(v: string | null) => form.setValue("periodMonth", parseInt(v ?? "1"))}>
-                  <SelectTrigger className="border-[#D6DED2] focus:ring-[#8FAF9A]/50">
-                    <SelectValue>
-                      {monthVal ? MONTHS[parseInt(monthVal) - 1] : undefined}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent className="rounded-xl border-[#D6DED2] bg-white/95 backdrop-blur-md">
-                    {MONTHS.map((m, i) => <SelectItem key={i+1} value={String(i+1)}>{m}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-sm font-medium text-[#243028]">{t("targets_form.year")}</Label>
-                <Input type="number" {...form.register("periodYear")} className="border-[#D6DED2] font-mono" />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-sm font-medium text-[#243028]">{t("targets_form.target_unit")} <span className="text-red-500">*</span></Label>
-                <Input type="number" required min={0} {...form.register("targetUnits")} className="border-[#D6DED2] font-mono" />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-sm font-medium text-[#243028]">{t("targets_form.target_amount")} <span className="text-red-500">*</span></Label>
-                <Input type="number" required step="1000000" min={0} {...form.register("targetAmount")} placeholder="0" className="border-[#D6DED2] font-mono placeholder:text-[#A8B0AA]" />
-              </div>
-            </div>
-
-            <DialogFooter className="pt-2 gap-2">
-              <Button type="button" variant="outline" onClick={() => setOpen(false)} className="border-[#D6DED2]">{t("action.cancel")}</Button>
-              <Button type="submit" disabled={loading} className="btn-premium bg-[#4F6F52] hover:bg-[#3D563F] text-white gap-2">
-                {loading && <Loader2 className="h-4 w-4 animate-spin" />}{t("targets_form.btn_submit")}
-              </Button>
-            </DialogFooter>
-          </form>
+            </DialogHeader>
+          </div>
+          <TargetForm projects={projects} marketings={marketings} defaultValues={defaultValues} onSubmit={onSubmit} loading={loading} errorMsg={errorMsg} isEdit />
         </DialogContent>
       </Dialog>
     </>
