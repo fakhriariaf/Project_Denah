@@ -74,6 +74,7 @@ ehthumbs.db
 
 # AI Agent files and folders
 .agents/
+.kiro/
 AGENTS.md
 CLAUDE.md
 docs/
