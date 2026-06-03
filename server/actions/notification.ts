@@ -74,11 +74,11 @@ export async function notifyUsersWithRoles({
     if (matchedRoles.length === 0) return { success: true, count: 0 };
     const roleIds = matchedRoles.map((r) => r.id);
 
-    // 2. Fetch all users having these role IDs
+    // 2. Fetch all active users having these role IDs
     const targetUsers = await db
       .select({ id: userTable.id })
       .from(userTable)
-      .where(inArray(userTable.roleId, roleIds));
+      .where(and(inArray(userTable.roleId, roleIds), eq(userTable.status, "active")));
 
     if (targetUsers.length === 0) return { success: true, count: 0 };
 

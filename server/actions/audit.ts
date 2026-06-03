@@ -3,8 +3,8 @@
 import { db } from "@/db";
 import { auditLogs } from "@/db/schema/system";
 import { user as userTable } from "@/db/schema/auth";
-import { desc, eq, and, sql } from "drizzle-orm";
-import { getCurrentUser } from "@/server/permissions";
+import { desc, eq, and, sql, gte, lte } from "drizzle-orm";
+import { getCurrentUser, requireAnyRole } from "@/server/permissions";
 import { headers } from "next/headers";
 
 export async function getAuditLogs(filters?: {
@@ -16,6 +16,9 @@ export async function getAuditLogs(filters?: {
   page?: number;
   pageSize?: number;
 }) {
+  // RBAC: only admin-level roles can view audit logs
+  await requireAnyRole(["Super Admin", "Admin Kantor", "Direksi / Manager"]);
+
   try {
     const conditions = [];
 
@@ -29,17 +32,17 @@ export async function getAuditLogs(filters?: {
       conditions.push(eq(auditLogs.action, filters.action));
     }
     if (filters?.startDate) {
-      const parsedStart = Date.parse(filters.startDate);
-      if (!isNaN(parsedStart)) {
-        conditions.push(sql`${auditLogs.createdAt} >= ${parsedStart}`);
+      const parsedStart = new Date(filters.startDate);
+      if (!isNaN(parsedStart.getTime())) {
+        conditions.push(gte(auditLogs.createdAt, parsedStart));
       }
     }
     if (filters?.endDate) {
-      const parsedEnd = Date.parse(filters.endDate);
-      if (!isNaN(parsedEnd)) {
-        // Include full day (86400000ms - 1ms)
-        const endWithTime = parsedEnd + 86400000 - 1;
-        conditions.push(sql`${auditLogs.createdAt} <= ${endWithTime}`);
+      const parsedEnd = new Date(filters.endDate);
+      if (!isNaN(parsedEnd.getTime())) {
+        // Include full day
+        parsedEnd.setHours(23, 59, 59, 999);
+        conditions.push(lte(auditLogs.createdAt, parsedEnd));
       }
     }
 

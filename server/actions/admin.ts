@@ -65,10 +65,12 @@ export async function resetSimulatedData(mode: "transactions_only" | "all_data")
       await tx.delete(financeAccounts).run();
       await tx.delete(financeCategories).run();
     } else {
-      // If transactions only, we should reset unit statuses to "available"
+      // If transactions only, reset unit statuses AND clear all foreign references
       await tx.update(units).set({
         status: "available",
         currentSpkId: null,
+        currentCustomerId: null,
+        currentBookingId: null,
         constructionProgress: 0,
       }).run();
     }

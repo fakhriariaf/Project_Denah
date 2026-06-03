@@ -33,12 +33,13 @@ export const auth = betterAuth({
   hooks: {
     before: async (context: any) => {
       if (context.path === "/sign-in/email") {
-        const email = context.body?.email;
-        if (!email) return;
+        const rawEmail = context.body?.email;
+        if (!rawEmail) return;
+        const email = rawEmail.trim().toLowerCase();
         const [foundUser] = await db
           .select({ status: userTable.status })
           .from(userTable)
-          .where(eq(userTable.email, email.toLowerCase()))
+          .where(eq(userTable.email, email))
           .limit(1);
         if (foundUser && foundUser.status !== "active") {
           throw new Error("Akun Anda telah dinonaktifkan. Hubungi Admin untuk mengaktifkan kembali.");
