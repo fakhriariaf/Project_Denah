@@ -10,8 +10,7 @@ import { notFound } from "next/navigation"
 import { eq } from "drizzle-orm"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { SiteplanViewer } from "@/components/siteplan/siteplan-viewer"
-import { SiteplanEditor } from "@/components/siteplan/siteplan-editor"
+import { DynamicSiteplanViewer, DynamicSiteplanEditor } from "@/components/siteplan/dynamic-siteplan"
 import { CreateSiteplanForm } from "./create-siteplan-form"
 import { SiteplanFilters } from "./siteplan-filters"
 import { ImageUploadForm } from "./image-upload-form"
@@ -322,7 +321,7 @@ export default async function SiteplanProjectPage({
             </div>
             
              {/* Beautiful SVG siteplan canvas */}
-            <SiteplanViewer
+            <DynamicSiteplanViewer
               shapes={shapes}
               imageUrl={activeSiteplan.imageUrl}
               width={activeSiteplan.width ?? 800}
@@ -348,7 +347,7 @@ export default async function SiteplanProjectPage({
           {isEditor && project.status === "active" && (
             <>
               <TabsContent value="editor" className="mt-0 focus-visible:outline-none focus-visible:ring-0">
-                <SiteplanEditor
+                <DynamicSiteplanEditor
                   siteplanId={activeSiteplan.id}
                   existingShapes={shapes.map(s => ({
                     id: s.id,

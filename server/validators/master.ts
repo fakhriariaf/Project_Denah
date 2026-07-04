@@ -1,10 +1,13 @@
 import { z } from "zod";
+import { sanitizeInput } from "@/server/middleware/sanitizer";
+
+const safeStr = (s: string) => sanitizeInput(s);
 
 export const projectSchema = z.object({
-  code: z.string().trim().min(1, "Kode wajib diisi"),
-  name: z.string().trim().min(1, "Nama project wajib diisi"),
-  location: z.string().trim().optional(),
-  description: z.string().trim().optional(),
+  code: z.string().trim().min(1, "Kode wajib diisi").transform(safeStr),
+  name: z.string().trim().min(1, "Nama project wajib diisi").transform(safeStr),
+  location: z.string().trim().optional().transform(v => v ? safeStr(v) : v),
+  description: z.string().trim().optional().transform(v => v ? safeStr(v) : v),
   status: z.enum(["active", "inactive", "completed"]).default("active"),
   startDate: z.date().optional(),
   targetEndDate: z.date().optional(),
@@ -15,9 +18,9 @@ export type ProjectInput = z.infer<typeof projectSchema>;
 
 export const unitSchema = z.object({
   projectId: z.string().min(1, "Project wajib dipilih"),
-  code: z.string().trim().min(1, "Kode/Nomor unit wajib diisi"),
-  cluster: z.string().trim().optional(),
-  typeName: z.string().trim().optional(),
+  code: z.string().trim().min(1, "Kode/Nomor unit wajib diisi").transform(safeStr),
+  cluster: z.string().trim().nullish().transform(v => (v ? safeStr(v) : v ?? undefined)),
+  typeName: z.string().trim().nullish().transform(v => (v ? safeStr(v) : v ?? undefined)),
   landArea: z.coerce.number().min(0, "Luas tanah tidak valid"),
   buildingArea: z.coerce.number().min(0, "Luas bangunan tidak valid"),
   price: z.coerce.number().min(0, "Harga tidak valid"),
@@ -38,11 +41,11 @@ export const unitSchema = z.object({
 export type UnitInput = z.infer<typeof unitSchema>;
 
 export const customerSchema = z.object({
-  name: z.string().trim().min(1, "Nama wajib diisi"),
-  nik: z.string().trim().optional(),
-  phone: z.string().trim().min(1, "Nomor HP wajib diisi"),
+  name: z.string().trim().min(1, "Nama wajib diisi").transform(safeStr),
+  nik: z.string().trim().optional().transform(v => v ? safeStr(v) : v),
+  phone: z.string().trim().min(1, "Nomor HP wajib diisi").transform(safeStr),
   email: z.string().trim().email("Email tidak valid").optional().or(z.literal("")),
-  address: z.string().trim().optional(),
+  address: z.string().trim().optional().transform(v => v ? safeStr(v) : v),
   source: z.enum(["walk_in", "ads", "referral", "social_media", "website", "other"]).default("other"),
   status: z.enum(["prospect", "booking", "kpr_process", "akad", "buyer", "cancelled"]).default("prospect"),
   assignedMarketingId: z.string().optional(),
@@ -50,13 +53,13 @@ export const customerSchema = z.object({
 export type CustomerInput = z.infer<typeof customerSchema>;
 
 export const vendorSchema = z.object({
-  name: z.string().trim().min(1, "Nama vendor wajib diisi"),
-  phone: z.string().trim().optional(),
+  name: z.string().trim().min(1, "Nama vendor wajib diisi").transform(safeStr),
+  phone: z.string().trim().optional().transform(v => v ? safeStr(v) : v),
   email: z.string().trim().email("Email tidak valid").optional().or(z.literal("")),
-  address: z.string().trim().optional(),
-  legalDocNumber: z.string().trim().optional(),
+  address: z.string().trim().optional().transform(v => v ? safeStr(v) : v),
+  legalDocNumber: z.string().trim().optional().transform(v => v ? safeStr(v) : v),
   status: z.enum(["active", "inactive"]).default("active"),
-  notes: z.string().optional(),
+  notes: z.string().optional().transform(v => v ? safeStr(v) : v),
 });
 export type VendorInput = z.infer<typeof vendorSchema>;
 

@@ -22,6 +22,7 @@ import { eq, ne, and, desc, sql, sum, lt, isNotNull, or, inArray } from "drizzle
 import { revalidatePath } from "next/cache";
 import { writeAuditLog, safeWriteBlockedTransitionLog } from "./audit";
 import { createNotification, notifyUsersWithRoles } from "./notification";
+import { applyRateLimit } from "@/server/middleware/apply-rate-limit";
 import {
   spkSchema,
   spmbSchema,
@@ -33,6 +34,7 @@ import {
   reviewVendorComplaintSchema,
   customerComplaintSchema,
   resolveCustomerComplaintSchema,
+  spkUpdateSchema,
 } from "../validators/production";
 
 // ==========================================
@@ -44,6 +46,10 @@ import {
 export async function getProgressPhotosForProject(projectId: string) {
   await requireAuth();
 
+  // BUG 8 FIX: The OR join condition caused duplicate rows when a log had both
+  // photoAttachmentId AND a matching entityId/entityType attachment record.
+  // Fix: use only the direct photoAttachmentId join for the main gallery query.
+  // The entityId/entityType path is only used for getSpkDetails detail view.
   const rows = await db
     .select({
       unitId: spks.unitId,
@@ -58,10 +64,7 @@ export async function getProgressPhotosForProject(projectId: string) {
     .innerJoin(workItems, eq(spkProgressLogs.workItemId, workItems.id))
     .innerJoin(
       attachments,
-      or(
-        eq(spkProgressLogs.photoAttachmentId, attachments.id),
-        and(eq(attachments.entityId, spkProgressLogs.id), eq(attachments.entityType, "progress_log"))
-      )
+      eq(spkProgressLogs.photoAttachmentId, attachments.id)
     )
     .where(eq(spks.projectId, projectId))
     .orderBy(desc(spkProgressLogs.progressDate));
@@ -197,6 +200,7 @@ export async function getSpkDetails(spkId: string) {
 
 export async function createSpk(data: unknown) {
   const activeUser = await requireAuth();
+  applyRateLimit(activeUser.id);
   const parsed = spkSchema.parse(data);
 
   // ── FASE 6: DP GATE CHECK ──────────────────────────────────────────────
@@ -318,7 +322,8 @@ export async function createSpk(data: unknown) {
 
 export async function deleteSpk(spkId: string) {
   // Super Admin, Admin Kantor, and Admin Keuangan can delete SPKs
-  await requireAnyRole(["Super Admin", "Admin Kantor", "Admin Keuangan"]);
+  const activeUser = await requireAnyRole(["Super Admin", "Admin Kantor", "Admin Keuangan"]);
+  applyRateLimit(activeUser.id);
 
   const [spk] = await db.select().from(spks).where(eq(spks.id, spkId)).limit(1);
   if (!spk) throw new Error("SPK tidak ditemukan.");
@@ -329,11 +334,23 @@ export async function deleteSpk(spkId: string) {
     if (unitResults.length > 0) {
       const unit = unitResults[0];
 
+      // BUG 7 FIX: Correctly restore unit status when SPK deleted
+      // - Ready Stock: keep current status unchanged
+      // - Has booking with KPR scheme: restore to "kpr_process"
+      // - Has booking (non-KPR): restore to "booking"
+      // - No booking: restore to "belum_siap"
       let restoredStatus: "available" | "belum_siap" | "booking" | "kpr_process" | "payment_pending" | "sold" | "construction" | "construction_done" | "overdue" | "cancelled" = "belum_siap";
       if (unit.isReadyStock) {
         restoredStatus = unit.status as any;
       } else if (unit.currentBookingId) {
-        restoredStatus = "booking";
+        // Check if the associated booking uses KPR scheme to restore correct status
+        const bookingRow = await tx
+          .select({ paymentScheme: bookingsTable.paymentScheme })
+          .from(bookingsTable)
+          .where(eq(bookingsTable.id, unit.currentBookingId))
+          .limit(1)
+          .then((res) => res[0]);
+        restoredStatus = bookingRow?.paymentScheme === "kpr" ? "kpr_process" : "booking";
       }
 
       await tx.update(units).set({
@@ -362,9 +379,13 @@ export async function deleteSpk(spkId: string) {
   return { success: true };
 }
 
-export async function updateSpk(spkId: string, data: any) {
+// BUG 13 FIX: Use spkUpdateSchema instead of `data: any` — validates and sanitizes input
+export async function updateSpk(spkId: string, data: unknown) {
   // Super Admin, Admin Kantor, and Admin Keuangan can edit SPKs
   const activeUser = await requireAnyRole(["Super Admin", "Admin Kantor", "Admin Keuangan"]);
+  applyRateLimit(activeUser.id);
+
+  const parsed = spkUpdateSchema.parse(data);
 
   const [existingSpk] = await db.select().from(spks).where(eq(spks.id, spkId)).limit(1);
   if (!existingSpk) throw new Error("SPK tidak ditemukan.");
@@ -372,22 +393,22 @@ export async function updateSpk(spkId: string, data: any) {
   await db.transaction(async (tx) => {
     // 1. Update SPK
     await tx.update(spks).set({
-      title: data.title,
-      workDescription: data.workDescription,
-      specification: data.specification || null,
-      rabAmount: data.rabAmount,
-      startDate: new Date(data.startDate),
-      targetEndDate: new Date(data.targetEndDate),
-      vendorId: data.vendorId,
+      title: parsed.title,
+      workDescription: parsed.workDescription,
+      specification: parsed.specification || null,
+      rabAmount: parsed.rabAmount,
+      startDate: parsed.startDate,
+      targetEndDate: parsed.targetEndDate,
+      vendorId: parsed.vendorId,
       updatedAt: new Date(),
     }).where(eq(spks.id, spkId)).run();
 
     // 2. Update custom weights if provided
-    if (data.customWeights && data.customWeights.length > 0) {
+    if (parsed.customWeights && parsed.customWeights.length > 0) {
       // Delete old weights
       await tx.delete(spkWorkItemWeights).where(eq(spkWorkItemWeights.spkId, spkId)).run();
       // Insert new weights
-      for (const item of data.customWeights) {
+      for (const item of parsed.customWeights) {
         await tx.insert(spkWorkItemWeights).values({
           id: crypto.randomUUID(),
           spkId,
@@ -403,11 +424,11 @@ export async function updateSpk(spkId: string, data: any) {
     module: "production",
     entityId: spkId,
     entityType: "spk",
-    details: { spkNumber: existingSpk.spkNumber, title: data.title },
+    details: { spkNumber: existingSpk.spkNumber, title: parsed.title },
   });
 
   // check if RAB is verified (was 0, now > 0)
-  const isRabVerified = existingSpk.rabAmount === 0 && Number(data.rabAmount) > 0;
+  const isRabVerified = existingSpk.rabAmount === 0 && Number(parsed.rabAmount) > 0;
   if (isRabVerified) {
     try {
       const spkDetails = await db
@@ -602,6 +623,7 @@ export async function getSpmbs(spkId?: string) {
 
 export async function inputProgress(data: unknown) {
   const activeUser = await requireAuth();
+  applyRateLimit(activeUser.id);
   const parsed = progressInputSchema.parse(data);
 
   let progressLogIdResult = "";

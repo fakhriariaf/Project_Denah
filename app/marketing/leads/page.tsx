@@ -4,29 +4,21 @@ import { projects as projectsTable, units as unitsTable, customers as customersT
 import { user as userTable, userEmployments as userEmploymentsTable } from "@/db/schema/auth";
 import { roles as rolesTable } from "@/db/schema/access";
 import { requireAuth, getSessionRole } from "@/server/permissions";
-import { desc, eq, and } from "drizzle-orm";
+import { desc, eq, and, ilike, or, count } from "drizzle-orm";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { 
   Users, 
   TrendingUp, 
   MessageSquare, 
-  Calendar,
-  Phone,
   UserPlus,
   Target,
-  Sparkles,
   ShieldAlert,
 } from "lucide-react";
 import { SearchInput } from "@/components/ui/search-input";
 import CreateLeadDialog from "@/app/marketing/leads/create-lead-dialog";
-import EditLeadDialog from "@/app/marketing/leads/edit-lead-dialog";
-import AddFollowupDialog from "@/app/marketing/leads/add-followup-dialog";
-import { DeleteConfirm } from "@/components/delete-confirm";
-import { deleteLead } from "@/server/actions/marketing";
-import { formatDate } from "@/lib/format-utils";
 import { DataTablePagination } from "@/components/ui/data-table-pagination";
 import { Translate } from "@/components/translate";
+import { LeadsTableClient } from "@/app/marketing/leads/leads-table-client";
 
 export const revalidate = 0;
 
@@ -68,20 +60,86 @@ export default async function LeadsPage({
     .where(eq(userTable.status, "active"));
 
   // 2. Determine RBAC scope for query
-  // Marketing Biasa: only sees leads assigned to them
-  // Marketing Manager: sees all leads (for monitoring), but can filter "mine"
-  // Super Admin / Admin Kantor / Direksi / Keuangan: sees all
   const isBiasaRole = sessionRoleInfo.isMarketing && !sessionRoleInfo.isMarketingManager && !sessionRoleInfo.isAdminKantor && !sessionRoleInfo.isSuperAdmin;
 
-  // Build query — push RBAC scope to DB WHERE, not in-memory filter
-  const rbacConditions = [];
-  if (isBiasaRole) {
-    rbacConditions.push(eq(leadsTable.assignedMarketingId, activeUser.id));
-  } else if (mineFilter) {
-    rbacConditions.push(eq(leadsTable.assignedMarketingId, activeUser.id));
+  // Build WHERE conditions — all filtering done in DB, not in-memory (Item 2 fix)
+  const whereConditions: ReturnType<typeof eq>[] = [];
+
+  // RBAC scope
+  if (isBiasaRole || mineFilter) {
+    whereConditions.push(eq(leadsTable.assignedMarketingId, activeUser.id));
   }
 
-  const allLeadsQuery = db.select({
+  // Status filter
+  if (statusFilter) {
+    whereConditions.push(eq(leadsTable.status, statusFilter as "new" | "contacted" | "follow_up" | "converted" | "lost"));
+  }
+
+  // Search filter — case-insensitive partial match across name, phone, projectName, unitCode
+  let searchCondition: ReturnType<typeof or> | undefined;
+  if (q && q.trim() !== "") {
+    const searchTerm = `%${q.trim()}%`;
+    searchCondition = or(
+      ilike(leadsTable.name, searchTerm),
+      ilike(leadsTable.phone, searchTerm),
+      ilike(projectsTable.name, searchTerm),
+      ilike(unitsTable.code, searchTerm),
+    );
+  }
+
+  const whereClause = searchCondition
+    ? whereConditions.length > 0
+      ? and(...whereConditions, searchCondition)
+      : searchCondition
+    : whereConditions.length > 0
+      ? and(...whereConditions)
+      : undefined;
+
+  // Count query for accurate pagination (runs same filters, no LIMIT)
+  const [countResult] = await db
+    .select({ totalCount: count() })
+    .from(leadsTable)
+    .leftJoin(projectsTable, eq(leadsTable.interestedProjectId, projectsTable.id))
+    .leftJoin(unitsTable, eq(leadsTable.interestedUnitId, unitsTable.id))
+    .leftJoin(userTable, eq(leadsTable.assignedMarketingId, userTable.id))
+    .where(whereClause);
+
+  const totalFilteredItems = countResult?.totalCount ?? 0;
+
+  // Metrics — scoped totals use same RBAC conditions without search/status filter
+  const scopeOnlyClause = whereConditions.length > 0 ? and(...whereConditions) : undefined;
+
+  const [metricsRows] = await db
+    .select({
+      totalLeads: count(),
+    })
+    .from(leadsTable)
+    .where(scopeOnlyClause);
+
+  const [newLeadsRow] = await db
+    .select({ cnt: count() })
+    .from(leadsTable)
+    .where(scopeOnlyClause ? and(scopeOnlyClause, eq(leadsTable.status, "new")) : eq(leadsTable.status, "new"));
+
+  const [followUpRow] = await db
+    .select({ cnt: count() })
+    .from(leadsTable)
+    .where(scopeOnlyClause ? and(scopeOnlyClause, eq(leadsTable.status, "follow_up")) : eq(leadsTable.status, "follow_up"));
+
+  const [convertedRow] = await db
+    .select({ cnt: count() })
+    .from(leadsTable)
+    .where(scopeOnlyClause ? and(scopeOnlyClause, eq(leadsTable.status, "converted")) : eq(leadsTable.status, "converted"));
+
+  const totalLeads = metricsRows?.totalLeads ?? 0;
+  const newLeads = newLeadsRow?.cnt ?? 0;
+  const followUpLeads = followUpRow?.cnt ?? 0;
+  const convertedLeads = convertedRow?.cnt ?? 0;
+  const conversionRate = totalLeads > 0 ? Math.round((convertedLeads / totalLeads) * 100) : 0;
+
+  // Paginated data query — server-side LIMIT/OFFSET
+  const offset = (currentPage - 1) * itemsPerPage;
+  const paginatedLeads = await db.select({
     id: leadsTable.id,
     name: leadsTable.name,
     phone: leadsTable.phone,
@@ -101,35 +159,10 @@ export default async function LeadsPage({
   .leftJoin(projectsTable, eq(leadsTable.interestedProjectId, projectsTable.id))
   .leftJoin(unitsTable, eq(leadsTable.interestedUnitId, unitsTable.id))
   .leftJoin(userTable, eq(leadsTable.assignedMarketingId, userTable.id))
-  .where(rbacConditions.length > 0 ? and(...rbacConditions) : undefined)
-  .orderBy(desc(leadsTable.createdAt));
-
-  const allLeads = await allLeadsQuery;
-
-  // scopedLeads = already filtered by DB — no further in-memory RBAC filter needed
-  const scopedLeads = allLeads;
-
-  // 4. Search + status filter
-  const filteredLeads = scopedLeads.filter(lead => {
-    const matchesSearch = q === "" || 
-      lead.name.toLowerCase().includes(q.toLowerCase()) || 
-      lead.phone.includes(q) ||
-      (lead.projectName && lead.projectName.toLowerCase().includes(q.toLowerCase())) ||
-      (lead.unitCode && lead.unitCode.toLowerCase().includes(q.toLowerCase()));
-      
-    const matchesStatus = statusFilter === "" || lead.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
-
-  const totalFilteredItems = filteredLeads.length;
-  const paginatedLeads = filteredLeads.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
-
-  // Calculate Metrics (based on scoped leads)
-  const totalLeads = scopedLeads.length;
-  const newLeads = scopedLeads.filter(l => l.status === "new").length;
-  const followUpLeads = scopedLeads.filter(l => l.status === "follow_up").length;
-  const convertedLeads = scopedLeads.filter(l => l.status === "converted").length;
-  const conversionRate = totalLeads > 0 ? Math.round((convertedLeads / totalLeads) * 100) : 0;
+  .where(whereClause)
+  .orderBy(desc(leadsTable.createdAt))
+  .limit(itemsPerPage)
+  .offset(offset);
 
   // RBAC permissions for UI
   const canDelete = sessionRoleInfo.isSuperAdmin || sessionRoleInfo.isAdminKantor;
@@ -137,23 +170,6 @@ export default async function LeadsPage({
                   sessionRoleInfo.isMarketingManager || sessionRoleInfo.isMarketing;
   const canAdd = sessionRoleInfo.isSuperAdmin || sessionRoleInfo.isAdminKantor || 
                  sessionRoleInfo.isMarketingManager || sessionRoleInfo.isMarketing;
-
-  const sourceMap: Record<string, string> = {
-    walk_in: "Walk In",
-    ads: "Iklan Digital",
-    referral: "Referral",
-    social_media: "Sosial Media",
-    website: "Website",
-    other: "Lainnya"
-  };
-
-  const statusMap: Record<string, { bg: string; label: string; dot: string }> = {
-    new:        { bg: "bg-emerald-50 text-emerald-700 border-emerald-200", dot: "bg-emerald-500", label: "Baru" },
-    contacted:  { bg: "bg-blue-50 text-blue-700 border-blue-200",         dot: "bg-blue-500",    label: "Dihubungi" },
-    follow_up:  { bg: "bg-amber-50 text-amber-700 border-amber-200",      dot: "bg-amber-500",   label: "Follow Up" },
-    converted:  { bg: "bg-[#DDE8D8] text-[#4F6F52] border-[#8FAF9A]/40", dot: "bg-[#4F6F52]",  label: "Deal ✓" },
-    lost:       { bg: "bg-rose-50 text-rose-700 border-rose-200",         dot: "bg-rose-500",    label: "Tidak Jadi" },
-  };
 
   const statusFilterOptions = [
     { value: "", label: "status_all" },
@@ -311,156 +327,39 @@ export default async function LeadsPage({
         </form>
       </div>
 
-      {/* ── DATA TABLE ── */}
-      <div className="bg-white border border-[#D6DED2] rounded-2xl shadow-sage overflow-hidden">
-        {/* Table Header */}
-        <div className="px-6 py-3.5 border-b border-[#D6DED2] bg-[#F7F8F3]/70">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-[#66736A] uppercase tracking-wider">
-              <Translate namespace="lead" translationKey="list_title" />
-              {mineFilter && !isBiasaRole && (
-                <span className="ml-2 text-[#4F6F52] bg-[#DDE8D8] px-2 py-0.5 rounded-full normal-case font-semibold">
-                  <Translate namespace="lead" translationKey="filter_mine" />
-                </span>
-              )}
-            </span>
-            <span className="text-xs font-mono text-[#8FAF9A] tabular-nums">
-              <Translate namespace="lead" translationKey="list_subtitle" values={{ filtered: filteredLeads.length.toString(), total: totalLeads.toString() }} />
-            </span>
-          </div>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-[#D6DED2] text-[#66736A] text-xs font-bold uppercase tracking-wider">
-                <th className="py-3 px-6"><Translate namespace="lead" translationKey="col_prospect" /></th>
-                <th className="py-3 px-6"><Translate namespace="lead" translationKey="col_source_interest" /></th>
-                <th className="py-3 px-6"><Translate namespace="lead" translationKey="col_marketing" /></th>
-                <th className="py-3 px-6 text-center"><Translate namespace="lead" translationKey="col_status" /></th>
-                <th className="py-3 px-6"><Translate namespace="lead" translationKey="col_date" /></th>
-                <th className="py-3 px-6 text-right"><Translate namespace="lead" translationKey="col_action" /></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#D6DED2]/60">
-              {paginatedLeads.length > 0 ? (
-                paginatedLeads.map((lead) => {
-                  const statusInfo = statusMap[lead.status] || { bg: "bg-slate-50 text-slate-600 border-slate-200", dot: "bg-slate-400", label: lead.status };
-                  return (
-                    <tr key={lead.id} className="hover:bg-[#F7F8F3]/80 transition-colors duration-150 group">
-                      <td className="py-4 px-6">
-                        <div className="flex items-start gap-3">
-                          <div className="h-8 w-8 rounded-full bg-[#DDE8D8] text-[#4F6F52] flex items-center justify-center font-bold text-xs shrink-0 border border-[#8FAF9A]/20">
-                            {lead.name.slice(0, 2).toUpperCase()}
-                          </div>
-                          <div className="space-y-0.5">
-                            <div className="font-semibold text-[#243028] text-sm">{lead.name}</div>
-                            <div className="flex items-center text-xs text-[#66736A] font-mono">
-                              <Phone className="h-3 w-3 mr-1 text-[#8FAF9A]" /> {lead.phone}
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="py-4 px-6">
-                        <div className="space-y-0.5">
-                          <div className="text-sm font-semibold text-[#243028]">{lead.projectName || <span className="text-[#A8B0AA] italic font-normal"><Translate namespace="lead" translationKey="unassigned_project" /></span>}</div>
-                          <div className="text-xs text-[#66736A] flex items-center gap-1.5">
-                            {lead.unitCode && (
-                              <span className="font-mono bg-[#DDE8D8]/60 text-[#4F6F52] px-1.5 py-0.5 rounded text-[10px] font-semibold border border-[#8FAF9A]/20">
-                                {lead.unitCode}
-                              </span>
-                            )}
-                            <span className="text-[#A8B0AA]">•</span>
-                            <span className="font-medium"><Translate namespace="lead" translationKey={`source_${lead.source}` as any} /></span>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="py-4 px-6">
-                        <div className="flex items-center gap-2">
-                          {lead.marketingName ? (
-                            <>
-                              <div className="h-6 w-6 rounded-full bg-[#DDE8D8] text-[#4F6F52] flex items-center justify-center text-[9px] font-bold shrink-0">
-                                {lead.marketingName.slice(0, 2).toUpperCase()}
-                              </div>
-                              <span className="text-sm font-medium text-[#243028]">{lead.marketingName}</span>
-                            </>
-                          ) : (
-                            <span className="text-xs text-[#A8B0AA] italic"><Translate namespace="lead" translationKey="unassigned_marketing" /></span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="py-4 px-6 text-center">
-                        <Badge className={`border font-semibold text-xs ${statusInfo.bg} flex items-center gap-1.5 w-fit mx-auto`}>
-                          <span className={`h-1.5 w-1.5 rounded-full ${statusInfo.dot} shrink-0`} />
-                          <Translate namespace="lead" translationKey={`status_${lead.status}` as any} />
-                        </Badge>
-                      </td>
-                      <td className="py-4 px-6">
-                        <div className="flex items-center gap-1 text-xs text-[#66736A]">
-                          <Calendar className="h-3.5 w-3.5 text-[#8FAF9A]" />
-                          <span className="font-mono">
-                            {formatDate(lead.createdAt)}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="py-4 px-6">
-                        {/* Action buttons — RBAC controlled */}
-                        <div className="flex items-center justify-end gap-1.5">
-                          {/* Follow-up: all marketing roles */}
-                          <AddFollowupDialog lead={lead} />
-
-                          {/* Edit: Marketing and above */}
-                          {canEdit && (
-                            <EditLeadDialog
-                              lead={lead}
-                              projects={projects}
-                              marketings={marketings}
-                              currentUser={activeUser}
-                              currentUserRole={sessionRoleInfo}
-                            />
-                          )}
-
-                          {/* Delete: ONLY Super Admin & Admin Kantor */}
-                          {canDelete && (
-                            <DeleteConfirm
-                              onConfirm={async () => {
-                                "use server";
-                                return deleteLead(lead.id);
-                              }}
-                              label={`lead "${lead.name}"`}
-                            />
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              ) : (
-                <tr>
-                  <td colSpan={6} className="py-16 text-center">
-                    <div className="flex flex-col items-center gap-3">
-                      <div className="h-16 w-16 rounded-full bg-[#DDE8D8]/50 flex items-center justify-center">
-                        <Sparkles className="h-8 w-8 text-[#8FAF9A]" />
-                      </div>
-                      <div>
-                        <p className="font-semibold text-[#243028] text-sm"><Translate namespace="lead" translationKey="not_found" /></p>
-                        <p className="text-xs text-[#66736A] mt-1">
-                          {q || statusFilter 
-                            ? <Translate namespace="lead" translationKey="not_found_desc_1" />
-                            : isBiasaRole
-                              ? <Translate namespace="lead" translationKey="not_found_desc_2" />
-                              : <Translate namespace="lead" translationKey="not_found_desc_3" />}
-                        </p>
-                      </div>
-                    </div>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-          <DataTablePagination totalItems={totalFilteredItems} itemsPerPage={itemsPerPage} />
-        </div>
-      </div>
+      {/* ── DATA TABLE with Bulk Operations ── */}
+      <LeadsTableClient
+        leads={paginatedLeads.map((l) => ({
+          id: l.id,
+          name: l.name,
+          phone: l.phone,
+          source: l.source,
+          status: l.status,
+          notes: l.notes,
+          createdAt: l.createdAt,
+          assignedMarketingId: l.assignedMarketingId,
+          interestedProjectId: l.interestedProjectId,
+          interestedUnitId: l.interestedUnitId,
+          projectName: l.projectName,
+          unitCode: l.unitCode,
+          marketingName: l.marketingName,
+          customerId: l.customerId,
+        }))}
+        canBulkDelete={canDelete}
+        totalFilteredItems={totalFilteredItems}
+        totalLeads={totalLeads}
+        mineFilter={mineFilter}
+        isBiasaRole={isBiasaRole}
+        dialogData={{
+          projects,
+          marketings,
+          currentUser: { id: activeUser.id, name: activeUser.name || "" },
+          currentUserRole: sessionRoleInfo,
+          canEdit,
+          canDelete,
+        }}
+      />
+      <DataTablePagination totalItems={totalFilteredItems} itemsPerPage={itemsPerPage} />
     </div>
   );
 }

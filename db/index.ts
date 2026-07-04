@@ -40,6 +40,16 @@ export const schema = {
 
 let connectionString = process.env.DATABASE_URL || '';
 if (!connectionString.startsWith('postgres://') && !connectionString.startsWith('postgresql://')) {
+  // BUG 3 FIX: Warn clearly when DATABASE_URL is missing or not a valid PostgreSQL URL.
+  // This prevents silent fallback to localhost:5432 which fails without a clear error message.
+  const isLocalFallback = !connectionString || connectionString === 'local.db';
+  if (process.env.NODE_ENV !== 'test') {
+    console.warn(
+      '[db] WARNING: DATABASE_URL is not set or is not a valid PostgreSQL connection string.' +
+      ' Falling back to postgres://postgres:postgres@localhost:5432/postgres.' +
+      ' Ensure PostgreSQL is running locally or set DATABASE_URL to a valid Supabase/PostgreSQL URI.'
+    );
+  }
   connectionString = 'postgres://postgres:postgres@localhost:5432/postgres';
 }
 

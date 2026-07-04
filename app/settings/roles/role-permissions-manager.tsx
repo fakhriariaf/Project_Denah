@@ -107,7 +107,7 @@ export function RolePermissionsManager({ roles, permsByResource, rolePermMap }: 
     )
   );
   const [expandedResources, setExpandedResources] = useState<Set<string>>(
-    new Set(Object.keys(permsByResource).slice(0, 3))
+    new Set() // semua group collapsed by default — user expand manual
   );
   const [isPending, startTransition] = useTransition();
   const [togglingKey, setTogglingKey] = useState<string | null>(null);

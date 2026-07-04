@@ -277,6 +277,11 @@ export function PublicSiteplanViewer({ initialData }: PublicSiteplanViewerProps)
                   <feMergeNode in="SourceGraphic" />
                 </feMerge>
               </filter>
+
+              {/* Drop-shadow filter for polygon hover using sage green color */}
+              <filter id="drop-shadow-sage" x="-20%" y="-20%" width="140%" height="140%">
+                <feDropShadow dx="0" dy="4" stdDeviation="6" floodColor="rgba(79, 111, 82, 0.25)" floodOpacity="1" />
+              </filter>
             </defs>
 
             {/* Transform Group (Zoom/Pan) */}
@@ -335,17 +340,17 @@ export function PublicSiteplanViewer({ initialData }: PublicSiteplanViewerProps)
                     <polygon
                       points={coordsToPolygonPoints(shape.coordinates)}
                       fill={color.fill}
-                      fillOpacity={isDimmed ? 0.1 : isSelected ? 0.95 : isHovered ? 0.9 : 0.85}
+                      fillOpacity={isDimmed ? 0.1 : isSelected ? 0.95 : isHovered ? 1.0 : 0.7}
                       stroke={isSelected ? "#FF6B00" : isHovered ? color.stroke : color.stroke}
                       strokeWidth={isSelected ? 3.5 : isHovered ? 2.5 : 1.5}
                       filter={
                         isSelected
                           ? "url(#glow-selected)"
                           : isHovered
-                          ? "url(#glow-highlight)"
+                          ? "url(#drop-shadow-sage)"
                           : undefined
                       }
-                      className="transition-all duration-300"
+                      className="transition-[opacity,filter] duration-200 ease-in-out"
                     />
 
                     {/* Code label text */}

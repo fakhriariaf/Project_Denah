@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, doublePrecision, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, doublePrecision, integer, index } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { user } from "./auth";
 import { projects, units, customers, financeAccounts } from "./master";
@@ -49,7 +49,10 @@ export const bookings = pgTable("bookings", {
   termin: integer("termin"),
   createdAt: defaultCreatedAt(),
   updatedAt: defaultUpdatedAt(),
-});
+}, (table) => ({
+  statusIdx: index("idx_bookings_status").on(table.status),
+  bookingDateIdx: index("idx_bookings_booking_date").on(table.bookingDate),
+}));
 
 export const bookingStatusHistories = pgTable("booking_status_histories", {
   id: text("id").primaryKey(),

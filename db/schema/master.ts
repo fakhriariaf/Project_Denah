@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, doublePrecision, integer, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean, doublePrecision, integer, jsonb, index } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { user } from "./auth";
 
@@ -62,7 +62,10 @@ export const units = pgTable("units", {
   notes: text("notes"),
   createdAt: defaultCreatedAt(),
   updatedAt: defaultUpdatedAt(),
-});
+}, (table) => ({
+  statusIdx: index("idx_units_status").on(table.status),
+  projectIdIdx: index("idx_units_project_id").on(table.projectId),
+}));
 
 export const siteplanShapes = pgTable("siteplan_shapes", {
   id: text("id").primaryKey(),

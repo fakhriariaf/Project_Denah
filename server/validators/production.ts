@@ -19,6 +19,19 @@ export const spkSchema = z.object({
 });
 export type SpkInput = z.infer<typeof spkSchema>;
 
+// BUG 13 FIX: Typed update schema for updateSpk — replaces `data: any` parameter
+export const spkUpdateSchema = z.object({
+  vendorId: z.string().min(1, "Kontraktor/Vendor wajib dipilih"),
+  title: z.string().trim().min(3, "Judul pekerjaan minimal 3 karakter"),
+  workDescription: z.string().trim().min(5, "Deskripsi pekerjaan minimal 5 karakter"),
+  specification: z.string().trim().optional().nullable(),
+  rabAmount: z.coerce.number().min(0, "Nilai RAB tidak boleh negatif"),
+  startDate: z.coerce.date(),
+  targetEndDate: z.coerce.date(),
+  customWeights: z.array(spkWorkItemWeightSchema).optional().nullable(),
+});
+export type SpkUpdateInput = z.infer<typeof spkUpdateSchema>;
+
 export const spmbSchema = z.object({
   spkId: z.string().min(1, "SPK wajib dipilih"),
   issueDate: z.coerce.date(),

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useRef } from "react";
 import { Trash2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,24 +17,64 @@ type DeleteConfirmProps = {
   label?: string;
   description?: React.ReactNode;
   onConfirm: () => Promise<{ success: boolean }>;
+  /**
+   * Optional: called when user confirms deletion, before the actual onConfirm.
+   * Use with `useAnimatedDelete` hook to trigger row fade-out animation.
+   * Should return a promise that resolves after animation completes.
+   */
+  onAnimateStart?: () => Promise<void>;
+  /**
+   * When true, automatically animates the closest <tr> parent with a fade-out
+   * before executing the delete action. Defaults to true.
+   */
+  animateRow?: boolean;
 };
 
 export function DeleteConfirm({
   label = "",
   description,
   onConfirm,
+  onAnimateStart,
+  animateRow = true,
 }: DeleteConfirmProps) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  /**
+   * Finds the closest <tr> ancestor and applies the fade-out animation.
+   * Returns a promise that resolves after the animation completes (300ms).
+   */
+  const animateRowFadeOut = (): Promise<void> => {
+    return new Promise((resolve) => {
+      const row = triggerRef.current?.closest("tr");
+      if (row) {
+        row.classList.add("animate-row-delete");
+        setTimeout(resolve, 300);
+      } else {
+        resolve();
+      }
+    });
+  };
 
   const handleConfirm = () => {
     startTransition(async () => {
       setError(null);
       try {
-        await onConfirm();
+        // Close dialog first so user sees the row animation
         setOpen(false);
+
+        // Trigger custom animation callback if provided
+        if (onAnimateStart) {
+          await onAnimateStart();
+        } else if (animateRow) {
+          // Auto-animate the closest table row
+          await animateRowFadeOut();
+        }
+
+        await onConfirm();
       } catch (err) {
         setError(err instanceof Error ? err.message : t("delete_confirm.error"));
       }
@@ -45,6 +85,7 @@ export function DeleteConfirm({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger nativeButton={true} render={
         <Button
+          ref={triggerRef}
           variant="outline"
           size="sm"
           className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 border-rose-200 hover:border-rose-300 transition-all duration-200"

@@ -129,14 +129,17 @@ export async function getSessionRole(userId: string) {
   const role = details?.roleName || "Viewer";
   const roleId = details?.roleId || "";
   
+  // BUG 10 FIX: Use role name consistently for all role checks — no hardcoded role IDs
+  // Previously isPengawas used roleId === "role_pengawas" (hardcoded ID) while others used role name.
+  // Unified to role name for consistency and resilience to seed changes.
   const isSuperAdmin = role === "Super Admin";
   const isAdminKantor = isSuperAdmin || role === "Admin Kantor";
   const isMarketingManager = isSuperAdmin || role === "Marketing Manager";
   const isMarketing = isSuperAdmin || role === "Marketing" || role === "Marketing Manager";
   const isKeuangan = isSuperAdmin || role === "Admin Keuangan";
   const isDireksi = isSuperAdmin || role === "Direksi / Manager";
-  const isPengawas = isSuperAdmin || roleId === "role_pengawas";
-  const isVendor = roleId === "role_vendor";
+  const isPengawas = isSuperAdmin || role === "Pengawas Lapangan";
+  const isVendor = role === "Kontraktor / Vendor";
   const isViewer = isSuperAdmin || role === "Viewer";
   
   const isEditor = isSuperAdmin || role === "Admin Kantor";

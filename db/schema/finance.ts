@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, doublePrecision, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, doublePrecision, integer, index } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { projects, units, customers, financeAccounts, financeCategories } from "./master";
 import { bookings } from "./marketing";
@@ -64,7 +64,9 @@ export const transactions = pgTable("transactions", {
   createdBy: text("created_by").references(() => user.id).notNull(),
   createdAt: defaultCreatedAt(),
   updatedAt: defaultUpdatedAt(),
-});
+}, (table) => ({
+  createdAtIdx: index("idx_transactions_created_at").on(table.createdAt),
+}));
 
 export const transactionApprovals = pgTable("transaction_approvals", {
   id: text("id").primaryKey(),

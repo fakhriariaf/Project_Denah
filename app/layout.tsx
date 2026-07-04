@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, Roboto_Mono } from "next/font/google";
 import "./globals.css";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { Toaster } from "sonner";
 import NextTopLoader from "nextjs-toploader";
 
 const inter = Inter({
@@ -60,6 +61,12 @@ export default function RootLayout({
         <TooltipProvider>
           {children}
         </TooltipProvider>
+        <Toaster
+          position="top-right"
+          toastOptions={{ duration: 4000 }}
+          visibleToasts={3}
+          richColors
+        />
       </body>
     </html>
   );

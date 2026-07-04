@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Users, AlertCircle, Loader2 } from "lucide-react";
 import { parseServerError } from "@/lib/error-parser";
+import { handleActionResult, type ActionResult } from "@/lib/action-utils";
 import { useI18n } from "@/lib/i18n";
 import { z } from "zod";
 
@@ -130,17 +131,19 @@ export function CustomerForm({
       setError(null);
       try {
         if (id) {
-          await updateCustomer(id, submittedData);
-          alert("Data konsumen berhasil diperbarui!");
+          const res = await updateCustomer(id, submittedData);
+          handleActionResult({ success: true, data: res } as ActionResult<typeof res>, { successMessage: `Konsumen ${data.name} berhasil diperbarui` });
         } else {
-          await createCustomer(submittedData);
-          alert("Data konsumen berhasil disimpan!");
+          const res = await createCustomer(submittedData);
+          handleActionResult({ success: true, data: res } as ActionResult<typeof res>, { successMessage: `Konsumen ${data.name} berhasil dibuat` });
         }
         setOpen(false);
         if (!id) reset();
         window.location.reload();
       } catch (err) {
-        setError(parseServerError(err));
+        const errorMsg = parseServerError(err);
+        handleActionResult({ success: false, error: errorMsg });
+        setError(errorMsg);
       }
     });
   };
