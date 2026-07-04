@@ -22,10 +22,13 @@ import { bookings } from "@/db/schema/marketing";
 import { checkAndTransitionToConstruction } from "./marketing";
 import { attachments, notifications } from "@/db/schema/system";
 import { getCurrentUser, requireAuth, hasRole, getSessionRole } from "@/server/permissions";
-import { eq, and, desc, sum, sql, inArray, lte, isNotNull } from "drizzle-orm";
+import { eq, and, desc, sum, sql, inArray, lte, isNotNull, gte, count, ilike, or } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { cachedQuery } from "@/lib/cache";
+import { calculateOffset, validatePaginationParams, type PaginatedResult } from "@/lib/pagination";
 import { writeAuditLog } from "./audit";
 import { createNotification, notifyUsersWithRoles } from "./notification";
+import { applyRateLimit } from "@/server/middleware/apply-rate-limit";
 import {
   invoiceSchema,
   paymentSchema,
@@ -56,6 +59,10 @@ export async function computeCurrentBalance(accountId: string): Promise<number> 
     .where(and(
       eq(transactions.accountId, accountId),
       eq(transactions.type, "income"),
+      // BUG 5 AUDIT: All income inserts use approvalStatus = "not_required" by design.
+      // Payment verifications (verifyPayment) and KPR realizations (realizeKpr) both set
+      // approvalStatus = "not_required" for income transactions. This filter is intentional
+      // and consistent with all income insert paths in finance.ts and marketing.ts.
       eq(transactions.approvalStatus, "not_required")
     ));
 
@@ -135,6 +142,7 @@ export async function getInvoice(invoiceId: string) {
 
 export async function createInvoice(data: unknown) {
   const activeUser = await requireAuth();
+  applyRateLimit(activeUser.id);
   const parsed = invoiceSchema.parse(data);
 
   const invoiceId = crypto.randomUUID();
@@ -199,6 +207,7 @@ export async function getPayments(projectId?: string) {
 
 export async function createPayment(data: unknown) {
   const activeUser = await requireAuth();
+  applyRateLimit(activeUser.id);
   const parsed = paymentSchema.parse(data);
 
   const paymentId = crypto.randomUUID();
@@ -239,6 +248,7 @@ export async function createPayment(data: unknown) {
   });
 
   revalidatePath("/finance/payments");
+  revalidatePath("/dashboard");
   return { success: true, paymentId };
 }
 
@@ -511,59 +521,30 @@ export async function verifyPayment(
   });
 
   // Find related booking and marketing PIC to send a targeted notification
+  // BUG 2 FIX: Use single JOIN query instead of 3 chained N+1 queries post-transaction
   let marketingPicId: string | null = null;
   let unitCodeStr = "";
   let bookingNumStr = "";
 
   try {
-    const payment = await db
+    const notifData = await db
       .select({
-        invoiceId: payments.invoiceId,
+        marketingId: bookings.marketingId,
+        bookingNumber: bookings.bookingNumber,
+        unitCode: units.code,
       })
       .from(payments)
+      .leftJoin(invoices, eq(payments.invoiceId, invoices.id))
+      .leftJoin(bookings, eq(invoices.bookingId, bookings.id))
+      .leftJoin(units, eq(invoices.unitId, units.id))
       .where(eq(payments.id, paymentId))
       .limit(1)
       .then((res) => res[0]);
 
-    if (payment?.invoiceId) {
-      const invoice = await db
-        .select({
-          bookingId: invoices.bookingId,
-          unitId: invoices.unitId,
-        })
-        .from(invoices)
-        .where(eq(invoices.id, payment.invoiceId))
-        .limit(1)
-        .then((res) => res[0]);
-
-      if (invoice?.bookingId) {
-        const booking = await db
-          .select({
-            marketingId: bookings.marketingId,
-            bookingNumber: bookings.bookingNumber,
-          })
-          .from(bookings)
-          .where(eq(bookings.id, invoice.bookingId))
-          .limit(1)
-          .then((res) => res[0]);
-
-        if (booking) {
-          marketingPicId = booking.marketingId;
-          bookingNumStr = booking.bookingNumber;
-        }
-
-        if (invoice.unitId) {
-          const unit = await db
-            .select({ code: units.code })
-            .from(units)
-            .where(eq(units.id, invoice.unitId))
-            .limit(1)
-            .then((res) => res[0]);
-          if (unit) {
-            unitCodeStr = unit.code;
-          }
-        }
-      }
+    if (notifData) {
+      marketingPicId = notifData.marketingId ?? null;
+      bookingNumStr = notifData.bookingNumber ?? "";
+      unitCodeStr = notifData.unitCode ?? "";
     }
   } catch (err) {
     console.error("[verifyPayment] Gagal mengambil data booking untuk notifikasi:", err);
@@ -593,6 +574,7 @@ export async function verifyPayment(
 
   revalidatePath("/finance/payments");
   revalidatePath("/finance/transactions");
+  revalidatePath("/dashboard");
   // Sprint 3: Return structured response so UI can show handover feedback
   return {
     success: true,
@@ -808,6 +790,134 @@ export async function getTransactions(projectId?: string) {
   return query;
 }
 
+/**
+ * TransactionListItem — shape returned by server-side paginated transactions query.
+ * Only includes columns needed for table display + filtering.
+ */
+export interface TransactionListItem {
+  id: string;
+  transactionNumber: string;
+  projectId: string;
+  type: "income" | "expense";
+  description: string;
+  amount: number;
+  transactionDate: Date;
+  paymentMethod: "cash" | "transfer" | "giro" | "other";
+  approvalStatus: "not_required" | "pending" | "approved" | "rejected" | "insufficient_balance";
+  createdAt: Date;
+  projectName: string;
+  accountName: string;
+  categoryName: string;
+  categoryId: string;
+  unitCode: string | null;
+  customerName: string | null;
+}
+
+/**
+ * Server-side paginated + filtered transactions query.
+ * Eliminates N+1 by using JOINs and returns only the columns needed for the list view.
+ */
+export async function getTransactionsPaginated(params: {
+  page: number;
+  pageSize?: number;
+  startDate?: string;
+  endDate?: string;
+  categoryId?: string;
+  projectId?: string;
+}): Promise<PaginatedResult<TransactionListItem>> {
+  await requireAuth();
+
+  const pageSize = params.pageSize || 20;
+
+  // Build WHERE conditions
+  const filterConditions: ReturnType<typeof eq>[] = [];
+
+  // Project filter
+  if (params.projectId) {
+    filterConditions.push(eq(transactions.projectId, params.projectId));
+  }
+
+  // Category filter
+  if (params.categoryId) {
+    filterConditions.push(eq(transactions.categoryId, params.categoryId));
+  }
+
+  // Date range filter — start date (inclusive)
+  if (params.startDate) {
+    const start = new Date(params.startDate);
+    filterConditions.push(gte(transactions.transactionDate, start));
+  }
+
+  // Date range filter — end date (inclusive, end of day)
+  if (params.endDate) {
+    const end = new Date(params.endDate);
+    end.setHours(23, 59, 59, 999);
+    filterConditions.push(lte(transactions.transactionDate, end));
+  }
+
+  // Combine all conditions
+  const whereClause = filterConditions.length > 0
+    ? and(...filterConditions)
+    : undefined;
+
+  // Count query for pagination navigation (uses same JOINs for filter accuracy)
+  const [countResult] = await db
+    .select({ totalCount: count() })
+    .from(transactions)
+    .innerJoin(projects, eq(transactions.projectId, projects.id))
+    .innerJoin(financeAccounts, eq(transactions.accountId, financeAccounts.id))
+    .innerJoin(financeCategories, eq(transactions.categoryId, financeCategories.id))
+    .leftJoin(units, eq(transactions.unitId, units.id))
+    .leftJoin(customers, eq(transactions.customerId, customers.id))
+    .where(whereClause);
+
+  const totalCount = countResult?.totalCount ?? 0;
+
+  // Validate and normalize pagination params
+  const validatedParams = validatePaginationParams({ page: params.page, pageSize }, totalCount);
+  const { limit, offset } = calculateOffset(validatedParams);
+  const totalPages = Math.ceil(totalCount / validatedParams.pageSize);
+
+  // Main data query with JOINs — specific columns only
+  const results = await db
+    .select({
+      id: transactions.id,
+      transactionNumber: transactions.transactionNumber,
+      projectId: transactions.projectId,
+      type: transactions.type,
+      description: transactions.description,
+      amount: transactions.amount,
+      transactionDate: transactions.transactionDate,
+      paymentMethod: transactions.paymentMethod,
+      approvalStatus: transactions.approvalStatus,
+      createdAt: transactions.createdAt,
+      projectName: projects.name,
+      accountName: financeAccounts.name,
+      categoryName: financeCategories.name,
+      categoryId: transactions.categoryId,
+      unitCode: units.code,
+      customerName: customers.name,
+    })
+    .from(transactions)
+    .innerJoin(projects, eq(transactions.projectId, projects.id))
+    .innerJoin(financeAccounts, eq(transactions.accountId, financeAccounts.id))
+    .innerJoin(financeCategories, eq(transactions.categoryId, financeCategories.id))
+    .leftJoin(units, eq(transactions.unitId, units.id))
+    .leftJoin(customers, eq(transactions.customerId, customers.id))
+    .where(whereClause)
+    .orderBy(desc(transactions.createdAt))
+    .limit(limit)
+    .offset(offset);
+
+  return {
+    data: results as TransactionListItem[],
+    totalCount,
+    page: validatedParams.page,
+    pageSize: validatedParams.pageSize,
+    totalPages,
+  };
+}
+
 export async function createExpenseRequest(data: unknown) {
   const activeUser = await requireAuth();
   const parsed = expenseRequestSchema.parse(data);
@@ -905,6 +1015,7 @@ export async function createExpenseRequest(data: unknown) {
 
   revalidatePath("/finance/transactions");
   revalidatePath("/finance/approvals");
+  revalidatePath("/dashboard");
   return { success: true, transactionId: trxId };
 }
 
@@ -1103,6 +1214,7 @@ export async function approveExpense(transactionId: string, notes?: string) {
   revalidatePath("/finance/transactions");
   revalidatePath("/finance/approvals");
   revalidatePath("/finance/budgets");
+  revalidatePath("/dashboard");
   return { success: true };
 }
 
@@ -1543,9 +1655,21 @@ export async function getFinancePageData() {
     budgetsList,
     usersList,
   ] = await Promise.all([
-    db.select().from(projects),
-    db.select().from(units),
-    db.select().from(customers),
+    cachedQuery(
+      () => db.select().from(projects),
+      ["projects", "list"],
+      { tags: ["projects"], revalidate: 300, fallback: [] }
+    ),
+    cachedQuery(
+      () => db.select().from(units),
+      ["units", "all"],
+      { tags: ["units"], revalidate: 300, fallback: [] }
+    ),
+    cachedQuery(
+      () => db.select().from(customers),
+      ["customers", "all"],
+      { tags: ["customers"], revalidate: 300, fallback: [] }
+    ),
     db.select().from(financeAccounts),
     db.select().from(financeCategories),
 

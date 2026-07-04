@@ -53,15 +53,9 @@ import {
 import { exportToCsv } from "@/lib/export-utils";
 import { formatRupiah } from "@/lib/format-utils";
 import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip as ChartTooltip,
-  CartesianGrid,
-  Cell,
-} from "recharts";
+  DynamicReportsBarChart,
+  ChartErrorBoundary,
+} from "@/components/charts";
 import { useI18n } from "@/lib/i18n";
 import { Translate } from "@/components/translate";
 
@@ -430,39 +424,9 @@ export default function ReportsShell({
                   </CardHeader>
                   <CardContent className="w-full min-w-0 pt-4">
                     <div style={{ height: 260, minHeight: 0, minWidth: 0 }}>
-                    <ResponsiveContainer width="100%" height={260} minWidth={0}>
-                      <BarChart data={chartData} barSize={52}>
-                        <defs>
-                          <linearGradient id="gradIncome" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="var(--secondary-foreground)" stopOpacity={1} />
-                            <stop offset="100%" stopColor="var(--primary)" stopOpacity={0.8} />
-                          </linearGradient>
-                          <linearGradient id="gradExpense" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#D77A7A" stopOpacity={1} />
-                            <stop offset="100%" stopColor="#E8A0A8" stopOpacity={0.8} />
-                          </linearGradient>
-                          <linearGradient id="gradNet" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="var(--primary)" stopOpacity={1} />
-                            <stop offset="100%" stopColor="var(--secondary)" stopOpacity={0.8} />
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
-                        <XAxis dataKey="name" stroke="var(--muted-foreground)" fontSize={11} fontFamily="Inter" tick={{ fill: "var(--muted-foreground)" }} />
-                        <YAxis stroke="var(--muted-foreground)" fontSize={10} fontFamily="monospace" tickFormatter={(v) => `Rp ${(v / 1000000).toFixed(0)}jt`} />
-                        <ChartTooltip
-                          formatter={(v) => [formatRupiah(Number(v)), "Nominal"]}
-                          contentStyle={{ borderRadius: "12px", backgroundColor: "var(--card)", border: "1px solid var(--border)", color: "var(--foreground)", fontSize: "12px", fontFamily: "monospace" }}
-                        />
-                        <Bar dataKey="Nominal" radius={[8, 8, 0, 0]}>
-                          {chartData.map((entry, index) => (
-                            <Cell
-                              key={`cell-${index}`}
-                              fill={entry.type === "income" ? "url(#gradIncome)" : entry.type === "expense" ? "url(#gradExpense)" : "url(#gradNet)"}
-                            />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
+                    <ChartErrorBoundary fallbackHeight={260}>
+                      <DynamicReportsBarChart data={chartData} />
+                    </ChartErrorBoundary>
                     </div>
                   </CardContent>
                 </Card>

@@ -666,3 +666,54 @@ select:-webkit-autofill:focus {
   box-shadow: 0 0 0px 1000px var(--muted) inset !important;
   transition: background-color 5000s ease-in-out 0s;
 }
+
+/* ──────────────────────────────────────────────────────────
+   🎬 Dashboard Card Staggered Fade-In Animation
+   Cards fade in sequentially with 100ms delay between each
+   ────────────────────────────────────────────────────────── */
+@keyframes dashboardCardFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dashboard-card-stagger {
+  opacity: 0;
+  animation: dashboardCardFadeIn 300ms ease-out forwards;
+}
+
+/* ──────────────────────────────────────────────────────────
+   🗑️ TABLE ROW DELETE ANIMATION
+   Fade-out with height collapse for smooth row removal
+   ────────────────────────────────────────────────────────── */
+@keyframes row-delete-fadeout {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+
+.animate-row-delete {
+  animation: row-delete-fadeout 300ms ease-out forwards;
+  pointer-events: none;
+}
+
+/* ──────────────────────────────────────────────────────────
+   ♿ ACCESSIBILITY: Reduced Motion Support
+   Respects user preference to minimize animations
+   ────────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0ms !important;
+    transition-duration: 0ms !important;
+  }
+}

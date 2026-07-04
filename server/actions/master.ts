@@ -1,4 +1,4 @@
-"use server";
+﻿"use server";
 
 import { db } from "@/db";
 import { projects, units, customers, vendors, projectUsers, siteplans, siteplanShapes, financeCategories, financeAccounts } from "@/db/schema/master";
@@ -13,10 +13,12 @@ import { writeAuditLog, safeWriteBlockedTransitionLog } from "./audit";
 import { user as userTable, vendorProfiles } from "@/db/schema/auth";
 import { auth } from "@/server/auth";
 import { notifyNewSpkCreated } from "./production";
+import { applyRateLimit } from "@/server/middleware/apply-rate-limit";
 
 // --- PROJECTS ---
 export async function createProject(data: unknown) {
   const user = await requireAnyRole(["Super Admin", "Admin Kantor"]);
+  applyRateLimit(user.id);
   const parsed = projectSchema.parse(data);
   const id = crypto.randomUUID();
 
@@ -24,22 +26,26 @@ export async function createProject(data: unknown) {
   await writeAuditLog({ action: "create", module: "master", entityId: id, entityType: "project", details: { name: parsed.name } });
 
   revalidatePath("/master/projects");
+  revalidatePath("/marketing/bookings");
   return { success: true, id };
 }
 
 export async function updateProject(id: string, data: unknown) {
-  await requireAnyRole(["Super Admin", "Admin Kantor"]);
+  const user = await requireAnyRole(["Super Admin", "Admin Kantor"]);
+  applyRateLimit(user.id);
   const parsed = projectSchema.parse(data);
 
   await db.update(projects).set({ ...parsed, updatedAt: new Date() }).where(eq(projects.id, id));
   await writeAuditLog({ action: "update", module: "master", entityId: id, entityType: "project", details: { name: parsed.name } });
 
   revalidatePath("/master/projects");
+  revalidatePath("/marketing/bookings");
   return { success: true };
 }
 
 export async function deleteProject(id: string) {
-  await requireAnyRole(["Super Admin", "Admin Kantor"]);
+  const user = await requireAnyRole(["Super Admin", "Admin Kantor"]);
+  applyRateLimit(user.id);
 
   // Prevent deletion if project has active or sold units
   const projectUnits = await db.select().from(units).where(eq(units.projectId, id));
@@ -65,12 +71,14 @@ export async function deleteProject(id: string) {
   await writeAuditLog({ action: "delete", module: "master", entityId: id, entityType: "project" });
 
   revalidatePath("/master/projects");
+  revalidatePath("/marketing/bookings");
   return { success: true };
 }
 
 // --- UNITS ---
 export async function createUnit(data: unknown) {
   const user = await requireAnyRole(["Super Admin", "Admin Kantor"]);
+  applyRateLimit(user.id);
   const parsed = unitSchema.parse(data);
   const id = crypto.randomUUID();
   const { readyStockVendorId, ...unitData } = parsed;
@@ -78,7 +86,7 @@ export async function createUnit(data: unknown) {
   if (!parsed.isReadyStock) {
     const ALLOWED_INITIAL_STATUSES = ["available", "belum_siap", "cancelled"];
     if (!ALLOWED_INITIAL_STATUSES.includes(parsed.status)) {
-      throw new Error(`⚠️ Unit baru dengan alur Konstruksi ERP hanya dapat dibuat dengan status 'Tersedia', 'Belum Siap', atau 'Batal'. Status '${parsed.status}' wajib melalui alur transaksi ERP.`);
+      throw new Error(`âš ï¸ Unit baru dengan alur Konstruksi ERP hanya dapat dibuat dengan status 'Tersedia', 'Belum Siap', atau 'Batal'. Status '${parsed.status}' wajib melalui alur transaksi ERP.`);
     }
   }
 
@@ -155,11 +163,13 @@ export async function createUnit(data: unknown) {
 
   revalidatePath("/master/units");
   revalidatePath("/production");
+  revalidatePath("/marketing/bookings");
   return { success: true, id };
 }
 
 export async function updateUnit(id: string, data: unknown) {
   const user = await requireAnyRole(["Super Admin", "Admin Kantor"]);
+  applyRateLimit(user.id);
   const parsed = unitSchema.parse(data);
   const { readyStockVendorId, ...unitData } = parsed;
 
@@ -225,11 +235,11 @@ export async function updateUnit(id: string, data: unknown) {
 
     const ALLOWED_TO_BECOME_AVAILABLE = ["available", "belum_siap", "cancelled"];
     if (parsed.status === "available" && !ALLOWED_TO_BECOME_AVAILABLE.includes(existingUnit.status) && parsed.readyStockSource === "construction_flow" && !existingUnit.isReadyStock) {
-      throw new Error("⚠️ Unit dengan alur Konstruksi ERP wajib menyelesaikan pembangunan dan mengunggah BAST Vendor di modul Konstruksi untuk menjadi Tersedia.");
+      throw new Error("âš ï¸ Unit dengan alur Konstruksi ERP wajib menyelesaikan pembangunan dan mengunggah BAST Vendor di modul Konstruksi untuk menjadi Tersedia.");
     }
 
     if (parsed.status === "construction" && existingUnit.status !== "construction" && !parsed.isReadyStock) {
-      throw new Error("⚠️ Unit tidak dapat langsung diset 'Proses Bangun'. Status 'Proses Bangun' hanya dapat diubah melalui SPK Konstruksi.");
+      throw new Error("âš ï¸ Unit tidak dapat langsung diset 'Proses Bangun'. Status 'Proses Bangun' hanya dapat diubah melalui SPK Konstruksi.");
     }
 
     let finalSpkId = existingUnit.currentSpkId;
@@ -302,11 +312,13 @@ export async function updateUnit(id: string, data: unknown) {
 
   revalidatePath("/master/units");
   revalidatePath("/production");
+  revalidatePath("/marketing/bookings");
   return { success: true };
 }
 
 export async function deleteUnit(id: string) {
-  await requireAnyRole(["Super Admin", "Admin Kantor"]);
+  const user = await requireAnyRole(["Super Admin", "Admin Kantor"]);
+  applyRateLimit(user.id);
 
   const [targetUnit] = await db.select().from(units).where(eq(units.id, id));
   if (!targetUnit) throw new Error("Unit tidak ditemukan.");
@@ -325,6 +337,7 @@ export async function deleteUnit(id: string) {
   await writeAuditLog({ action: "delete", module: "master", entityId: id, entityType: "unit" });
 
   revalidatePath("/master/units");
+  revalidatePath("/marketing/bookings");
   return { success: true };
 }
 
@@ -364,6 +377,7 @@ export async function bulkDeleteUnits(ids: string[]) {
   });
 
   revalidatePath("/master/units");
+  revalidatePath("/marketing/bookings");
   return { success: true, deletedCount: ids.length };
 }
 
@@ -377,6 +391,7 @@ export async function createCustomer(data: unknown) {
   await writeAuditLog({ action: "create", module: "master", entityId: id, entityType: "customer", details: { name: parsed.name } });
 
   revalidatePath("/master/customers");
+  revalidatePath("/marketing/bookings");
   return { success: true, id };
 }
 
@@ -388,6 +403,7 @@ export async function updateCustomer(id: string, data: unknown) {
   await writeAuditLog({ action: "update", module: "master", entityId: id, entityType: "customer", details: { name: parsed.name } });
 
   revalidatePath("/master/customers");
+  revalidatePath("/marketing/bookings");
   return { success: true };
 }
 
@@ -404,6 +420,7 @@ export async function deleteCustomer(id: string) {
   await writeAuditLog({ action: "delete", module: "master", entityId: id, entityType: "customer" });
 
   revalidatePath("/master/customers");
+  revalidatePath("/marketing/bookings");
   return { success: true };
 }
 
@@ -411,24 +428,24 @@ export async function deleteCustomer(id: string) {
 export async function provisionVendorAccount(vendorId: string) {
   await requireAnyRole(["Super Admin", "Admin Kantor"]);
 
-  // Layer 1 — Vendor harus ada
+  // Layer 1 â€” Vendor harus ada
   const [vendor] = await db.select().from(vendors).where(eq(vendors.id, vendorId)).limit(1);
   if (!vendor) throw new Error("Vendor tidak ditemukan.");
 
-  // Layer 2 — Vendor harus active
+  // Layer 2 â€” Vendor harus active
   if (vendor.status !== "active") {
     throw new Error("Vendor tidak aktif. Akun login tidak dapat dibuat untuk vendor nonaktif.");
   }
 
-  // Layer 3 — Vendor harus punya email
+  // Layer 3 â€” Vendor harus punya email
   if (!vendor.email || vendor.email.trim() === "") {
     throw new Error("Vendor belum memiliki email. Tambahkan email terlebih dahulu sebelum membuat akun.");
   }
 
-  // Layer 4 — Normalisasi email
+  // Layer 4 â€” Normalisasi email
   const normalizedEmail = vendor.email.trim().toLowerCase();
 
-  // Layer 5 — Vendor belum boleh punya vendorProfile
+  // Layer 5 â€” Vendor belum boleh punya vendorProfile
   const [existingProfile] = await db
     .select({ id: vendorProfiles.id })
     .from(vendorProfiles)
@@ -438,7 +455,7 @@ export async function provisionVendorAccount(vendorId: string) {
     throw new Error("Vendor sudah memiliki akun login.");
   }
 
-  // Layer 6 — Email belum boleh dipakai user lain
+  // Layer 6 â€” Email belum boleh dipakai user lain
   const [existingUser] = await db
     .select({ id: userTable.id })
     .from(userTable)
@@ -490,7 +507,7 @@ export async function provisionVendorAccount(vendorId: string) {
       }).run();
     });
   } catch (txErr) {
-    // Orphan user safety — nonaktifkan user yang gagal di-link
+    // Orphan user safety â€” nonaktifkan user yang gagal di-link
     await db
       .update(userTable)
       .set({ status: "inactive", updatedAt: new Date() })
@@ -502,7 +519,7 @@ export async function provisionVendorAccount(vendorId: string) {
     );
   }
 
-  // Audit log — TANPA tempPassword
+  // Audit log â€” TANPA tempPassword
   await writeAuditLog({
     action: "create",
     module: "master",
@@ -513,7 +530,7 @@ export async function provisionVendorAccount(vendorId: string) {
 
   revalidatePath("/master/vendors");
 
-  // Kembalikan credential — hanya sekali, tidak tersimpan
+  // Kembalikan credential â€” hanya sekali, tidak tersimpan
   return {
     success: true,
     accountCreated: true,
@@ -556,7 +573,7 @@ export async function createVendor(data: unknown) {
         tempPassword: result.tempPassword,
       };
     } catch (err: any) {
-      // Non-fatal — vendor tetap tersimpan
+      // Non-fatal â€” vendor tetap tersimpan
       provisionResult = {
         accountCreated: false,
         warning: err?.message ?? "Akun login tidak berhasil dibuat secara otomatis.",
@@ -578,11 +595,11 @@ export async function updateVendor(id: string, data: unknown) {
 
   await db.update(vendors).set({ ...vendorData }).where(eq(vendors.id, id));
 
-  // Sync status akun — wajib filter by vendorId, bukan companyName
+  // Sync status akun â€” wajib filter by vendorId, bukan companyName
   const [profile] = await db
     .select({ userId: vendorProfiles.userId })
     .from(vendorProfiles)
-    .where(eq(vendorProfiles.vendorId, id))   // ← filter by vendorId, bukan nama
+    .where(eq(vendorProfiles.vendorId, id))   // â† filter by vendorId, bukan nama
     .limit(1);
 
   if (profile) {
@@ -744,7 +761,7 @@ export async function updateFinanceAccount(id: string, data: unknown) {
   if (existing.length > 0 && existing[0].id !== id) {
     throw new Error(`Kode akun "${parsed.code}" sudah digunakan oleh rekening lain.`);
   }
-  // openingBalance is IMMUTABLE � DO NOT update it
+  // openingBalance is IMMUTABLE ï¿½ DO NOT update it
   await db.update(financeAccounts)
     .set({ code: parsed.code, name: parsed.name, type: parsed.type, status: parsed.status })
     .where(eq(financeAccounts.id, id));

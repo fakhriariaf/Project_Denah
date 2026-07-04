@@ -1,26 +1,34 @@
 import { z } from "zod";
+import { sanitizeInput } from "@/server/middleware/sanitizer";
+
+// Helper: trim + sanitize string fields in schemas
+const safeString = z.string().transform(sanitizeInput);
+const safeStringOpt = z.string().optional().transform(v => v ? sanitizeInput(v) : v);
+const safeStringNullOpt = z.string().nullable().optional().transform(v => (v ? sanitizeInput(v) : v));
 
 export const leadSchema = z.object({
-  customerId: z.string().nullable().optional(),
-  name: z.string().min(2, "val.marketing_name"),
-  phone: z.string()
-    .min(8, "val.marketing_phone")
-    .regex(/^[0-9+\-\s()]{8,20}$/, "val.marketing_phone_format"),
-  source: z.string().min(1, "val.marketing_source"), // walk_in, ads, referral, etc.
-  interestedProjectId: z.string().nullable().optional(),
-  interestedUnitId: z.string().nullable().optional(),
+  customerId: safeStringNullOpt,
+  name: safeString.pipe(z.string().min(2, "val.marketing_name")),
+  phone: safeString.pipe(
+    z.string()
+      .min(8, "val.marketing_phone")
+      .regex(/^[0-9+\-\s()]{8,20}$/, "val.marketing_phone_format")
+  ),
+  source: safeString.pipe(z.string().min(1, "val.marketing_source")),
+  interestedProjectId: safeStringNullOpt,
+  interestedUnitId: safeStringNullOpt,
   status: z.enum(["new", "contacted", "follow_up", "converted", "lost"]).default("new"),
-  assignedMarketingId: z.string().nullable().optional(),
-  notes: z.string().nullable().optional(),
+  assignedMarketingId: safeStringNullOpt,
+  notes: safeStringNullOpt,
 });
 
 export const followupSchema = z.object({
   id: z.string().optional(),
-  customerId: z.string().nullable().optional(),
-  leadId: z.string().nullable().optional(),
+  customerId: safeStringNullOpt,
+  leadId: safeStringNullOpt,
   followupDate: z.coerce.date(),
   method: z.enum(["call", "whatsapp", "meeting", "email", "site_visit"]),
-  result: z.string().min(3, "val.followup_result"),
+  result: safeString.pipe(z.string().min(3, "val.followup_result")),
   nextFollowupAt: z.preprocess(
     (val) => {
       if (!val) return null;

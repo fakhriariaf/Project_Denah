@@ -1,4 +1,4 @@
-"use server";
+﻿"use server";
 
 import { db } from "@/db";
 import { 
@@ -13,8 +13,9 @@ import {
   waitingLists,
 } from "@/db/schema/marketing";
 import { invoices, payments, transactions } from "@/db/schema/finance";
-import { units, customers, unitStatusHistories, financeAccounts, financeCategories } from "@/db/schema/master";
+import { units, customers, unitStatusHistories, financeAccounts, financeCategories, projects } from "@/db/schema/master";
 import { attachments, notifications } from "@/db/schema/system";
+import { user as userTable } from "@/db/schema/auth";
 import { 
   leadSchema, 
   followupSchema, 
@@ -26,19 +27,22 @@ import {
   realizeKprSchema
 } from "../validators/marketing";
 import { requireAnyRole, getSessionRole, getUserRole } from "../permissions";
-import { eq, and, sql, inArray, desc, lte, isNotNull } from "drizzle-orm";
+import { eq, and, or, sql, inArray, desc, lte, isNotNull, ilike, count } from "drizzle-orm";
+import { calculateOffset, validatePaginationParams, type PaginatedResult } from "@/lib/pagination";
 import { revalidatePath } from "next/cache";
 import { writeAuditLog, safeWriteBlockedTransitionLog } from "./audit";
 import { createNotification, notifyUsersWithRoles } from "./notification";
+import { applyRateLimit } from "@/server/middleware/apply-rate-limit";
 
 // --- LEADS ---
 export async function createLead(data: unknown) {
   const user = await requireAnyRole(["Super Admin", "Admin Kantor", "Marketing", "Marketing Manager"]);
+  applyRateLimit(user.id);
   const parsed = leadSchema.parse(data);
   const id = crypto.randomUUID();
   const targetPicId = parsed.assignedMarketingId || user.id;
 
-  // Duplicate phone guard — block if active lead with same phone already exists
+  // Duplicate phone guard â€” block if active lead with same phone already exists
   const existingLeadByPhone = await db
     .select({ id: leads.id, name: leads.name, status: leads.status })
     .from(leads)
@@ -65,7 +69,7 @@ export async function createLead(data: unknown) {
     await createNotification({
       userId: targetPicId,
       type: "info",
-      title: "Penugasan Prospek Baru 🎯",
+      title: "Penugasan Prospek Baru ðŸŽ¯",
       message: `Anda telah ditunjuk oleh ${user.name} sebagai PIC untuk mengelola prospek baru bernama "${parsed.name}".`,
       entityId: id,
       entityType: "lead",
@@ -86,6 +90,7 @@ export async function createLead(data: unknown) {
 
 export async function updateLead(id: string, data: unknown) {
   const user = await requireAnyRole(["Super Admin", "Admin Kantor", "Marketing", "Marketing Manager"]);
+  applyRateLimit(user.id);
   const parsed = leadSchema.parse(data);
 
   const [existingLead] = await db.select().from(leads).where(eq(leads.id, id)).limit(1);
@@ -114,7 +119,7 @@ export async function updateLead(id: string, data: unknown) {
     await createNotification({
       userId: newPicId,
       type: "info",
-      title: "Penugasan Prospek Baru 🎯",
+      title: "Penugasan Prospek Baru ðŸŽ¯",
       message: `Anda telah ditunjuk oleh ${user.name} sebagai PIC baru untuk mengelola prospek bernama "${parsed.name}".`,
       entityId: id,
       entityType: "lead",
@@ -135,7 +140,8 @@ export async function updateLead(id: string, data: unknown) {
 
 export async function deleteLead(id: string) {
   // Only Super Admin and Admin Kantor can delete leads (RBAC policy)
-  await requireAnyRole(["Super Admin", "Admin Kantor"]);
+  const user = await requireAnyRole(["Super Admin", "Admin Kantor"]);
+  applyRateLimit(user.id);
 
   await db.delete(leads).where(eq(leads.id, id));
   await writeAuditLog({
@@ -152,6 +158,7 @@ export async function deleteLead(id: string) {
 // --- FOLLOW-UPS ---
 export async function createFollowup(data: unknown) {
   const user = await requireAnyRole(["Super Admin", "Admin Kantor", "Marketing", "Marketing Manager"]);
+  applyRateLimit(user.id);
   const parsed = followupSchema.parse(data);
   const id = crypto.randomUUID();
 
@@ -180,11 +187,140 @@ export async function createFollowup(data: unknown) {
 }
 
 // --- BOOKINGS & KPR FLOW ---
+
+/**
+ * BookingListItem — shape returned by server-side paginated bookings query.
+ */
+export interface BookingListItem {
+  id: string;
+  bookingNumber: string;
+  status: string;
+  bookingDate: Date;
+  bookingFee: number;
+  dpAmount: number;
+  paymentScheme: string;
+  cancellationReason: string | null;
+  termin: number | null;
+  customerName: string | null;
+  unitCode: string | null;
+  projectName: string | null;
+  marketingName: string | null;
+  marketingId: string;
+  projectId: string;
+  unitId: string;
+  customerId: string;
+}
+
+/**
+ * Server-side paginated and filtered bookings query.
+ * Eliminates N+1 by using LEFT JOINs and returns only the columns needed for the list view.
+ */
+export async function getBookingsPaginated(params: {
+  page: number;
+  pageSize?: number;
+  status?: string;
+  search?: string;
+  marketingId?: string;
+}): Promise<PaginatedResult<BookingListItem>> {
+  const pageSize = params.pageSize || 20;
+
+  // Build WHERE conditions
+  const filterConditions: ReturnType<typeof eq>[] = [];
+
+  // Status filter
+  if (params.status) {
+    filterConditions.push(eq(bookings.status, params.status as "active" | "cancelled" | "akad" | "completed"));
+  }
+
+  // Marketing filter (for RBAC scoping — marketing biasa only sees own bookings)
+  if (params.marketingId) {
+    filterConditions.push(eq(bookings.marketingId, params.marketingId));
+  }
+
+  // Search filter — case-insensitive partial match across multiple columns
+  let searchCondition: ReturnType<typeof or> | undefined;
+  if (params.search && params.search.trim() !== "") {
+    const searchTerm = `%${params.search.trim()}%`;
+    searchCondition = or(
+      ilike(bookings.bookingNumber, searchTerm),
+      ilike(customers.name, searchTerm),
+      ilike(units.code, searchTerm),
+      ilike(projects.name, searchTerm)
+    );
+  }
+
+  // Combine all conditions
+  const whereClause = searchCondition
+    ? filterConditions.length > 0
+      ? and(...filterConditions, searchCondition)
+      : searchCondition
+    : filterConditions.length > 0
+      ? and(...filterConditions)
+      : undefined;
+
+  // Count query for pagination navigation
+  const [countResult] = await db
+    .select({ totalCount: count() })
+    .from(bookings)
+    .leftJoin(customers, eq(bookings.customerId, customers.id))
+    .leftJoin(units, eq(bookings.unitId, units.id))
+    .leftJoin(projects, eq(bookings.projectId, projects.id))
+    .where(whereClause);
+
+  const totalCount = countResult?.totalCount ?? 0;
+
+  // Validate and normalize pagination params
+  const validatedParams = validatePaginationParams({ page: params.page, pageSize }, totalCount);
+  const { limit, offset } = calculateOffset(validatedParams);
+  const totalPages = Math.ceil(totalCount / validatedParams.pageSize);
+
+  // Main data query with LEFT JOINs — specific columns only
+  const results = await db
+    .select({
+      id: bookings.id,
+      bookingNumber: bookings.bookingNumber,
+      status: bookings.status,
+      bookingDate: bookings.bookingDate,
+      bookingFee: bookings.bookingFee,
+      dpAmount: bookings.dpAmount,
+      paymentScheme: bookings.paymentScheme,
+      cancellationReason: bookings.cancellationReason,
+      termin: bookings.termin,
+      customerName: customers.name,
+      unitCode: units.code,
+      projectName: projects.name,
+      marketingName: userTable.name,
+      marketingId: bookings.marketingId,
+      projectId: bookings.projectId,
+      unitId: bookings.unitId,
+      customerId: bookings.customerId,
+    })
+    .from(bookings)
+    .leftJoin(customers, eq(bookings.customerId, customers.id))
+    .leftJoin(units, eq(bookings.unitId, units.id))
+    .leftJoin(projects, eq(bookings.projectId, projects.id))
+    .leftJoin(userTable, eq(bookings.marketingId, userTable.id))
+    .where(whereClause)
+    .orderBy(desc(bookings.bookingDate))
+    .limit(limit)
+    .offset(offset);
+
+  return {
+    data: results as BookingListItem[],
+    totalCount,
+    page: validatedParams.page,
+    pageSize: validatedParams.pageSize,
+    totalPages,
+  };
+}
+
 export async function createBooking(data: unknown) {
   const user = await requireAnyRole(["Super Admin", "Admin Kantor", "Marketing", "Marketing Manager"]);
+  applyRateLimit(user.id);
   const parsed = bookingSchema.parse(data);
   const id = crypto.randomUUID();
-  const bookingNumber = parsed.bookingNumber || `BOOK-${Date.now().toString().slice(-8)}`;
+  // BUG 4 FIX: Add random suffix to prevent duplicate bookingNumber on concurrent ms-same requests
+  const bookingNumber = parsed.bookingNumber || `BOOK-${Date.now().toString().slice(-8)}-${crypto.randomUUID().replace(/-/g, "").slice(0, 4).toUpperCase()}`;
 
   // Run as atomic database transaction
   const result = await db.transaction(async (tx) => {
@@ -262,7 +398,7 @@ export async function createBooking(data: unknown) {
       .where(and(eq(units.id, parsed.unitId), eq(units.status, "available")))
       .returning();
 
-    // If 0 rows were updated, the unit was concurrently booked by another request — abort
+    // If 0 rows were updated, the unit was concurrently booked by another request â€” abort
     if (updateResult.length === 0) {
       throw new Error("Kavling sudah dipesan oleh pihak lain secara bersamaan. Silakan refresh dan coba lagi.");
     }
@@ -379,11 +515,13 @@ export async function createBooking(data: unknown) {
   revalidatePath("/marketing/bookings");
   revalidatePath("/marketing/kpr");
   revalidatePath(`/siteplan/${parsed.projectId}`);
+  revalidatePath("/dashboard");
   return { success: true, ...result };
 }
 
 export async function updateBooking(id: string, data: unknown) {
   const user = await requireAnyRole(["Super Admin", "Admin Kantor", "Marketing", "Marketing Manager"]);
+  applyRateLimit(user.id);
   const parsed = bookingSchema.parse(data);
 
   // Run as atomic database transaction
@@ -570,16 +708,18 @@ export async function updateBooking(id: string, data: unknown) {
   revalidatePath(`/marketing/bookings/${id}`);
   revalidatePath("/marketing/kpr");
   revalidatePath(`/siteplan/${result.projectId}`);
+  revalidatePath("/dashboard");
   return { success: true, ...result };
 }
 
 export async function cancelBooking(id: string, reason: string) {
   const user = await requireAnyRole(["Super Admin", "Admin Kantor", "Marketing", "Marketing Manager"]);
+  applyRateLimit(user.id);
 
-  // All reads and writes occur inside the transaction to prevent stale data race
-  let projectId: string;
+// BUG 1 FIX: Init projectId = "" to prevent uninitialized variable crash
+  let projectId = "";
   await db.transaction(async (tx) => {
-    // 1. Fetch booking INSIDE transaction — eliminates stale-read race condition
+    // 1. Fetch booking INSIDE transaction â€” eliminates stale-read race condition
     const booking = await tx.select().from(bookings).where(eq(bookings.id, id)).get();
     if (!booking) throw new Error("Booking tidak ditemukan.");
     if (booking.status === "cancelled") throw new Error("Booking sudah dibatalkan sebelumnya.");
@@ -707,7 +847,9 @@ export async function cancelBooking(id: string, reason: string) {
 
   revalidatePath("/marketing/bookings");
   revalidatePath("/marketing/kpr");
-  revalidatePath(`/siteplan/${projectId!}`);
+  // BUG 1 FIX: Guard against empty projectId (tx threw before assignment)
+  if (projectId) revalidatePath(`/siteplan/${projectId}`);
+  revalidatePath("/dashboard");
   return { success: true };
 }
 
@@ -836,7 +978,7 @@ export async function validateKprStateTransition(
   }
 
   // Must pass through "pemberkasan" before reaching "proses_bank"
-  // Direct jump from bi_checking → proses_bank is not allowed
+  // Direct jump from bi_checking â†’ proses_bank is not allowed
   const STAGES_BEFORE_PROSES_BANK = ["bi_checking"];
   if (newStatus === "proses_bank" && STAGES_BEFORE_PROSES_BANK.includes(currentStatus)) {
     throw new Error(
@@ -912,7 +1054,7 @@ export async function validateKprStateTransition(
 
 export async function updateKprProcess(id: string, data: unknown) {
   const user = await requireAnyRole(["Super Admin", "Admin Kantor", "Marketing", "Marketing Manager"]);
-  // Use kprUpdateSchema (no bookingId required — resolved from DB by id)
+  // Use kprUpdateSchema (no bookingId required â€” resolved from DB by id)
   const parsed = kprUpdateSchema.parse(data);
 
   if (
@@ -1014,7 +1156,7 @@ export async function updateKprProcess(id: string, data: unknown) {
       // Synchronize unit status to match KPR state
       let unitState: "construction" | "kpr_process" | "booking" | "available" = "kpr_process";
       if (parsed.status === "rejected") {
-        // KPR rejected → release unit back to market
+        // KPR rejected â†’ release unit back to market
         unitState = "available";
       } else if (parsed.status === "bi_checking" || parsed.status === "pemberkasan") {
         // Early KPR stages remain as booking
@@ -1026,7 +1168,7 @@ export async function updateKprProcess(id: string, data: unknown) {
         if (!unitForApproved?.isReadyStock) {
           unitState = "construction";
         }
-        // else: keep unitState = "kpr_process" for ready stock — handover gate handled separately
+        // else: keep unitState = "kpr_process" for ready stock â€” handover gate handled separately
       }
 
       const currentUnit = await tx.select().from(units).where(eq(units.id, booking.unitId)).get();
@@ -1167,7 +1309,7 @@ export async function updateKprStatusDirect(id: string, newStatus: string, revis
       }).where(eq(bookings.id, booking.id)).run();
 
     } else if (newStatus === "realisasi") {
-      // RULE 9: KPR realisasi → unit: menunggu_serah_terima
+      // RULE 9: KPR realisasi â†’ unit: menunggu_serah_terima
       const currentUnit = await tx.select().from(units).where(eq(units.id, booking.unitId)).get();
       if (currentUnit) {
         const prevStatus = currentUnit.status;
@@ -1181,7 +1323,7 @@ export async function updateKprStatusDirect(id: string, newStatus: string, revis
           unitId: booking.unitId,
           previousStatus: prevStatus,
           newStatus: "menunggu_serah_terima",
-          reason: "Dana KPR telah direalisasikan — unit menunggu serah terima fisik kepada konsumen",
+          reason: "Dana KPR telah direalisasikan â€” unit menunggu serah terima fisik kepada konsumen",
           changedBy: user.id,
           changedAt: new Date(),
         }).run();
@@ -1246,10 +1388,10 @@ export async function updateKprStatusDirect(id: string, newStatus: string, revis
   return { success: true };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// BAST KONSUMEN — APPROVE SERAH TERIMA (RULE 11, 12, 13)
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// BAST KONSUMEN â€” APPROVE SERAH TERIMA (RULE 11, 12, 13)
 // Role: Super Admin, Admin Kantor, Direksi / Manager
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export async function approveBastKonsumen(bookingId: string) {
   const user = await requireAnyRole(["Super Admin", "Admin Kantor", "Direksi / Manager"]);
 
@@ -1302,7 +1444,7 @@ export async function approveBastKonsumen(bookingId: string) {
   if (!unit) throw new Error("Unit tidak ditemukan.");
 
   // RULE 11: unit harus menunggu_serah_terima
-  // "sold" no longer accepted — unit must go through the proper menunggu_serah_terima gate
+  // "sold" no longer accepted â€” unit must go through the proper menunggu_serah_terima gate
   // (set by realizeKprFunds for KPR, or triggerMenungguSerahTerima for cash/installment)
   if (unit.status !== "menunggu_serah_terima") {
     throw new Error(
@@ -1329,7 +1471,7 @@ export async function approveBastKonsumen(bookingId: string) {
   const oldStatus = unit.status;
   const projectId = booking.projectId;
 
-  // RULE 12: update unit → handover_complete
+  // RULE 12: update unit â†’ handover_complete
   await db.transaction(async (tx) => {
     await tx.update(units).set({
       status: "handover_complete",
@@ -1369,7 +1511,7 @@ export async function approveBastKonsumen(bookingId: string) {
       roleNames: ["Super Admin", "Admin Kantor", "Direksi / Manager", "Marketing Manager"],
       type: "info",
       title: "Serah Terima Unit Selesai",
-      message: `Unit ${unit.code} telah resmi diserahterimakan kepada konsumen. BAST Developer → Konsumen telah disetujui.`,
+      message: `Unit ${unit.code} telah resmi diserahterimakan kepada konsumen. BAST Developer â†’ Konsumen telah disetujui.`,
       entityId: unit.id,
       entityType: "unit",
     });
@@ -1681,7 +1823,7 @@ export async function upgradeBookingToAkad(bookingId: string) {
 
   await db.transaction(async (tx) => {
     await tx.update(bookings).set({ status: "akad", updatedAt: new Date() }).where(eq(bookings.id, bookingId)).run();
-    // Do NOT set unit to "sold" yet — unit stays at current status.
+    // Do NOT set unit to "sold" yet â€” unit stays at current status.
     // For non-KPR: unit reaches "menunggu_serah_terima" via triggerMenungguSerahTerima
     // after all invoices paid. For KPR: via realizeKprFunds.
     // Final "handover_complete" only via approveBastKonsumen.
@@ -2117,14 +2259,14 @@ export async function checkAndTransitionToConstruction(tx: any, bookingId: strin
   const bookingInvoices = await tx.select().from(invoices).where(eq(invoices.bookingId, bookingId)).all();
 
   // Booking fee must exist AND be paid (not absent)
-  // If BF invoice was never created (bookingFee = 0), treat as not paid — require explicit payment
+  // If BF invoice was never created (bookingFee = 0), treat as not paid â€” require explicit payment
   const bfInvoice = bookingInvoices.find((i: any) => i.type === "booking_fee");
   const bfPaid = !!bfInvoice && bfInvoice.status === "paid";
 
   // DP must exist AND be paid, OR explicitly no DP invoice was created because dpAmount = 0
   // For KPR: DP is conditional (bank may waive it). Only treat as "not required" if
   // dpAmount was explicitly 0 at booking time (no invoice generated).
-  // If invoice exists but unpaid → block.
+  // If invoice exists but unpaid â†’ block.
   const dpInvoice = bookingInvoices.find((i: any) => i.type === "dp");
   const dpPaid = !dpInvoice || dpInvoice.status === "paid";
   // Note: !dpInvoice = developer set dpAmount = 0 at booking = dp not required for this deal.
@@ -2161,8 +2303,8 @@ export async function checkAndTransitionToConstruction(tx: any, bookingId: strin
     await createNotification({
       userId: userId,
       type: "info",
-      title: "🏗️ Unit Siap Pembangunan Fisik",
-      message: `Unit ${unit.code} telah memenuhi seluruh syarat (Booking Fee & DP Lunas${booking.paymentScheme === "kpr" ? " · KPR Disetujui" : ""}). Status otomatis berubah menjadi Pembangunan Fisik. Silakan terbitkan SPK.`,
+      title: "ðŸ—ï¸ Unit Siap Pembangunan Fisik",
+      message: `Unit ${unit.code} telah memenuhi seluruh syarat (Booking Fee & DP Lunas${booking.paymentScheme === "kpr" ? " Â· KPR Disetujui" : ""}). Status otomatis berubah menjadi Pembangunan Fisik. Silakan terbitkan SPK.`,
       entityId: unit.projectId,
       entityType: "unit_construction_ready",
     });
@@ -2171,8 +2313,8 @@ export async function checkAndTransitionToConstruction(tx: any, bookingId: strin
     await notifyUsersWithRoles({
       roleNames: ["Super Admin", "Admin Kantor", "Marketing Manager"],
       type: "info",
-      title: "🏗️ Kavling Siap Dibangun",
-      message: `Unit ${unit.code} telah memenuhi seluruh syarat pembangunan (Booking Fee & DP Lunas${booking.paymentScheme === "kpr" ? " · KPR Disetujui" : ""}). Buka Site Plan untuk menerbitkan SPK Konstruksi.`,
+      title: "ðŸ—ï¸ Kavling Siap Dibangun",
+      message: `Unit ${unit.code} telah memenuhi seluruh syarat pembangunan (Booking Fee & DP Lunas${booking.paymentScheme === "kpr" ? " Â· KPR Disetujui" : ""}). Buka Site Plan untuk menerbitkan SPK Konstruksi.`,
       entityId: unit.projectId,
       entityType: "unit_construction_ready",
     });
@@ -2381,7 +2523,7 @@ export async function realizeKprFunds(data: unknown) {
     if (!account) throw new Error("Rekening tujuan realisasi tidak ditemukan.");
     if (account.status !== "active") throw new Error("Rekening tujuan realisasi tidak aktif.");
 
-    // 5.6. Update KPR → status "realisasi"
+    // 5.6. Update KPR â†’ status "realisasi"
     await tx.update(kprProcesses).set({
       status: "realisasi",
       realizedDate: parsed.realizedDate,
@@ -2408,7 +2550,7 @@ export async function realizeKprFunds(data: unknown) {
         unitId: unit.id,
         previousStatus: unit.status,
         newStatus: "menunggu_serah_terima",
-        reason: "Realisasi dana KPR dari bank partner — unit siap diserahterimakan",
+        reason: "Realisasi dana KPR dari bank partner â€” unit siap diserahterimakan",
         changedBy: activeUser.id,
         changedAt: new Date(),
       }).run();
@@ -2428,7 +2570,7 @@ export async function realizeKprFunds(data: unknown) {
       accountId: parsed.realizedAccountId,
       categoryId: incomeCategoryId,
       type: "income",
-      description: `Realisasi bersih dana KPR Unit ${unit.code} — ${account.name}`,
+      description: `Realisasi bersih dana KPR Unit ${unit.code} â€” ${account.name}`,
       amount: netReceived,
       transactionDate: parsed.realizedDate,
       paymentMethod: "transfer",
@@ -2468,7 +2610,7 @@ export async function realizeKprFunds(data: unknown) {
     await notifyUsersWithRoles({
       roleNames: ["Super Admin", "Admin Keuangan", "Direksi / Manager", "Admin Kantor", "Marketing Manager"],
       type: "handover_waiting",
-      title: "Dana KPR Terealisasi — Unit Siap Serah Terima",
+      title: "Dana KPR Terealisasi â€” Unit Siap Serah Terima",
       message: `Dana KPR dicairkan bersih Rp ${netReceived.toLocaleString("id-ID")}. Unit kini menunggu serah terima konsumen.`,
       entityId: bookingId,
       entityType: "unit_handover_wait",

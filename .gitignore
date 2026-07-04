@@ -68,16 +68,3 @@ python-ai-engine/__pycache__/
 # OS files
 Thumbs.db
 ehthumbs.db
-
-# Gemini directory
-.gemini/
-
-# AI Agent files and folders
-.agents/
-.kiro/
-AGENTS.md
-CLAUDE.md
-docs/
-
-# Scratch / temporary working files
-scratch/

@@ -26,41 +26,11 @@ import { Progress } from "@/components/ui/progress";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
-  Area,
-  AreaChart,
-  Bar,
-  BarChart,
-  ResponsiveContainer,
-  XAxis,
-  YAxis,
-  Tooltip as ChartTooltip,
-  CartesianGrid,
-  PieChart,
-  Pie,
-  Cell,
-  LineChart,
-  Line,
-} from "recharts";
-
-const CustomChartTooltip = ({ active, payload, label }: any) => {
-  if (active && payload && payload.length) {
-    return (
-      <div className="bg-white/95 backdrop-blur-md border border-[#D6DED2] p-4 rounded-2xl shadow-[0_10px_30px_rgba(143,175,154,0.12)] font-sans text-xs space-y-2">
-        <p className="font-extrabold text-[#243028] border-b border-[#D6DED2]/60 pb-1.5">{label}</p>
-        {payload.map((pld: any, index: number) => (
-          <div key={index} className="flex items-center justify-between gap-4 font-semibold">
-            <div className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: pld.fill || pld.color || "#8FAF9A" }} />
-              <span className="text-[#66736A]">{pld.name}:</span>
-            </div>
-            <span className="font-mono text-[#243028] font-bold">Rp {pld.value.toLocaleString("id-ID")}</span>
-          </div>
-        ))}
-      </div>
-    );
-  }
-  return null;
-};
+  DynamicDashboardAreaChart,
+  DynamicDashboardPieChart,
+  ChartErrorBoundary,
+} from "@/components/charts";
+import { STATUS_COLOR_MAP, PIE_COLORS } from "@/components/charts/dashboard-pie-chart";
 
 interface DashboardShellProps {
   stats: any;
@@ -75,23 +45,7 @@ interface DashboardShellProps {
   userName: string;
 }
 
-const PIE_COLORS = ["#8FAF9A", "#FFF2C2", "#DCECF7", "#FBE4C9", "#F3D1D1", "#E9DDF7", "#D4EEE7", "#F8D4DA", "#E7E9E7"];
 
-const STATUS_COLOR_MAP: Record<string, string> = {
-  "Belum Siap": "#AAB5AF", // Cool Slate/Gray
-  "Tersedia": "#8FAF9A", // Sage Green
-  "Tersedia - Ready Stock": "#3F5941", // Hijau Gelap
-  "Booking": "#E9C46A", // Warm Yellow
-  "Proses KPR": "#8FB8D8", // Soft Blue
-  "Pending Bayar": "#FBE4C9", // Orange Warm
-  "Terjual": "#D77A7A", // Muted Red
-  "Proses Bangun": "#B8A4D9", // Soft Lavender
-  "Proses Bangun - Ready Stock": "#4B286D", // Ungu Gelap
-  "Bangun - Ready Stock": "#4B286D", // Ungu Gelap (Alternative label)
-  "Selesai Bangun": "#7AA874", // Success Soft Green
-  "Overdue": "#E8A0A8", // Soft Rose
-  "Batal": "#A8B0AA", // Cool Gray
-};
 
 export default function DashboardShell({
   stats,
@@ -203,7 +157,7 @@ export default function DashboardShell({
         
         {/* Metric 1: Financial Balance / Total Units Available */}
         {(isSuperAdmin || isDireksi || isKeuangan) ? (
-          <Card className="rounded-3xl border border-[#D6DED2]/80 bg-white/70 backdrop-blur-md shadow-[0_8px_30px_rgba(143,175,154,0.05)] hover:shadow-[0_12px_40px_rgba(143,175,154,0.12)] hover:-translate-y-1.5 transition-all duration-300 relative overflow-hidden group">
+          <Card className="dashboard-card-stagger rounded-3xl border border-[#D6DED2]/80 bg-white/70 backdrop-blur-md shadow-[0_8px_30px_rgba(143,175,154,0.05)] hover:shadow-[0_12px_40px_rgba(143,175,154,0.12)] hover:-translate-y-1.5 transition-all duration-300 relative overflow-hidden group" style={{ animationDelay: "0ms" }}>
             <div className="absolute top-0 left-0 w-full h-1 bg-[#4F6F52]" />
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
               <CardTitle className="text-[10px] font-bold text-[#66736A] uppercase tracking-wider">{t("dash.net_cash")}</CardTitle>
@@ -222,7 +176,7 @@ export default function DashboardShell({
             </CardContent>
           </Card>
         ) : (
-          <Card className="rounded-3xl border border-[#D6DED2]/80 bg-white/70 backdrop-blur-md shadow-[0_8px_30px_rgba(143,175,154,0.05)] hover:shadow-[0_12px_40px_rgba(143,175,154,0.12)] hover:-translate-y-1.5 transition-all duration-300 relative overflow-hidden group">
+          <Card className="dashboard-card-stagger rounded-3xl border border-[#D6DED2]/80 bg-white/70 backdrop-blur-md shadow-[0_8px_30px_rgba(143,175,154,0.05)] hover:shadow-[0_12px_40px_rgba(143,175,154,0.12)] hover:-translate-y-1.5 transition-all duration-300 relative overflow-hidden group" style={{ animationDelay: "0ms" }}>
             <div className="absolute top-0 left-0 w-full h-1 bg-[#4F6F52]" />
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
               <CardTitle className="text-[10px] font-bold text-[#66736A] uppercase tracking-wider">{t("dash.available_units")}</CardTitle>
@@ -242,7 +196,7 @@ export default function DashboardShell({
         )}
 
         {/* Metric 2: Total Units Booked / Active Bookings */}
-        <Card className="rounded-3xl border border-[#D6DED2]/80 bg-white/70 backdrop-blur-md shadow-[0_8px_30px_rgba(143,175,154,0.05)] hover:shadow-[0_12px_40px_rgba(143,175,154,0.12)] hover:-translate-y-1.5 transition-all duration-300 relative overflow-hidden group">
+        <Card className="dashboard-card-stagger rounded-3xl border border-[#D6DED2]/80 bg-white/70 backdrop-blur-md shadow-[0_8px_30px_rgba(143,175,154,0.05)] hover:shadow-[0_12px_40px_rgba(143,175,154,0.12)] hover:-translate-y-1.5 transition-all duration-300 relative overflow-hidden group" style={{ animationDelay: "100ms" }}>
           <div className="absolute top-0 left-0 w-full h-1 bg-amber-500" />
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
             <CardTitle className="text-[10px] font-bold text-[#66736A] uppercase tracking-wider">{t("dash.booked_units")}</CardTitle>
@@ -261,7 +215,7 @@ export default function DashboardShell({
         </Card>
 
         {/* Metric 3: Active Pembangunan SPK / Overdue SPK count */}
-        <Card className="rounded-3xl border border-[#D6DED2]/80 bg-white/70 backdrop-blur-md shadow-[0_8px_30px_rgba(143,175,154,0.05)] hover:shadow-[0_12px_40px_rgba(143,175,154,0.12)] hover:-translate-y-1.5 transition-all duration-300 relative overflow-hidden group">
+        <Card className="dashboard-card-stagger rounded-3xl border border-[#D6DED2]/80 bg-white/70 backdrop-blur-md shadow-[0_8px_30px_rgba(143,175,154,0.05)] hover:shadow-[0_12px_40px_rgba(143,175,154,0.12)] hover:-translate-y-1.5 transition-all duration-300 relative overflow-hidden group" style={{ animationDelay: "200ms" }}>
           <div className="absolute top-0 left-0 w-full h-1 bg-purple-500" />
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
             <CardTitle className="text-[10px] font-bold text-[#66736A] uppercase tracking-wider">{t("dash.construction_units")}</CardTitle>
@@ -281,7 +235,7 @@ export default function DashboardShell({
 
         {/* Metric 4: Alerts / Overdue SPK / Pending Approvals */}
         {(isSuperAdmin || isDireksi) ? (
-          <Card className="rounded-3xl border border-rose-200/80 bg-white/70 backdrop-blur-md shadow-[0_8px_30px_rgba(143,175,154,0.05)] hover:shadow-[0_12px_40px_rgb(215,122,122,0.12)] hover:-translate-y-1.5 transition-all duration-300 relative overflow-hidden group hover:border-rose-300">
+          <Card className="dashboard-card-stagger rounded-3xl border border-rose-200/80 bg-white/70 backdrop-blur-md shadow-[0_8px_30px_rgba(143,175,154,0.05)] hover:shadow-[0_12px_40px_rgb(215,122,122,0.12)] hover:-translate-y-1.5 transition-all duration-300 relative overflow-hidden group hover:border-rose-300" style={{ animationDelay: "300ms" }}>
             <div className="absolute top-0 left-0 w-full h-1 bg-rose-500" />
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
               <CardTitle className="text-[10px] font-bold text-rose-700 uppercase tracking-wider">{t("dash.pending_approval")}</CardTitle>
@@ -301,7 +255,7 @@ export default function DashboardShell({
             </CardContent>
           </Card>
         ) : (
-          <Card className="rounded-3xl border border-rose-200/80 bg-white/70 backdrop-blur-md shadow-[0_8px_30px_rgba(143,175,154,0.05)] hover:shadow-[0_12px_40px_rgb(215,122,122,0.12)] hover:-translate-y-1.5 transition-all duration-300 relative overflow-hidden group hover:border-rose-300">
+          <Card className="dashboard-card-stagger rounded-3xl border border-rose-200/80 bg-white/70 backdrop-blur-md shadow-[0_8px_30px_rgba(143,175,154,0.05)] hover:shadow-[0_12px_40px_rgb(215,122,122,0.12)] hover:-translate-y-1.5 transition-all duration-300 relative overflow-hidden group hover:border-rose-300" style={{ animationDelay: "300ms" }}>
             <div className="absolute top-0 left-0 w-full h-1 bg-rose-500" />
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
               <CardTitle className="text-[10px] font-bold text-rose-700 uppercase tracking-wider">{t("dash.spk_delay")}</CardTitle>
@@ -337,63 +291,21 @@ export default function DashboardShell({
           </CardHeader>
           <CardContent className="pl-2 pb-5">
             <div className="w-full" style={{ height: 300, minWidth: 0, minHeight: 0 }}>
-              {isMarketing ? (
-                <div className="relative w-full h-full">
-                  <ResponsiveContainer width="100%" height={300} minWidth={0}>
-                    <PieChart>
-                      <Pie
-                        data={stats.statusDataset}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={70}
-                        outerRadius={95}
-                        paddingAngle={3}
-                        dataKey="Jumlah"
-                      >
-                        {stats.statusDataset.map((entry: any, index: number) => {
-                          const color = STATUS_COLOR_MAP[entry.name] || PIE_COLORS[index % PIE_COLORS.length];
-                          return (
-                            <Cell key={`cell-${index}`} fill={color} stroke="var(--card)" strokeWidth={2} />
-                          );
-                        })}
-                      </Pie>
-                      <ChartTooltip formatter={(v, name) => [`${v} Unit`, name]} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  {/* Central Statistics Indicator */}
-                  <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                    <span className="text-3xl font-extrabold text-foreground font-mono tracking-tight">{stats.totalUnits}</span>
-                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">{t("dash.units")}</span>
-                  </div>
-                </div>
-              ) : (
-                <ResponsiveContainer width="100%" height={300} minWidth={0}>
-                  <AreaChart data={stats.monthlyCashFlow} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="colorInflow" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="var(--secondary-foreground)" stopOpacity={0.4}/>
-                        <stop offset="95%" stopColor="var(--primary)" stopOpacity={0.02}/>
-                      </linearGradient>
-                      <linearGradient id="colorOutflow" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#D77A7A" stopOpacity={0.4}/>
-                        <stop offset="95%" stopColor="#E8A0A8" stopOpacity={0.02}/>
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="var(--border)" />
-                    <XAxis dataKey="name" stroke="var(--muted-foreground)" fontSize={11} tickLine={false} axisLine={false} />
-                    <YAxis
-                      stroke="var(--muted-foreground)"
-                      fontSize={10}
-                      tickLine={false}
-                      axisLine={false}
-                      tickFormatter={(v) => `Rp ${(v/1000000).toLocaleString("id-ID")}jt`}
-                    />
-                    <ChartTooltip content={<CustomChartTooltip />} />
-                    <Area type="monotone" dataKey="Inflow" stroke="var(--secondary-foreground)" strokeWidth={3} fillOpacity={1} fill="url(#colorInflow)" name={t("dash.income")} />
-                    <Area type="monotone" dataKey="Outflow" stroke="#D77A7A" strokeWidth={3} fillOpacity={1} fill="url(#colorOutflow)" name={t("dash.expense")} />
-                  </AreaChart>
-                </ResponsiveContainer>
-              )}
+              <ChartErrorBoundary fallbackHeight={300}>
+                {isMarketing ? (
+                  <DynamicDashboardPieChart
+                    data={stats.statusDataset}
+                    totalUnits={stats.totalUnits}
+                    unitsLabel={t("dash.units")}
+                  />
+                ) : (
+                  <DynamicDashboardAreaChart
+                    data={stats.monthlyCashFlow}
+                    incomeLabel={t("dash.income")}
+                    expenseLabel={t("dash.expense")}
+                  />
+                )}
+              </ChartErrorBoundary>
             </div>
 
             {isMarketing && (

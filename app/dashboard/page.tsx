@@ -10,7 +10,7 @@ import DashboardShell from "@/components/dashboard/dashboard-shell";
 import { VendorDashboardShell } from "@/components/dashboard/vendor-dashboard-shell";
 import { FieldSupervisorDashboardShell } from "@/components/dashboard/field-supervisor-dashboard-shell";
 
-export const revalidate = 0;
+export const revalidate = 60;
 
 export default async function DashboardPage() {
   const activeUser = await requireAuth();

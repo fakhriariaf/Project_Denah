@@ -60,6 +60,8 @@ import {
   Eye,
   Trash2,
 } from "lucide-react";
+import { PageHeader } from "@/components/ui/page-header";
+import { StatCard } from "@/components/ui/stat-card";
 import {
   createInvoice,
   createPayment,
@@ -72,15 +74,9 @@ import {
   deleteInvoice,
 } from "@/server/actions/finance";
 import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip as ChartTooltip,
-  Legend,
-  CartesianGrid,
-} from "recharts";
+  DynamicFinanceBarChart,
+  ChartErrorBoundary,
+} from "@/components/charts";
 
 interface FinanceShellProps {
   activeUser: { id: string; name: string; email: string; roleId?: string | null };
@@ -591,22 +587,12 @@ export default function FinanceShell({
     <div className="flex flex-col gap-6">
       
       {/* ── PREMIUM HEADER ── */}
-      <div className="relative rounded-2xl overflow-hidden bg-gradient-to-r from-[#DDE8D8]/70 via-white/95 to-[#DDE8D8]/40 border border-[#D6DED2] shadow-sage p-6">
-        <div className="absolute -top-6 -right-6 h-28 w-28 rounded-full bg-[#8FAF9A]/10 blur-2xl pointer-events-none" />
-        <div className="absolute bottom-0 left-1/3 h-20 w-20 rounded-full bg-[#4F6F52]/8 blur-xl pointer-events-none" />
-
-        <div className="relative flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="flex items-start gap-3">
-            <div className="h-12 w-12 rounded-2xl bg-[#4F6F52] flex items-center justify-center shadow-[0_4px_12px_rgba(79,111,82,0.3)] shrink-0">
-              <CircleDollarSign className="h-6 w-6 text-white" />
-            </div>
-            <div>
-              <h2 className="text-2xl font-black text-[#243028] tracking-tight">{t("finance.title")}</h2>
-              <p className="text-sm text-[#66736A] mt-0.5">{t("finance.subtitle")}</p>
-            </div>
-          </div>
-          
-          <div className="flex flex-wrap items-center gap-3 self-end lg:self-center">
+      <PageHeader
+        icon={<CircleDollarSign className="h-6 w-6" />}
+        title={t("finance.title")}
+        description={t("finance.subtitle")}
+        actions={
+          <div className="flex flex-wrap items-center gap-3">
             {/* Project Selector filter */}
             <div className="w-[200px]">
               <Select 
@@ -638,78 +624,35 @@ export default function FinanceShell({
               />
             </div>
           </div>
-        </div>
-      </div>
+        }
+      />
 
       {/* 2. Top Banner Metrics Widgets */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Card 1: Total Kas Masuk */}
-        <Card className="bg-white/75 backdrop-blur-md border border-[#D6DED2]/80 shadow-sage hover:shadow-sage-lg hover:-translate-y-1 transition-premium rounded-3xl overflow-hidden relative group">
-          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-400 to-[#8FAF9A]" />
-          <div className="absolute -right-6 -bottom-6 w-24 h-24 rounded-full bg-emerald-500/5 group-hover:scale-150 transition-premium duration-500" />
-          <CardContent className="p-5 flex items-center justify-between relative z-10">
-            <div>
-              <p className="text-xs text-[#66736A] font-semibold uppercase tracking-wider">{t("finance.kpi_income")}</p>
-              <h3 className="text-xl font-extrabold font-mono text-[#4F6F52] mt-1.5 tracking-tight tabular-nums">
-                Rp {totalIncomeVal.toLocaleString("id-ID")}
-              </h3>
-            </div>
-            <div className="h-11 w-11 rounded-2xl bg-emerald-50 text-emerald-600 border border-emerald-100 flex items-center justify-center shadow-sm group-hover:scale-110 group-hover:bg-emerald-500 group-hover:text-white transition-premium">
-              <TrendingUp className="h-5.5 w-5.5 animate-pulse" />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Card 2: Pengeluaran Disetujui */}
-        <Card className="bg-white/75 backdrop-blur-md border border-[#D6DED2]/80 shadow-sage hover:shadow-sage-lg hover:-translate-y-1 transition-premium rounded-3xl overflow-hidden relative group">
-          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-rose-400 to-[#D77A7A]" />
-          <div className="absolute -right-6 -bottom-6 w-24 h-24 rounded-full bg-rose-500/5 group-hover:scale-150 transition-premium duration-500" />
-          <CardContent className="p-5 flex items-center justify-between relative z-10">
-            <div>
-              <p className="text-xs text-[#66736A] font-semibold uppercase tracking-wider">{t("finance.kpi_expense")}</p>
-              <h3 className="text-xl font-extrabold font-mono text-[#D77A7A] mt-1.5 tracking-tight tabular-nums">
-                Rp {totalExpenseVal.toLocaleString("id-ID")}
-              </h3>
-            </div>
-            <div className="h-11 w-11 rounded-2xl bg-rose-50 text-[#D77A7A] border border-rose-100 flex items-center justify-center shadow-sm group-hover:scale-110 group-hover:bg-[#D77A7A] group-hover:text-white transition-premium">
-              <TrendingDown className="h-5.5 w-5.5" />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Card 3: Saldo Bersih */}
-        <Card className="bg-white/75 backdrop-blur-md border border-[#D6DED2]/80 shadow-sage hover:shadow-sage-lg hover:-translate-y-1 transition-premium rounded-3xl overflow-hidden relative group">
-          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#8FAF9A] to-[#4F6F52]" />
-          <div className="absolute -right-6 -bottom-6 w-24 h-24 rounded-full bg-[#8FAF9A]/5 group-hover:scale-150 transition-premium duration-500" />
-          <CardContent className="p-5 flex items-center justify-between relative z-10">
-            <div>
-              <p className="text-xs text-[#66736A] font-semibold uppercase tracking-wider">{t("finance.kpi_net")}</p>
-              <h3 className="text-xl font-extrabold font-mono text-[#4F6F52] mt-1.5 tracking-tight tabular-nums">
-                Rp {netBalanceVal.toLocaleString("id-ID")}
-              </h3>
-            </div>
-            <div className="h-11 w-11 rounded-2xl bg-[#DDE8D8] text-[#4F6F52] border border-[#8FAF9A]/20 flex items-center justify-center shadow-sm group-hover:scale-110 group-hover:bg-[#4F6F52] group-hover:text-white transition-premium">
-              <CircleDollarSign className="h-5.5 w-5.5" />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Card 4: Piutang Berjalan */}
-        <Card className="bg-white/75 backdrop-blur-md border border-[#D6DED2]/80 shadow-sage hover:shadow-sage-lg hover:-translate-y-1 transition-premium rounded-3xl overflow-hidden relative group">
-          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-400 to-[#E9C46A]" />
-          <div className="absolute -right-6 -bottom-6 w-24 h-24 rounded-full bg-amber-500/5 group-hover:scale-150 transition-premium duration-500" />
-          <CardContent className="p-5 flex items-center justify-between relative z-10">
-            <div>
-              <p className="text-xs text-[#66736A] font-semibold uppercase tracking-wider">{t("finance.kpi_ar")}</p>
-              <h3 className="text-xl font-extrabold font-mono text-[#E9C46A] mt-1.5 tracking-tight tabular-nums">
-                Rp {totalUnpaidVal.toLocaleString("id-ID")}
-              </h3>
-            </div>
-            <div className="h-11 w-11 rounded-2xl bg-amber-50 text-[#E9C46A] border border-amber-100 flex items-center justify-center shadow-sm group-hover:scale-110 group-hover:bg-[#E9C46A] group-hover:text-white transition-premium">
-              <Clock className="h-5.5 w-5.5" />
-            </div>
-          </CardContent>
-        </Card>
+        <StatCard
+          title={t("finance.kpi_income")}
+          value={`Rp ${totalIncomeVal.toLocaleString("id-ID")}`}
+          icon={<TrendingUp className="h-5 w-5" />}
+          colorScheme="#10b981"
+        />
+        <StatCard
+          title={t("finance.kpi_expense")}
+          value={`Rp ${totalExpenseVal.toLocaleString("id-ID")}`}
+          icon={<TrendingDown className="h-5 w-5" />}
+          colorScheme="#f43f5e"
+        />
+        <StatCard
+          title={t("finance.kpi_net")}
+          value={`Rp ${netBalanceVal.toLocaleString("id-ID")}`}
+          icon={<CircleDollarSign className="h-5 w-5" />}
+          colorScheme="#4F6F52"
+        />
+        <StatCard
+          title={t("finance.kpi_ar")}
+          value={`Rp ${totalUnpaidVal.toLocaleString("id-ID")}`}
+          icon={<Clock className="h-5 w-5" />}
+          colorScheme="#f59e0b"
+        />
       </div>
 
       {/* 3. Operational Custom Tabs Navigation */}
@@ -2132,15 +2075,9 @@ export default function FinanceShell({
               </CardHeader>
               <CardContent className="w-full min-w-0 p-4">
                 <div style={{ height: 280, minHeight: 0, minWidth: 0 }}>
-                <ResponsiveContainer width="100%" height={280} minWidth={0}>
-                  <BarChart data={monthlyData}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="name" stroke="#66736A" fontSize={12} />
-                    <YAxis stroke="#66736A" fontSize={10} tickFormatter={(v) => `Rp ${v.toLocaleString("id-ID")}`} />
-                    <ChartTooltip formatter={(v) => `Rp ${Number(v).toLocaleString("id-ID")}`} />
-                    <Bar dataKey="Nominal" fill="#8FAF9A" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+                <ChartErrorBoundary fallbackHeight={280}>
+                  <DynamicFinanceBarChart data={monthlyData} />
+                </ChartErrorBoundary>
                 </div>
               </CardContent>
             </Card>

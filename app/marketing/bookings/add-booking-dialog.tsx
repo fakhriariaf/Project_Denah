@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { PlusCircle, AlertCircle, CheckCircle, Building2, User, DollarSign, CalendarDays } from "lucide-react";
 import { parseServerError } from "@/lib/error-parser";
+import { handleActionResult, type ActionResult } from "@/lib/action-utils";
 import { useI18n } from "@/lib/i18n";
 import { Translate } from "@/components/translate";
 
@@ -117,8 +118,10 @@ export default function AddBookingDialog({
         isLead: isLeadSelected,
         termin: paymentScheme === "installment" ? installmentTerm : undefined,
       });
-      if (res.success) {
-        setSuccess(t("booking_form.success_add", { number: res.bookingNumber }));
+
+      const unitCode = units.find((u) => u.id === unitId)?.code || "";
+      const result: ActionResult<typeof res> = { success: true, data: res };
+      if (handleActionResult(result, { successMessage: `Booking ${res.bookingNumber || bookingNumber} untuk unit ${unitCode} berhasil dibuat` })) {
         setTimeout(() => {
           setOpen(false);
           reset();
@@ -127,10 +130,12 @@ export default function AddBookingDialog({
           } else {
             window.location.reload();
           }
-        }, 1500);
+        }, 1200);
       }
     } catch (err: any) {
-      setError(parseServerError(err));
+      const errorMsg = parseServerError(err);
+      handleActionResult({ success: false, error: errorMsg });
+      setError(errorMsg);
     } finally {
       setLoading(false);
     }

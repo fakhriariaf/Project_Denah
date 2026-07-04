@@ -13,6 +13,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Edit3, AlertCircle, CheckCircle, Building2, User, DollarSign, CalendarDays } from "lucide-react";
+import { parseServerError } from "@/lib/error-parser";
+import { handleActionResult, type ActionResult } from "@/lib/action-utils";
 import { useI18n } from "@/lib/i18n";
 
 interface Props {
@@ -101,8 +103,8 @@ export default function EditBookingDialog({
         termin: paymentScheme === "installment" ? installmentTerm : undefined,
       });
 
-      if (res.success) {
-        setSuccess(t("booking_form.success_edit", { number: booking.bookingNumber }));
+      const result: ActionResult<typeof res> = { success: true, data: res };
+      if (handleActionResult(result, { successMessage: `Booking ${booking.bookingNumber} berhasil diperbarui` })) {
         setTimeout(() => {
           setOpen(false);
           setSuccess(null);
@@ -111,10 +113,12 @@ export default function EditBookingDialog({
           } else {
             window.location.reload();
           }
-        }, 1500);
+        }, 1200);
       }
     } catch (err: any) {
-      setError(err.message || t("booking_form.error_edit"));
+      const errorMsg = parseServerError(err);
+      handleActionResult({ success: false, error: errorMsg });
+      setError(errorMsg);
     } finally {
       setLoading(false);
     }

@@ -14,6 +14,8 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { AlertOctagon, AlertCircle } from "lucide-react";
 import { cancelBooking } from "@/server/actions/marketing";
+import { parseServerError } from "@/lib/error-parser";
+import { handleActionResult, type ActionResult } from "@/lib/action-utils";
 import { useI18n } from "@/lib/i18n";
 import { Translate } from "@/components/translate";
 
@@ -39,14 +41,16 @@ export default function CancelBookingDialog({ booking }: Props) {
     setError(null);
     try {
       const res = await cancelBooking(booking.id, reason);
-      if (res.success) {
-        alert(t("booking_form.cancel_success"));
+      const result: ActionResult<typeof res> = { success: true, data: res };
+      if (handleActionResult(result, { successMessage: `Booking ${booking.unitCode || ""} berhasil dibatalkan` })) {
         setOpen(false);
         setReason("");
         window.location.reload();
       }
     } catch (err: any) {
-      setError(err.message || t("booking_form.error_cancel"));
+      const errorMsg = parseServerError(err);
+      handleActionResult({ success: false, error: errorMsg });
+      setError(errorMsg);
     } finally {
       setLoading(false);
     }

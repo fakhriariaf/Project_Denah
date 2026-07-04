@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { user as userTable, userProfiles, userEmployments, vendorProfiles } from "@/db/schema/auth";
 import { auditLogs } from "@/db/schema/system";
 import { roles } from "@/db/schema/access";
-import { vendors, projectUsers } from "@/db/schema/master";
+import { projectUsers } from "@/db/schema/master";
 import { getCurrentUser, hasPermission } from "@/server/permissions";
 import { eq, and, ne, desc, or } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
@@ -36,6 +36,8 @@ const employmentProfileSchema = z.object({
 const vendorProfileSchema = z.object({
   vendorCode: z.string().min(2, "Kode Vendor minimal 2 karakter"),
   companyName: z.string().min(2, "Nama Perusahaan minimal 2 karakter"),
+  // BUG 15 FIX: Accept vendorId directly from form to avoid ambiguous match-by-name
+  vendorId: z.string().nullable().optional(),
   picName: z.string().nullable().optional(),
   picPhone: z.string().nullable().optional(),
   vendorType: z.string().nullable().optional(),
@@ -333,12 +335,11 @@ export async function updateVendorProfile(targetUserId: string, data: unknown) {
     throw new Error(`Kode Vendor "${parsed.vendorCode}" sudah digunakan oleh vendor lain.`);
   }
 
-  // Resolve vendorId based on companyName
-  const [matchedVendor] = await db
-    .select({ id: vendors.id })
-    .from(vendors)
-    .where(eq(vendors.name, parsed.companyName))
-    .limit(1);
+  // BUG 15 FIX: Use vendorId passed from form input directly.
+  // Previously resolved by name (eq(vendors.name, parsed.companyName)) which is ambiguous
+  // when multiple vendors share the same company name — causes silent wrong-vendor link.
+  // If vendorId is not provided in the form, preserve the existing one from the profile record.
+  const resolvedVendorId = parsed.vendorId || existingVendor?.vendorId || null;
 
   const vendorValues = {
     vendorCode: parsed.vendorCode,
@@ -348,7 +349,7 @@ export async function updateVendorProfile(targetUserId: string, data: unknown) {
     vendorType: parsed.vendorType || null,
     address: parsed.address || null,
     status: parsed.status,
-    vendorId: matchedVendor?.id || null,
+    vendorId: resolvedVendorId,
     updatedAt: new Date(),
   };
 

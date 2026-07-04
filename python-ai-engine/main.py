@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from routers.svg_analyzer import analyze_svg_content
 from routers.raster_analyzer import analyze_raster_content
 import uvicorn
+import os
 
 app = FastAPI(
     title="Housing Siteplan Analysis AI Engine",
@@ -13,7 +14,9 @@ app = FastAPI(
 # Enable CORS for Next.js frontend communication
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # In production, restrict this to the frontend URL
+    # SECURITY FIX: Restrict CORS to frontend URL only — was allow_origins=["*"]
+    # Set FRONTEND_URL env var in production (e.g. https://your-domain.com)
+    allow_origins=[os.getenv("FRONTEND_URL", "http://localhost:3000")],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

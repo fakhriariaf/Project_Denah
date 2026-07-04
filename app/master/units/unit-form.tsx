@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Home, AlertCircle, Loader2 } from "lucide-react";
 import { parseServerError } from "@/lib/error-parser";
+import { handleActionResult, type ActionResult } from "@/lib/action-utils";
 import { useI18n } from "@/lib/i18n";
 
 // No longer need STATUS_LABELS since we will use t("timeline.[status]")
@@ -69,10 +70,10 @@ export function UnitForm({
         let res;
         if (id) {
           res = await updateUnit(id, data);
-          alert("Data unit/kavling berhasil diperbarui!");
+          handleActionResult({ success: true, data: res } as ActionResult<typeof res>, { successMessage: `Unit ${data.code} berhasil diperbarui` });
         } else {
           res = await createUnit(data);
-          alert("Data unit/kavling berhasil disimpan!");
+          handleActionResult({ success: true, data: res } as ActionResult<typeof res>, { successMessage: `Unit ${data.code} berhasil dibuat` });
         }
         if (onSuccess && (res as any)?.id) {
           await onSuccess((res as any).id);
@@ -81,7 +82,9 @@ export function UnitForm({
         if (!id) reset();
         window.location.reload();
       } catch (err) {
-        setError(parseServerError(err));
+        const errorMsg = parseServerError(err);
+        handleActionResult({ success: false, error: errorMsg });
+        setError(errorMsg);
       }
     });
   };
