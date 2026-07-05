@@ -8,6 +8,7 @@ export const dictionaries = {
   id: {
     // Navigation
     "nav.dashboard": "Dashboard",
+    "nav.notifications": "Notifikasi",
     "nav.masterData": "Master Data",
     "nav.masterData.projects": "Data Proyek",
     "nav.masterData.units": "Data Kavling & Unit",
