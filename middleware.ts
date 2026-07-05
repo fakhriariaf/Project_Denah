@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { isMaintenanceMode } from "@/lib/maintenance-cache";
+import { checkSessionIsSuperAdmin } from "@/lib/check-session-role";
 
 /**
  * Middleware Authentication Strategy
@@ -32,6 +34,23 @@ function hasSessionCookie(request: NextRequest): boolean {
   });
 }
 
+/**
+ * Extracts the session token value from the request cookies.
+ * Returns the raw token string or null if no valid session cookie is found.
+ */
+function getSessionToken(request: NextRequest): string | null {
+  const cookieHeader = request.headers.get("cookie") || "";
+  for (const name of SESSION_COOKIE_NAMES) {
+    const match = cookieHeader.match(
+      new RegExp(`(?:^|;\\s*)${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}=([^;]+)`)
+    );
+    if (match && match[1] && match[1].trim().length > 0) {
+      return match[1].trim();
+    }
+  }
+  return null;
+}
+
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
@@ -40,7 +59,8 @@ export async function middleware(request: NextRequest) {
     pathname === "/siteplan-public" ||
     pathname.startsWith("/siteplan-public/") ||
     pathname === "/api/public/siteplan" ||
-    pathname.startsWith("/api/cron/");
+    pathname.startsWith("/api/cron/") ||
+    pathname === "/maintenance";
 
   if (isPublicRoute) {
     return NextResponse.next();
@@ -62,6 +82,20 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
+  // Maintenance mode check for authenticated users on non-public routes
+  const maintenanceActive = await isMaintenanceMode();
+  if (maintenanceActive) {
+    const sessionToken = getSessionToken(request);
+    if (!sessionToken) {
+      // No valid token found — treat as non-Super Admin, redirect to maintenance
+      return NextResponse.redirect(new URL("/maintenance", request.url));
+    }
+    const isSuperAdmin = await checkSessionIsSuperAdmin(sessionToken);
+    if (!isSuperAdmin) {
+      return NextResponse.redirect(new URL("/maintenance", request.url));
+    }
+  }
+
   // Redirect root to dashboard
   if (pathname === "/") {
     return NextResponse.redirect(new URL("/dashboard", request.url));
@@ -74,6 +108,7 @@ export const config = {
   matcher: [
     "/",
     "/login",
+    "/maintenance",
     "/siteplan-public",
     "/siteplan-public/:path*",
     "/api/public/siteplan",

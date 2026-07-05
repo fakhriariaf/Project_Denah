@@ -103,7 +103,7 @@ export function BookingsTableClient({
         ids: Array.from(selectedIds),
       });
 
-      if (handleActionResult(result, { successMessage: `${result.success ? (result.data as any).rowCount : 0} booking berhasil diekspor` })) {
+      if (handleActionResult(result, { successMessage: `${result.success ? (result.data as { rowCount: number }).rowCount : 0} booking berhasil diekspor` })) {
         // Decode base64 and trigger download
         const data = (result as { success: true; data: { fileBase64: string; fileName: string; rowCount: number } }).data;
         const byteCharacters = atob(data.fileBase64);
@@ -337,7 +337,7 @@ export function BookingsTableClient({
                           <Translate
                             namespace="booking"
                             translationKey={
-                              `scheme_${booking.paymentScheme}` as any
+                              `scheme_${booking.paymentScheme}`
                             }
                             fallback={booking.paymentScheme}
                           />
@@ -354,7 +354,7 @@ export function BookingsTableClient({
                             <Translate
                               namespace="booking"
                               translationKey={
-                                `status_${booking.status}` as any
+                                `status_${booking.status}`
                               }
                               fallback={booking.status}
                             />
@@ -390,7 +390,7 @@ export function BookingsTableClient({
                           {/* BUG FIX: Dialogs instantiated here to avoid Server→Client function prop error */}
                           {booking.status === "active" && (
                             <EditBookingDialog
-                              booking={booking as any}
+                              booking={booking as unknown as React.ComponentProps<typeof EditBookingDialog>["booking"]}
                               marketings={marketings ?? []}
                               currentUser={activeUser ?? { id: "", name: "" }}
                             />

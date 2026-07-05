@@ -79,7 +79,7 @@ export function parseServerError(err: unknown): string {
   try {
     const parsed = JSON.parse(msg);
     if (Array.isArray(parsed)) {
-      return parsed.map((e: any) => e.message || dict["err.invalid_field"]).join(", ");
+      return parsed.map((e: { message?: string }) => e.message || dict["err.invalid_field"]).join(", ");
     }
     if (parsed.message) return parsed.message;
   } catch {

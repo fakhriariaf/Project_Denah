@@ -10,7 +10,7 @@ export const invoiceSchema = z.object({
   dueDate: z.preprocess(
     (val) => {
       if (!val) return null;
-      const d = new Date(val as any);
+      const d = new Date(val as string | number | Date);
       if (isNaN(d.getTime())) return null;
       return d;
     },

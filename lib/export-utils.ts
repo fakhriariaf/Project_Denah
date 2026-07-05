@@ -66,7 +66,7 @@ export function exportToCsv(
 /**
  * Escapes values containing commas, quotes or newlines for CSV safety
  */
-function escapeCsvValue(val: any): string {
+function escapeCsvValue(val: string | number | boolean | null | undefined | Date): string {
   const str = String(val);
   if (str.includes(",") || str.includes('"') || str.includes("\n") || str.includes("\r")) {
     return `"${str.replace(/"/g, '""')}"`;

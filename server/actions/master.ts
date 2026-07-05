@@ -1,4 +1,4 @@
-﻿"use server";
+"use server";
 
 import { db } from "@/db";
 import { projects, units, customers, vendors, projectUsers, siteplans, siteplanShapes, financeCategories, financeAccounts } from "@/db/schema/master";
@@ -86,7 +86,7 @@ export async function createUnit(data: unknown) {
   if (!parsed.isReadyStock) {
     const ALLOWED_INITIAL_STATUSES = ["available", "belum_siap", "cancelled"];
     if (!ALLOWED_INITIAL_STATUSES.includes(parsed.status)) {
-      throw new Error(`âš ï¸ Unit baru dengan alur Konstruksi ERP hanya dapat dibuat dengan status 'Tersedia', 'Belum Siap', atau 'Batal'. Status '${parsed.status}' wajib melalui alur transaksi ERP.`);
+      throw new Error(`⚠️ Unit baru dengan alur Konstruksi ERP hanya dapat dibuat dengan status 'Tersedia', 'Belum Siap', atau 'Batal'. Status '${parsed.status}' wajib melalui alur transaksi ERP.`);
     }
   }
 
@@ -235,11 +235,11 @@ export async function updateUnit(id: string, data: unknown) {
 
     const ALLOWED_TO_BECOME_AVAILABLE = ["available", "belum_siap", "cancelled"];
     if (parsed.status === "available" && !ALLOWED_TO_BECOME_AVAILABLE.includes(existingUnit.status) && parsed.readyStockSource === "construction_flow" && !existingUnit.isReadyStock) {
-      throw new Error("âš ï¸ Unit dengan alur Konstruksi ERP wajib menyelesaikan pembangunan dan mengunggah BAST Vendor di modul Konstruksi untuk menjadi Tersedia.");
+      throw new Error("⚠️ Unit dengan alur Konstruksi ERP wajib menyelesaikan pembangunan dan mengunggah BAST Vendor di modul Konstruksi untuk menjadi Tersedia.");
     }
 
     if (parsed.status === "construction" && existingUnit.status !== "construction" && !parsed.isReadyStock) {
-      throw new Error("âš ï¸ Unit tidak dapat langsung diset 'Proses Bangun'. Status 'Proses Bangun' hanya dapat diubah melalui SPK Konstruksi.");
+      throw new Error("⚠️ Unit tidak dapat langsung diset 'Proses Bangun'. Status 'Proses Bangun' hanya dapat diubah melalui SPK Konstruksi.");
     }
 
     let finalSpkId = existingUnit.currentSpkId;
@@ -428,24 +428,24 @@ export async function deleteCustomer(id: string) {
 export async function provisionVendorAccount(vendorId: string) {
   await requireAnyRole(["Super Admin", "Admin Kantor"]);
 
-  // Layer 1 â€” Vendor harus ada
+  // Layer 1 — Vendor harus ada
   const [vendor] = await db.select().from(vendors).where(eq(vendors.id, vendorId)).limit(1);
   if (!vendor) throw new Error("Vendor tidak ditemukan.");
 
-  // Layer 2 â€” Vendor harus active
+  // Layer 2 — Vendor harus active
   if (vendor.status !== "active") {
     throw new Error("Vendor tidak aktif. Akun login tidak dapat dibuat untuk vendor nonaktif.");
   }
 
-  // Layer 3 â€” Vendor harus punya email
+  // Layer 3 — Vendor harus punya email
   if (!vendor.email || vendor.email.trim() === "") {
     throw new Error("Vendor belum memiliki email. Tambahkan email terlebih dahulu sebelum membuat akun.");
   }
 
-  // Layer 4 â€” Normalisasi email
+  // Layer 4 — Normalisasi email
   const normalizedEmail = vendor.email.trim().toLowerCase();
 
-  // Layer 5 â€” Vendor belum boleh punya vendorProfile
+  // Layer 5 — Vendor belum boleh punya vendorProfile
   const [existingProfile] = await db
     .select({ id: vendorProfiles.id })
     .from(vendorProfiles)
@@ -455,7 +455,7 @@ export async function provisionVendorAccount(vendorId: string) {
     throw new Error("Vendor sudah memiliki akun login.");
   }
 
-  // Layer 6 â€” Email belum boleh dipakai user lain
+  // Layer 6 — Email belum boleh dipakai user lain
   const [existingUser] = await db
     .select({ id: userTable.id })
     .from(userTable)
@@ -507,7 +507,7 @@ export async function provisionVendorAccount(vendorId: string) {
       }).run();
     });
   } catch (txErr) {
-    // Orphan user safety â€” nonaktifkan user yang gagal di-link
+    // Orphan user safety — nonaktifkan user yang gagal di-link
     await db
       .update(userTable)
       .set({ status: "inactive", updatedAt: new Date() })
@@ -519,7 +519,7 @@ export async function provisionVendorAccount(vendorId: string) {
     );
   }
 
-  // Audit log â€” TANPA tempPassword
+  // Audit log — TANPA tempPassword
   await writeAuditLog({
     action: "create",
     module: "master",
@@ -530,7 +530,7 @@ export async function provisionVendorAccount(vendorId: string) {
 
   revalidatePath("/master/vendors");
 
-  // Kembalikan credential â€” hanya sekali, tidak tersimpan
+  // Kembalikan credential — hanya sekali, tidak tersimpan
   return {
     success: true,
     accountCreated: true,
@@ -572,11 +572,11 @@ export async function createVendor(data: unknown) {
         email: result.email,
         tempPassword: result.tempPassword,
       };
-    } catch (err: any) {
-      // Non-fatal â€” vendor tetap tersimpan
+    } catch (err: unknown) {
+      // Non-fatal — vendor tetap tersimpan
       provisionResult = {
         accountCreated: false,
-        warning: err?.message ?? "Akun login tidak berhasil dibuat secara otomatis.",
+        warning: err instanceof Error ? err.message : "Akun login tidak berhasil dibuat secara otomatis.",
       };
     }
   }
@@ -595,11 +595,11 @@ export async function updateVendor(id: string, data: unknown) {
 
   await db.update(vendors).set({ ...vendorData }).where(eq(vendors.id, id));
 
-  // Sync status akun â€” wajib filter by vendorId, bukan companyName
+  // Sync status akun — wajib filter by vendorId, bukan companyName
   const [profile] = await db
     .select({ userId: vendorProfiles.userId })
     .from(vendorProfiles)
-    .where(eq(vendorProfiles.vendorId, id))   // â† filter by vendorId, bukan nama
+    .where(eq(vendorProfiles.vendorId, id))   // ← filter by vendorId, bukan nama
     .limit(1);
 
   if (profile) {
@@ -761,7 +761,7 @@ export async function updateFinanceAccount(id: string, data: unknown) {
   if (existing.length > 0 && existing[0].id !== id) {
     throw new Error(`Kode akun "${parsed.code}" sudah digunakan oleh rekening lain.`);
   }
-  // openingBalance is IMMUTABLE ï¿½ DO NOT update it
+  // openingBalance is IMMUTABLE � DO NOT update it
   await db.update(financeAccounts)
     .set({ code: parsed.code, name: parsed.name, type: parsed.type, status: parsed.status })
     .where(eq(financeAccounts.id, id));

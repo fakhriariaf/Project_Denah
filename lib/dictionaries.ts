@@ -151,6 +151,9 @@ export const dictionaries = {
     "audit.act_reject": "Penolakan (reject)",
     "audit.act_login": "Masuk (login)",
     "audit.act_logout": "Keluar (logout)",
+    "audit.load_more": "Muat Lebih Banyak",
+    "audit.loading": "Memuat...",
+    "audit.showing_count": "Menampilkan {{count}} log aktivitas",
 
     // Reports
     "reports.title": "Pusat Pelaporan Terpadu",
@@ -1580,6 +1583,7 @@ export const dictionaries = {
     "finance.kpi_expense": "Pengeluaran Disetujui",
     "finance.kpi_net": "Saldo Bersih (Netto)",
     "finance.kpi_ar": "Piutang Berjalan (Unpaid)",
+    "finance.tab_invoices": "Invoice & Tagihan",
     "finance.tab_payments": "Kas Masuk & Pembayaran",
     "finance.tab_transactions": "Buku Kas Ledger",
     "finance.tab_approvals": "Persetujuan Kas Keluar",

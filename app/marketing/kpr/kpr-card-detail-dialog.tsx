@@ -828,11 +828,21 @@ export default function KprCardDetailDialog({
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger nativeButton={true} render={
-        <Button size="sm" className="mt-2 w-full bg-slate-50 hover:bg-slate-100 text-[#4F6F52] hover:text-[#3F5941] font-semibold border border-slate-200/60 shadow-sm flex items-center justify-center gap-1">
-          <Eye className="h-4 w-4" /> {t("kpr_dialog.btn_manage")}
-        </Button>
-      } />
+      <div className="flex gap-2 mt-2">
+        <SheetTrigger nativeButton={true} render={
+          <Button size="sm" className="flex-1 bg-slate-50 hover:bg-slate-100 text-[#4F6F52] hover:text-[#3F5941] font-semibold border border-slate-200/60 shadow-sm flex items-center justify-center gap-1">
+            <Eye className="h-4 w-4" /> {t("kpr_dialog.btn_manage")}
+          </Button>
+        } />
+        <a
+          href={`/marketing/kpr/${kpr.id}`}
+          className="h-9 px-3 bg-[#4F6F52]/10 hover:bg-[#4F6F52]/20 text-[#4F6F52] font-semibold border border-[#4F6F52]/20 rounded-md text-xs flex items-center gap-1 transition-colors"
+          title="Lihat Detail"
+        >
+          <ChevronRight className="h-3.5 w-3.5" />
+          Detail
+        </a>
+      </div>
       
       <SheetContent side="right" className="w-full sm:max-w-4xl bg-white/98 backdrop-blur-md border-l border-[#D6DED2] p-0 overflow-hidden flex flex-col h-full z-[100] sm:rounded-l-3xl shadow-[0_8px_30px_rgba(79,111,82,0.18)]">
         

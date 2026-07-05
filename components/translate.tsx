@@ -1,11 +1,12 @@
 "use client";
 
 import { useI18n } from "@/lib/i18n";
+import { DictionaryKey } from "@/lib/dictionaries";
 import React from "react";
 
 interface TranslateProps {
   /** Flat dict key, e.g. "booking.title" */
-  id?: any;
+  id?: string;
   /** Namespace prefix, e.g. "booking" */
   namespace?: string;
   /** Key within namespace, e.g. "title" */
@@ -38,8 +39,8 @@ export function Translate({
   const { t } = useI18n();
 
   // Resolve dict key
-  const key: any = id ?? (namespace && translationKey ? `${namespace}.${translationKey}` : "");
-  const text = t(key, values) || fallback || key;
+  const key = id ?? (namespace && translationKey ? `${namespace}.${translationKey}` : "");
+  const text = t(key as DictionaryKey, values) || fallback || key;
 
   // If render prop provided, pass the string through
   if (render) {

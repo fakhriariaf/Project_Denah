@@ -33,7 +33,7 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <head suppressHydrationWarning />
-      <body className="min-h-full flex flex-col">
+      <body className="min-h-full flex flex-col" suppressHydrationWarning>
         <script
           dangerouslySetInnerHTML={{
             __html: `

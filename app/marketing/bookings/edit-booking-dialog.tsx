@@ -21,7 +21,7 @@ interface Props {
   booking: {
     id: string;
     bookingNumber: string;
-    bookingDate: any; // Date | string | number
+    bookingDate: Date | string | number;
     bookingFee: number;
     dpAmount: number;
     paymentScheme: "cash" | "kpr" | "installment";

@@ -77,13 +77,16 @@ export type ShapeWithUnit = {
     notes: string | null;
     cluster: string | null;
     currentSpkId?: string | null;
+    currentBookingId?: string | null;
+    currentCustomerId?: string | null;
+    readyStockSource?: string | null;
   } | null;
 };
 
 // Helper functions for unit stock type and financial/physical readiness
-function getUnitStockType(unit: any) {
+function getUnitStockType(unit: ShapeWithUnit["unit"]) {
   if (!unit) return "unknown";
-  const isReady = unit.isReadyStock === true || unit.isReadyStock === 1;
+  const isReady = !!unit.isReadyStock;
 
   if (isReady) {
     if (unit.status === "available") {
@@ -142,7 +145,11 @@ function getUnitStockType(unit: any) {
   return "unknown";
 }
 
-function getFinancialReadiness(activeBooking: any, invoices: any[], kprProcess: any) {
+type BookingInfo = { id: string; unitId: string; customerId: string; paymentScheme: string; status: string; createdAt?: string | Date };
+type InvoiceInfo = { id: string; bookingId: string | null; type: string; status: string; amount: number };
+type KprProcessInfo = { id: string; bookingId: string; status: string; biCheckStatus: string; documentStatus: string; bankNotes?: string | null };
+
+function getFinancialReadiness(activeBooking: BookingInfo | null, invoices: InvoiceInfo[], kprProcess: KprProcessInfo | undefined | null) {
   if (!activeBooking) {
     return {
       ready: false,
@@ -194,7 +201,8 @@ function getFinancialReadiness(activeBooking: any, invoices: any[], kprProcess: 
   };
 }
 
-function getPhysicalReadiness(unit: any, selectedSpkBast: any) {
+function getPhysicalReadiness(unit: ShapeWithUnit["unit"], selectedSpkBast: unknown) {
+  if (!unit) return { ready: false, reason: "Unit tidak ditemukan." };
   const unitStockType = getUnitStockType(unit);
 
   const isReadyStockType = [
@@ -254,12 +262,19 @@ function getPhysicalReadiness(unit: any, selectedSpkBast: any) {
 }
 
 function getHandoverEligibility(
-  unit: any,
-  activeBooking: any,
-  invoices: any[],
-  kprProcess: any,
-  selectedSpkBast: any
+  unit: ShapeWithUnit["unit"],
+  activeBooking: BookingInfo | null,
+  invoices: InvoiceInfo[],
+  kprProcess: KprProcessInfo | undefined | null,
+  selectedSpkBast: unknown
 ) {
+  if (!unit) {
+    return {
+      eligible: false,
+      reason: "Unit tidak ditemukan.",
+    };
+  }
+
   if (!activeBooking) {
     return {
       eligible: false,
@@ -305,7 +320,7 @@ function getHandoverEligibility(
   };
 }
 
-function getActiveBooking(unitId: string, bookingsList: any[] | undefined) {
+function getActiveBooking(unitId: string, bookingsList: BookingInfo[] | undefined) {
   if (!bookingsList) return null;
   const validBookings = bookingsList
     .filter((b) => b.unitId === unitId)
@@ -317,8 +332,8 @@ function getActiveBooking(unitId: string, bookingsList: any[] | undefined) {
     validBookings.find((b) => b.status === "completed") ||
     validBookings.find((b) => b.status === "active") ||
     [...validBookings].sort((a, b) => {
-      const dateA = (a as any).createdAt ? new Date((a as any).createdAt).getTime() : 0;
-      const dateB = (b as any).createdAt ? new Date((b as any).createdAt).getTime() : 0;
+      const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
       if (dateA !== dateB) return dateB - dateA;
       return b.id.localeCompare(a.id);
     })[0] ||
@@ -336,7 +351,7 @@ type SiteplanViewerProps = {
   units?: { id: string; code: string; projectId: string; price: number; status: string }[];
   customers?: { id: string; name: string; phone?: string | null }[];
   leads?: { id: string; name: string; phone: string; status: string; assignedMarketingId: string | null }[];
-  bookings?: { id: string; unitId: string; customerId: string; paymentScheme: string; status: string }[];
+  bookings?: { id: string; unitId: string; customerId: string; paymentScheme: string; status: string; createdAt?: string | Date }[];
   invoices?: Array<{ id: string; bookingId: string | null; type: string; status: string; amount: number }>;
   kprProcesses?: Array<{ id: string; bookingId: string; status: string; biCheckStatus: string; documentStatus: string; bankNotes?: string | null }>;
   marketings?: { id: string; name: string; roleName?: string | null }[];
@@ -460,8 +475,8 @@ export function SiteplanViewer({
         });
         alert("Catatan cacat fisik (defect list) berhasil disimpan!");
       }
-    } catch (err: any) {
-      alert(err.message || "Gagal menyimpan catatan.");
+    } catch (err: unknown) {
+      alert((err instanceof Error ? err.message : null) || "Gagal menyimpan catatan.");
     } finally {
       setIsSubmitting(false);
     }
@@ -500,8 +515,8 @@ export function SiteplanViewer({
         alert("Foto defect berhasil diunggah!");
         window.location.reload();
       }
-    } catch (err: any) {
-      alert(err.message || "Gagal mengunggah foto.");
+    } catch (err: unknown) {
+      alert((err instanceof Error ? err.message : null) || "Gagal mengunggah foto.");
     } finally {
       setUploadingDefectPhoto(false);
     }
@@ -516,8 +531,8 @@ export function SiteplanViewer({
         setDefectPhotosList(prev => prev.filter(p => p.id !== attachmentId));
         alert("Foto defect berhasil dihapus!");
       }
-    } catch (err: any) {
-      alert(err.message || "Gagal menghapus foto.");
+    } catch (err: unknown) {
+      alert((err instanceof Error ? err.message : null) || "Gagal menghapus foto.");
     } finally {
       setIsSubmitting(false);
     }
@@ -532,8 +547,8 @@ export function SiteplanViewer({
         alert("Kavling berhasil dikaitkan dengan unit/kavling yang dipilih!");
         window.location.reload();
       }
-    } catch (err: any) {
-      alert(err.message || "Gagal mengaitkan unit.");
+    } catch (err: unknown) {
+      alert((err instanceof Error ? err.message : null) || "Gagal mengaitkan unit.");
     } finally {
       setIsLinking(false);
     }
@@ -546,7 +561,7 @@ export function SiteplanViewer({
       if (!res.success) {
         throw new Error("Gagal mengaitkan koordinat ke unit.");
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Gagal menautkan unit baru ke shape:", err);
       alert("Unit berhasil dibuat, tetapi gagal ditautkan ke koordinat. Hubungkan manual unit ini.");
     }
@@ -554,15 +569,16 @@ export function SiteplanViewer({
 
   // BAST Upload Dialog states
   const [bastDialogOpen, setBastDialogOpen] = useState(false);
-  const [bastUnit, setBastUnit] = useState<any | null>(null);
-  const [bastSpk, setBastSpk] = useState<any | null>(null);
+  const [bastUnit, setBastUnit] = useState<ShapeWithUnit["unit"]>(null);
+  const [bastSpk, setBastSpk] = useState<Awaited<ReturnType<typeof getActiveSpkForUnit>> | null>(null);
   const [bastPdfFile, setBastPdfFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [selectedSpkBast, setSelectedSpkBast] = useState<any | null>(null);
+  const [selectedSpkBast, setSelectedSpkBast] = useState<{ id: string; fileUrl: string; fileName: string } | null>(null);
 
-  const handleOpenBastDialog = async (unit: any) => {
+  const handleOpenBastDialog = async (unit: ShapeWithUnit["unit"]) => {
+    if (!unit) return;
     setIsSubmitting(true);
     setErrorMessage(null);
     try {
@@ -575,8 +591,8 @@ export function SiteplanViewer({
       setBastSpk(spk);
       setBastPdfFile(null);
       setBastDialogOpen(true);
-    } catch (err: any) {
-      alert(err.message || "Gagal mengambil data SPK terkait.");
+    } catch (err: unknown) {
+      alert((err instanceof Error ? err.message : null) || "Gagal mengambil data SPK terkait.");
     } finally {
       setIsSubmitting(false);
     }
@@ -633,8 +649,8 @@ export function SiteplanViewer({
         setSelectedShape(null);
         window.location.reload();
       }
-    } catch (e: any) {
-      setErrorMessage(e.message || "Gagal menyelesaikan pembangunan unit.");
+    } catch (e: unknown) {
+      setErrorMessage((e instanceof Error ? e.message : null) || "Gagal menyelesaikan pembangunan unit.");
     } finally {
       setIsSubmitting(false);
     }
@@ -837,15 +853,15 @@ export function SiteplanViewer({
   };
 
   const unit = selectedShape?.unit;
-  const isReadyStock = (unit as any)?.isReadyStock === true || (unit as any)?.isReadyStock === 1;
+  const isReadyStock = !!unit?.isReadyStock;
   const statusColor = getStatusColor(unit?.status, isReadyStock);
   const activeBooking = unit ? getActiveBooking(unit.id, bookings) : null;
 
   // Retrieve current booking to determine payment scheme
-  const realBooking = activeBooking || (unit ? bookings?.find(b => b.id === (unit as any).currentBookingId) : null);
+  const realBooking = activeBooking || (unit ? bookings?.find(b => b.id === unit.currentBookingId) : null);
   const paymentScheme = realBooking?.paymentScheme;
 
-  const isReady = unit ? (unit.isReadyStock === true || (unit.isReadyStock as any) === 1) : false;
+  const isReady = unit ? !!unit.isReadyStock : false;
   const getUnbookedStatusLabel = (status: string, isReadyStock: boolean) => {
     if (status === "available") {
       return isReadyStock ? "Tersedia - Ready Stock" : "Tersedia";
@@ -873,14 +889,14 @@ export function SiteplanViewer({
     kprProcess,
     invoices
   }: {
-    unit: any;
-    activeBooking: any;
+    unit: NonNullable<ShapeWithUnit["unit"]>;
+    activeBooking: BookingInfo | null;
     paymentScheme?: string;
-    kprProcess?: any;
-    invoices: any[];
+    kprProcess?: KprProcessInfo | null;
+    invoices: InvoiceInfo[];
   }) => {
     if (!activeBooking) {
-      const isReadyVal = unit.isReadyStock === true || unit.isReadyStock === 1;
+      const isReadyVal = !!unit.isReadyStock;
       const isBuilding = unit.status === "construction" || unit.status === "overdue";
 
       // "Sedang Dibangun untuk Ready Stock" — internal construction, no buyer yet
@@ -947,7 +963,7 @@ export function SiteplanViewer({
     const physicalReady = physical.ready;
 
     // Helper to override all steps to done if handover is complete
-    const overrideIfHandoverComplete = (stepsList: any[]) => {
+    const overrideIfHandoverComplete = <T extends { label: string; done: boolean; key?: string }>(stepsList: T[]) => {
       if (isHandoverComplete) {
         return stepsList.map((s) => ({
           ...s,
@@ -1432,12 +1448,12 @@ export function SiteplanViewer({
                 <span
                   className="inline-flex items-center rounded-lg px-2 py-0.5 text-[9px] font-black border"
                   style={{
-                    backgroundColor: getStatusColor(hoveredShape.unit.status, (hoveredShape.unit as any)?.isReadyStock).fill,
-                    color: getStatusColor(hoveredShape.unit.status, (hoveredShape.unit as any)?.isReadyStock).text || getStatusColor(hoveredShape.unit.status, (hoveredShape.unit as any)?.isReadyStock).stroke,
-                    borderColor: getStatusColor(hoveredShape.unit.status, (hoveredShape.unit as any)?.isReadyStock).stroke + "30",
+                    backgroundColor: getStatusColor(hoveredShape.unit.status, hoveredShape.unit?.isReadyStock).fill,
+                    color: getStatusColor(hoveredShape.unit.status, hoveredShape.unit?.isReadyStock).text || getStatusColor(hoveredShape.unit.status, hoveredShape.unit?.isReadyStock).stroke,
+                    borderColor: getStatusColor(hoveredShape.unit.status, hoveredShape.unit?.isReadyStock).stroke + "30",
                   }}
                 >
-                  {getUnitStatusLabel(hoveredShape.unit.status, (hoveredShape.unit as any)?.isReadyStock)}
+                  {getUnitStatusLabel(hoveredShape.unit.status, hoveredShape.unit?.isReadyStock)}
                 </span>
               </div>
             </div>
@@ -1748,9 +1764,9 @@ export function SiteplanViewer({
                                       alert(`Unit "${unit.code}" berhasil masuk ke tahap Pembangunan Fisik!`);
                                       window.location.reload();
                                     }
-                                  } catch (err: any) {
-                                    setErrorMessage(err.message || "Gagal memulai pembangunan fisik.");
-                                    alert(err.message || "Gagal memulai pembangunan fisik.");
+                                  } catch (err: unknown) {
+                                    setErrorMessage((err instanceof Error ? err.message : null) || "Gagal memulai pembangunan fisik.");
+                                    alert((err instanceof Error ? err.message : null) || "Gagal memulai pembangunan fisik.");
                                   } finally {
                                     setIsSubmitting(false);
                                   }
@@ -1791,7 +1807,7 @@ export function SiteplanViewer({
                     {/* Selesai Pembangunan Action Card */}
                     {((unit.status === "construction_done") ||
                       ((unit.status === "construction" || unit.status === "overdue") && unit.constructionProgress === 100)) && (() => {
-                        const isIndentUnit = !!activeBooking || !!(unit as any).currentCustomerId;
+                        const isIndentUnit = !!activeBooking || !!unit?.currentCustomerId;
                         const canVerifyBast = currentUser?.role != null &&
                           ["Super Admin", "Admin Kantor", "Pengawas Lapangan", "Pengawas"].includes(currentUser.role);
 
@@ -1920,7 +1936,7 @@ export function SiteplanViewer({
                     {/* Buyer Info Card (Only if active booking exists) */}
                     {activeBooking && (() => {
                       const realCustomer = customers?.find(c => c.id === activeBooking.customerId)
-                        || customers?.find(c => c.id === (unit as any).currentCustomerId);
+                        || customers?.find(c => c.id === unit?.currentCustomerId);
                       
                       let buyerName = "";
                       let buyerPhone = "";
@@ -2572,7 +2588,7 @@ export function SiteplanViewer({
                           price: unit.price || 0,
                           status: "belum_siap",
                           isReadyStock: unit.isReadyStock || false,
-                          readyStockSource: (unit as any).readyStockSource || "construction_flow",
+                          readyStockSource: (unit?.readyStockSource as "construction_flow" | "legacy_ready_stock" | "manual_ready_stock") || "construction_flow",
                           notes: unit.notes || undefined,
                         }}
                       />

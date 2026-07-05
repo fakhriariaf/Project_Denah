@@ -158,7 +158,7 @@ export async function getSpkDetails(spkId: string) {
 
   // Get all attachments associated with this SPK or these logs
   const logIds = logsRaw.map(l => l.log.id);
-  let allAttachments: any[] = [];
+  let allAttachments: typeof attachments.$inferSelect[] = [];
   if (logIds.length > 0) {
     allAttachments = await db
       .select()
@@ -341,7 +341,7 @@ export async function deleteSpk(spkId: string) {
       // - No booking: restore to "belum_siap"
       let restoredStatus: "available" | "belum_siap" | "booking" | "kpr_process" | "payment_pending" | "sold" | "construction" | "construction_done" | "overdue" | "cancelled" = "belum_siap";
       if (unit.isReadyStock) {
-        restoredStatus = unit.status as any;
+        restoredStatus = unit.status as typeof restoredStatus;
       } else if (unit.currentBookingId) {
         // Check if the associated booking uses KPR scheme to restore correct status
         const bookingRow = await tx

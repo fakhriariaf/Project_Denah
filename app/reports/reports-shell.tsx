@@ -43,12 +43,16 @@ import {
   PiggyBank,
   ArrowUpRight,
   ArrowDownRight,
+  FileCheck,
+  MessageSquare,
 } from "lucide-react";
 import { getFinancialReport } from "@/server/actions/finance";
 import {
   getSalesReportsData,
   getProductionReportsData,
   getUnitReportsData,
+  getKprReportsData,
+  getComplaintReportsData,
 } from "@/server/actions/reports";
 import { exportToCsv } from "@/lib/export-utils";
 import { formatRupiah } from "@/lib/format-utils";
@@ -76,6 +80,8 @@ export default function ReportsShell({
   const [unitData, setUnitData] = React.useState<Array<Record<string, any>>>([]);
   const [salesData, setSalesData] = React.useState<Array<Record<string, any>>>([]);
   const [productionData, setProductionData] = React.useState<Array<Record<string, any>>>([]);
+  const [kprData, setKprData] = React.useState<Record<string, any> | null>(null);
+  const [complaintData, setComplaintData] = React.useState<Record<string, any> | null>(null);
   
   const [isLoading, setIsLoading] = React.useState(false);
   const [mounted, setMounted] = React.useState(false);
@@ -106,6 +112,13 @@ export default function ReportsShell({
         const filterStatus = status === "all" ? undefined : status;
         const data = await getProductionReportsData(projectId, filterStatus);
         setProductionData(data);
+      } else if (tab === "kpr") {
+        const data = await getKprReportsData(projectId);
+        setKprData(data);
+      } else if (tab === "complaints") {
+        const filterProject = projectId === "all" ? undefined : projectId;
+        const data = await getComplaintReportsData(filterProject);
+        setComplaintData(data);
       }
     } catch (err) {
       console.error("Gagal memuat laporan data:", err);
@@ -326,6 +339,18 @@ export default function ReportsShell({
             className="data-[state=active]:bg-[#4F6F52] data-[state=active]:text-white data-[state=active]:shadow-[0_2px_8px_rgba(79,111,82,0.3)] text-[#66736A] text-xs font-bold rounded-xl px-4 py-2 transition-all duration-200 flex items-center gap-1.5"
           >
             <Wrench className="h-3.5 w-3.5" /> <Translate namespace="reports" translationKey="tab_production" />
+          </TabsTrigger>
+          <TabsTrigger
+            value="kpr"
+            className="data-[state=active]:bg-[#4F6F52] data-[state=active]:text-white data-[state=active]:shadow-[0_2px_8px_rgba(79,111,82,0.3)] text-[#66736A] text-xs font-bold rounded-xl px-4 py-2 transition-all duration-200 flex items-center gap-1.5"
+          >
+            <FileCheck className="h-3.5 w-3.5" /> Laporan KPR
+          </TabsTrigger>
+          <TabsTrigger
+            value="complaints"
+            className="data-[state=active]:bg-[#4F6F52] data-[state=active]:text-white data-[state=active]:shadow-[0_2px_8px_rgba(79,111,82,0.3)] text-[#66736A] text-xs font-bold rounded-xl px-4 py-2 transition-all duration-200 flex items-center gap-1.5"
+          >
+            <MessageSquare className="h-3.5 w-3.5" /> Laporan Complaint
           </TabsTrigger>
         </TabsList>
       </Tabs>
@@ -901,6 +926,377 @@ export default function ReportsShell({
                 </Table>
               </CardContent>
             </Card>
+          )}
+
+          {/* ════ TAB 5: KPR (MORTGAGE PROCESS) ════ */}
+          {activeTab === "kpr" && kprData && (
+            <div className="space-y-6 animate-in fade-in duration-300">
+
+              {/* KPI Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
+                {/* Total KPR Aktif */}
+                <Card className="bg-white border-[#D6DED2] shadow-sage hover:shadow-sage-lg hover:-translate-y-0.5 transition-premium overflow-hidden relative">
+                  <div className="absolute top-0 left-0 w-1 h-full bg-[#4F6F52]" />
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-[10px] text-[#66736A] font-bold uppercase tracking-wider pl-3">Total KPR Aktif</p>
+                      <div className="h-9 w-9 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0">
+                        <FileCheck className="h-4 w-4" />
+                      </div>
+                    </div>
+                    <h3 className="text-2xl font-black font-mono text-[#4F6F52] tabular-nums pl-3">
+                      {kprData.totalKprAktif}
+                    </h3>
+                    <div className="flex items-center gap-1 mt-2 pl-3">
+                      <span className="text-[10px] text-[#8FAF9A] font-medium">Proses berjalan</span>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* SLA Terlewat */}
+                <Card className="bg-white border-[#D6DED2] shadow-sage hover:shadow-sage-lg hover:-translate-y-0.5 transition-premium overflow-hidden relative">
+                  <div className="absolute top-0 left-0 w-1 h-full bg-rose-400" />
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-[10px] text-[#66736A] font-bold uppercase tracking-wider pl-3">SLA Terlewat</p>
+                      <div className="h-9 w-9 rounded-xl bg-rose-50 flex items-center justify-center text-rose-600 shrink-0">
+                        <TrendingDown className="h-4 w-4" />
+                      </div>
+                    </div>
+                    <h3 className="text-2xl font-black font-mono text-rose-600 tabular-nums pl-3">
+                      {kprData.slaOverdueCount}
+                    </h3>
+                    <div className="flex items-center gap-1 mt-2 pl-3">
+                      <span className="text-[10px] text-rose-400 font-medium">Melewati batas SLA</span>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* BI Checking Lolos % */}
+                <Card className="bg-white border-[#D6DED2] shadow-sage hover:shadow-sage-lg hover:-translate-y-0.5 transition-premium overflow-hidden relative">
+                  <div className="absolute top-0 left-0 w-1 h-full bg-[#8FAF9A]" />
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-[10px] text-[#66736A] font-bold uppercase tracking-wider pl-3">BI Checking Lolos</p>
+                      <div className="h-9 w-9 rounded-xl bg-sky-50 flex items-center justify-center text-sky-600 shrink-0">
+                        <Activity className="h-4 w-4" />
+                      </div>
+                    </div>
+                    <h3 className="text-2xl font-black font-mono text-[#4F6F52] tabular-nums pl-3">
+                      {kprData.biApprovedPct}%
+                    </h3>
+                    <div className="flex items-center gap-1 mt-2 pl-3">
+                      <span className="text-[10px] text-[#8FAF9A] font-medium">Rasio approved</span>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Akad Bulan Ini */}
+                <Card className="bg-white border-[#D6DED2] shadow-sage hover:shadow-sage-lg hover:-translate-y-0.5 transition-premium overflow-hidden relative">
+                  <div className="absolute top-0 left-0 w-1 h-full bg-amber-400" />
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-[10px] text-[#66736A] font-bold uppercase tracking-wider pl-3">Akad Bulan Ini</p>
+                      <div className="h-9 w-9 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600 shrink-0">
+                        <ArrowUpRight className="h-4 w-4" />
+                      </div>
+                    </div>
+                    <h3 className="text-2xl font-black font-mono text-amber-700 tabular-nums pl-3">
+                      {kprData.akadThisMonthCount}
+                    </h3>
+                    <div className="flex items-center gap-1 mt-2 pl-3">
+                      <span className="text-[10px] text-amber-500 font-medium">Jadwal akad</span>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Chart: KPR Status Distribution */}
+              <Card className="bg-white border-[#D6DED2] shadow-sage">
+                <CardHeader className="pb-2 border-b border-[#D6DED2]">
+                  <CardTitle className="text-sm font-bold text-[#243028] flex items-center gap-2">
+                    <BarChart3 className="h-4 w-4 text-[#8FAF9A]" />
+                    Distribusi Status KPR
+                  </CardTitle>
+                  <CardDescription className="text-xs text-[#66736A]">Jumlah proses KPR berdasarkan tahapan saat ini</CardDescription>
+                </CardHeader>
+                <CardContent className="w-full min-w-0 pt-4">
+                  <div style={{ height: 260, minHeight: 0, minWidth: 0 }}>
+                    <ChartErrorBoundary fallbackHeight={260}>
+                      <DynamicReportsBarChart data={kprData.statusDataset} />
+                    </ChartErrorBoundary>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Summary Tables */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Status Breakdown Table */}
+                <Card className="bg-white border-[#D6DED2] shadow-sage">
+                  <CardHeader className="pb-3 border-b border-[#D6DED2]">
+                    <CardTitle className="text-sm font-bold text-[#243028] flex items-center gap-2">
+                      <FileCheck className="h-4 w-4 text-[#8FAF9A]" /> Status KPR
+                    </CardTitle>
+                    <CardDescription className="text-xs text-[#66736A]">Rincian jumlah per tahapan proses</CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-[#F7F8F3]/70 border-b border-[#D6DED2]">
+                          <TableHead className="text-[10px] font-bold text-[#66736A] uppercase tracking-wider">Tahapan</TableHead>
+                          <TableHead className="text-right text-[10px] font-bold text-[#66736A] uppercase tracking-wider">Jumlah</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {kprData.statusDataset.map((item: { name: string; Nominal: number; type: string }) => (
+                          <TableRow key={item.type} className="hover:bg-[#F7F8F3]/60 transition-colors border-b border-[#D6DED2]/50">
+                            <TableCell className="text-xs font-semibold text-[#243028] py-3">{item.name}</TableCell>
+                            <TableCell className="text-right font-mono font-bold text-xs text-[#4F6F52] tabular-nums py-3">
+                              {item.Nominal}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+
+                {/* BI Check Status Table */}
+                <Card className="bg-white border-[#D6DED2] shadow-sage">
+                  <CardHeader className="pb-3 border-b border-[#D6DED2]">
+                    <CardTitle className="text-sm font-bold text-[#243028] flex items-center gap-2">
+                      <Activity className="h-4 w-4 text-[#8FAF9A]" /> Status BI Checking
+                    </CardTitle>
+                    <CardDescription className="text-xs text-[#66736A]">Distribusi hasil pengecekan BI</CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-[#F7F8F3]/70 border-b border-[#D6DED2]">
+                          <TableHead className="text-[10px] font-bold text-[#66736A] uppercase tracking-wider">Status BI</TableHead>
+                          <TableHead className="text-right text-[10px] font-bold text-[#66736A] uppercase tracking-wider">Jumlah</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {kprData.biCheckDataset.map((item: { key: string; label: string; count: number }) => (
+                          <TableRow key={item.key} className="hover:bg-[#F7F8F3]/60 transition-colors border-b border-[#D6DED2]/50">
+                            <TableCell className="text-xs font-semibold text-[#243028] py-3">
+                              <Badge
+                                className={
+                                  item.key === "approved"
+                                    ? "bg-[#DDE8D8] text-[#4F6F52] border-[#8FAF9A]/30 hover:bg-[#DDE8D8] text-[10px]"
+                                    : item.key === "pending"
+                                    ? "bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-50 text-[10px]"
+                                    : item.key === "partial"
+                                    ? "bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-50 text-[10px]"
+                                    : "bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-50 text-[10px]"
+                                }
+                              >
+                                {item.label}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right font-mono font-bold text-xs text-[#4F6F52] tabular-nums py-3">
+                              {item.count}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          )}
+
+          {/* ════ TAB 6: COMPLAINTS ════ */}
+          {activeTab === "complaints" && complaintData && (
+            <div className="space-y-6 animate-in fade-in duration-300">
+
+              {/* KPI Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
+                {/* Total Open */}
+                <Card className="bg-white border-[#D6DED2] shadow-sage hover:shadow-sage-lg hover:-translate-y-0.5 transition-premium overflow-hidden relative">
+                  <div className="absolute top-0 left-0 w-1 h-full bg-amber-400" />
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-[10px] text-[#66736A] font-bold uppercase tracking-wider pl-3">Total Open</p>
+                      <div className="h-9 w-9 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600 shrink-0">
+                        <MessageSquare className="h-4 w-4" />
+                      </div>
+                    </div>
+                    <h3 className="text-2xl font-black font-mono text-amber-700 tabular-nums pl-3">
+                      {complaintData.totalOpen}
+                    </h3>
+                    <div className="flex items-center gap-1 mt-2 pl-3">
+                      <span className="text-[10px] text-amber-500 font-medium">Complaint terbuka saat ini</span>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Total Resolved (bulan ini) */}
+                <Card className="bg-white border-[#D6DED2] shadow-sage hover:shadow-sage-lg hover:-translate-y-0.5 transition-premium overflow-hidden relative">
+                  <div className="absolute top-0 left-0 w-1 h-full bg-[#4F6F52]" />
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-[10px] text-[#66736A] font-bold uppercase tracking-wider pl-3">Resolved Bulan Ini</p>
+                      <div className="h-9 w-9 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0">
+                        <TrendingUp className="h-4 w-4" />
+                      </div>
+                    </div>
+                    <h3 className="text-2xl font-black font-mono text-[#4F6F52] tabular-nums pl-3">
+                      {complaintData.resolvedThisMonth}
+                    </h3>
+                    <div className="flex items-center gap-1 mt-2 pl-3">
+                      <span className="text-[10px] text-[#8FAF9A] font-medium">Diselesaikan bulan ini</span>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Rata-rata Waktu Resolusi */}
+                <Card className="bg-white border-[#D6DED2] shadow-sage hover:shadow-sage-lg hover:-translate-y-0.5 transition-premium overflow-hidden relative">
+                  <div className="absolute top-0 left-0 w-1 h-full bg-[#8FAF9A]" />
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-[10px] text-[#66736A] font-bold uppercase tracking-wider pl-3">Rata-rata Resolusi</p>
+                      <div className="h-9 w-9 rounded-xl bg-sky-50 flex items-center justify-center text-sky-600 shrink-0">
+                        <Activity className="h-4 w-4" />
+                      </div>
+                    </div>
+                    <h3 className="text-2xl font-black font-mono text-[#4F6F52] tabular-nums pl-3">
+                      {complaintData.avgResolutionDays} <span className="text-sm font-medium text-[#66736A]">hari</span>
+                    </h3>
+                    <div className="flex items-center gap-1 mt-2 pl-3">
+                      <span className="text-[10px] text-[#8FAF9A] font-medium">Waktu rata-rata penyelesaian</span>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Kategori Terbanyak */}
+                <Card className="bg-white border-[#D6DED2] shadow-sage hover:shadow-sage-lg hover:-translate-y-0.5 transition-premium overflow-hidden relative">
+                  <div className="absolute top-0 left-0 w-1 h-full bg-rose-400" />
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-[10px] text-[#66736A] font-bold uppercase tracking-wider pl-3">Kategori Terbanyak</p>
+                      <div className="h-9 w-9 rounded-xl bg-rose-50 flex items-center justify-center text-rose-600 shrink-0">
+                        <BarChart3 className="h-4 w-4" />
+                      </div>
+                    </div>
+                    <h3 className="text-lg font-black text-rose-600 pl-3 truncate">
+                      {complaintData.topCategory}
+                    </h3>
+                    <div className="flex items-center gap-1 mt-2 pl-3">
+                      <span className="text-[10px] text-rose-400 font-medium">Open terlama: {complaintData.oldestOpenDays} hari</span>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Chart: Complaints by Category */}
+              <Card className="bg-white border-[#D6DED2] shadow-sage">
+                <CardHeader className="pb-2 border-b border-[#D6DED2]">
+                  <CardTitle className="text-sm font-bold text-[#243028] flex items-center gap-2">
+                    <BarChart3 className="h-4 w-4 text-[#8FAF9A]" />
+                    Complaint per Kategori
+                  </CardTitle>
+                  <CardDescription className="text-xs text-[#66736A]">Distribusi jumlah complaint berdasarkan kategori</CardDescription>
+                </CardHeader>
+                <CardContent className="w-full min-w-0 pt-4">
+                  <div style={{ height: 260, minHeight: 0, minWidth: 0 }}>
+                    <ChartErrorBoundary fallbackHeight={260}>
+                      <DynamicReportsBarChart
+                        data={complaintData.categoryBreakdown.map((c: { label: string; count: number; category: string }) => ({
+                          name: c.label,
+                          Nominal: c.count,
+                          type: "income",
+                        }))}
+                      />
+                    </ChartErrorBoundary>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Summary Table: Status Breakdown */}
+              <Card className="bg-white border-[#D6DED2] shadow-sage">
+                <CardHeader className="pb-3 border-b border-[#D6DED2]">
+                  <CardTitle className="text-sm font-bold text-[#243028] flex items-center gap-2">
+                    <MessageSquare className="h-4 w-4 text-[#8FAF9A]" /> Breakdown Status Complaint
+                  </CardTitle>
+                  <CardDescription className="text-xs text-[#66736A]">Rincian jumlah dan persentase per status</CardDescription>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-[#F7F8F3]/70 border-b border-[#D6DED2]">
+                        <TableHead className="text-[10px] font-bold text-[#66736A] uppercase tracking-wider">Status</TableHead>
+                        <TableHead className="text-right text-[10px] font-bold text-[#66736A] uppercase tracking-wider">Jumlah</TableHead>
+                        <TableHead className="text-right text-[10px] font-bold text-[#66736A] uppercase tracking-wider">Persentase</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {(() => {
+                        const statusLabels: Record<string, string> = {
+                          open: "Open",
+                          in_progress: "In Progress",
+                          in_review: "In Review",
+                          need_revision: "Need Revision",
+                          approved_extension: "Approved Extension",
+                          follow_up_required: "Follow Up Required",
+                          waiting_customer_confirmation: "Waiting Confirmation",
+                          resolved: "Resolved",
+                          rejected: "Rejected",
+                          closed: "Closed",
+                        };
+                        const entries = Object.entries(complaintData.statusBreakdown as Record<string, number>)
+                          .filter(([, cnt]) => cnt > 0)
+                          .sort(([, a], [, b]) => b - a);
+                        if (entries.length === 0) {
+                          return (
+                            <TableRow>
+                              <TableCell colSpan={3} className="py-12 text-center">
+                                <div className="flex flex-col items-center gap-3">
+                                  <div className="h-16 w-16 rounded-full bg-[#DDE8D8]/50 flex items-center justify-center mx-auto">
+                                    <MessageSquare className="h-8 w-8 text-[#4F6F52]" />
+                                  </div>
+                                  <div>
+                                    <p className="font-semibold text-[#243028] text-sm">Belum ada data complaint</p>
+                                    <p className="text-xs text-[#66736A] mt-1">Data complaint akan muncul di sini</p>
+                                  </div>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        }
+                        return entries.map(([status, cnt]) => (
+                          <TableRow key={status} className="hover:bg-[#F7F8F3]/60 transition-colors border-b border-[#D6DED2]/50">
+                            <TableCell className="text-xs font-semibold text-[#243028] py-3">
+                              <Badge
+                                className={
+                                  status === "open"
+                                    ? "bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-50 text-[10px]"
+                                    : status === "in_progress"
+                                    ? "bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-50 text-[10px]"
+                                    : status === "resolved" || status === "closed"
+                                    ? "bg-[#DDE8D8] text-[#4F6F52] border-[#8FAF9A]/30 hover:bg-[#DDE8D8] text-[10px]"
+                                    : "bg-[#F7F8F3] text-[#66736A] border-[#D6DED2] hover:bg-[#F7F8F3] text-[10px]"
+                                }
+                              >
+                                {statusLabels[status] || status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right font-mono font-bold text-xs text-[#4F6F52] tabular-nums py-3">
+                              {cnt}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-xs text-[#66736A] tabular-nums py-3">
+                              {complaintData.totalAll > 0 ? ((cnt / complaintData.totalAll) * 100).toFixed(1) : "0.0"}%
+                            </TableCell>
+                          </TableRow>
+                        ));
+                      })()}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </div>
           )}
 
         </div>
