@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { isMaintenanceMode } from "@/lib/maintenance-cache";
-import { checkSessionIsSuperAdmin } from "@/lib/check-session-role";
 
 /**
  * Middleware Authentication Strategy
@@ -32,23 +30,6 @@ function hasSessionCookie(request: NextRequest): boolean {
     const match = cookieHeader.match(new RegExp(`(?:^|;\\s*)${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}=([^;]+)`));
     return match && match[1] && match[1].trim().length > 0;
   });
-}
-
-/**
- * Extracts the session token value from the request cookies.
- * Returns the raw token string or null if no valid session cookie is found.
- */
-function getSessionToken(request: NextRequest): string | null {
-  const cookieHeader = request.headers.get("cookie") || "";
-  for (const name of SESSION_COOKIE_NAMES) {
-    const match = cookieHeader.match(
-      new RegExp(`(?:^|;\\s*)${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}=([^;]+)`)
-    );
-    if (match && match[1] && match[1].trim().length > 0) {
-      return match[1].trim();
-    }
-  }
-  return null;
 }
 
 export async function middleware(request: NextRequest) {
@@ -82,19 +63,8 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  // Maintenance mode check for authenticated users on non-public routes
-  const maintenanceActive = await isMaintenanceMode();
-  if (maintenanceActive) {
-    const sessionToken = getSessionToken(request);
-    if (!sessionToken) {
-      // No valid token found — treat as non-Super Admin, redirect to maintenance
-      return NextResponse.redirect(new URL("/maintenance", request.url));
-    }
-    const isSuperAdmin = await checkSessionIsSuperAdmin(sessionToken);
-    if (!isSuperAdmin) {
-      return NextResponse.redirect(new URL("/maintenance", request.url));
-    }
-  }
+  // Maintenance mode check is handled in server components/actions, not middleware.
+  // This avoids DB calls that cause MIDDLEWARE_INVOCATION_TIMEOUT on Vercel.
 
   // Redirect root to dashboard
   if (pathname === "/") {
