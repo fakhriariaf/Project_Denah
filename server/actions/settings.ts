@@ -3,9 +3,10 @@
 import { db } from "@/db";
 import { appSettings } from "@/db/schema/system";
 import { requireRole } from "@/server/permissions";
-import { eq } from "drizzle-orm";
+
 import { revalidatePath } from "next/cache";
 import { writeAuditLog } from "./audit";
+import { invalidateMaintenanceCache } from "@/lib/maintenance-cache";
 import crypto from "crypto";
 
 const DEFAULT_SETTINGS = [
@@ -88,6 +89,11 @@ export async function updateAppSettings(settingsMap: Record<string, string>) {
     }
   });
 
+  // Invalidate maintenance cache if maintenance mode setting was updated
+  if ("system_maintenance" in settingsMap) {
+    invalidateMaintenanceCache();
+  }
+
   await writeAuditLog({
     action: "update",
     module: "master",
@@ -98,5 +104,6 @@ export async function updateAppSettings(settingsMap: Record<string, string>) {
 
   revalidatePath("/settings");
   revalidatePath("/dashboard");
+  revalidatePath("/maintenance");
   return { success: true };
 }

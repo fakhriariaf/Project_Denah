@@ -13,6 +13,8 @@ import { DeleteConfirm } from "@/components/delete-confirm"
 import { deleteMarketingTarget } from "@/server/actions/waiting-list"
 import { getI18n } from "@/lib/i18n-server"
 import { Translate } from "@/components/translate"
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
+import { TargetsBarChart, type TargetChartItem } from "./targets-chart-client"
 
 export const revalidate = 0
 
@@ -45,6 +47,36 @@ export default async function MarketingTargetsPage() {
 
   const fmtRp = (n: number) => new Intl.NumberFormat("id-ID", { notation: "compact", maximumFractionDigits: 1 }).format(n)
   const fmtRpFull = (n: number) => new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(n)
+
+  // Aggregate targets by marketing person for bar chart
+  const chartDataMap = new Map<string, { target: number; achieved: number }>()
+  for (const t of targets) {
+    const name = t.marketingName || "Unknown"
+    const existing = chartDataMap.get(name) ?? { target: 0, achieved: 0 }
+    existing.target += t.targetUnits
+    existing.achieved += t.achievedUnits
+    chartDataMap.set(name, existing)
+  }
+  const chartData: TargetChartItem[] = Array.from(chartDataMap.entries()).map(([name, vals]) => ({
+    name,
+    target: vals.target,
+    achieved: vals.achieved,
+  }))
+
+  // Aggregate targets by month for monthly progress
+  const monthlyMap = new Map<number, { target: number; achieved: number }>()
+  for (const t of targets) {
+    const existing = monthlyMap.get(t.periodMonth) ?? { target: 0, achieved: 0 }
+    existing.target += t.targetUnits
+    existing.achieved += t.achievedUnits
+    monthlyMap.set(t.periodMonth, existing)
+  }
+  const monthlyProgress = Array.from({ length: 12 }, (_, i) => {
+    const month = i + 1
+    const data = monthlyMap.get(month) ?? { target: 0, achieved: 0 }
+    const pct = data.target > 0 ? Math.round((data.achieved / data.target) * 100) : 0
+    return { month, label: MONTHS[i], ...data, pct }
+  })
 
   return (
     <div className="flex flex-col gap-6">
@@ -106,6 +138,50 @@ export default async function MarketingTargetsPage() {
           </div>
         </div>
       </div>
+
+      {/* Chart Card — Pencapaian per Marketing */}
+      <Card className="rounded-2xl border border-[#D6DED2] shadow-sage">
+        <CardHeader className="border-b border-[#D6DED2] bg-[#F7F8F3]/70">
+          <CardTitle className="text-xs font-bold text-[#66736A] uppercase tracking-wider">
+            Pencapaian per Marketing
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-4">
+          <TargetsBarChart data={chartData} year={currentYear} />
+        </CardContent>
+      </Card>
+
+      {/* Monthly Progress */}
+      <Card className="rounded-2xl border border-[#D6DED2] shadow-sage">
+        <CardHeader className="border-b border-[#D6DED2] bg-[#F7F8F3]/70">
+          <CardTitle className="text-xs font-bold text-[#66736A] uppercase tracking-wider">
+            Progres Bulanan {currentYear}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+            {monthlyProgress.map((m) => (
+              <div key={m.month} className="flex flex-col gap-1.5 p-2.5 rounded-xl bg-[#F7F8F3] border border-[#D6DED2]/60">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-[#243028]">{m.label}</span>
+                  <span className={`text-[10px] font-bold font-mono tabular-nums ${m.pct >= 80 ? "text-emerald-600" : m.pct >= 50 ? "text-amber-600" : "text-rose-500"}`}>
+                    {m.target > 0 ? `${m.pct}%` : "—"}
+                  </span>
+                </div>
+                <div className="h-1.5 bg-[#DDE8D8] rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${m.pct >= 80 ? "bg-emerald-500" : m.pct >= 50 ? "bg-amber-400" : "bg-rose-400"}`}
+                    style={{ width: `${Math.min(m.pct, 100)}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-[10px] text-[#66736A] font-mono">
+                  <span>{m.achieved}/{m.target}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Targets Table */}
       <div className="bg-card border border-[#D6DED2] rounded-2xl overflow-hidden shadow-sage">

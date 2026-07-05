@@ -15,11 +15,12 @@ import {
 } from "lucide-react";
 import {
   getNotifications,
-  getUnreadCount,
   markAsRead,
   markAllAsRead,
 } from "@/server/actions/notification";
 import { authClient } from "@/lib/auth-client";
+import { useNotificationPolling } from "@/hooks/use-notification-polling";
+import { toast } from "sonner";
 
 interface NotificationItem {
   id: string;
@@ -71,24 +72,19 @@ function getNotificationUrl(item: NotificationItem): string {
     case "complaint":
       return "/production?tab=complaints";
     case "unit_construction_ready":
-      // entityId is the projectId — navigate directly to that siteplan
       return entityId ? `/siteplan/${entityId}` : "/siteplan";
     case "unit":
       if (type === "progress_done") {
         return "/production?tab=progress";
       }
       return "/siteplan";
-    // Sprint 3: unit_handover_wait — prioritaskan bookingId deep link ke Booking Detail
     case "unit_handover_wait":
-      // entityId = bookingId (set di triggerMenungguSerahTerima Sprint 2+3)
-      // Booking Detail adalah tempat paling natural bagi Marketing
       return entityId ? `/marketing/bookings/${entityId}` : "/marketing/bookings";
     case "waiting_list":
       return "/marketing/waiting-list";
     case "marketing_target":
       return "/marketing/targets";
     default:
-      // Fallback based on notification type if entityType is missing
       if (type === "kpr_sla") return "/marketing/kpr";
       if (type === "spk_overdue") return "/production?tab=spk";
       if (type === "progress_done") return "/production?tab=progress";
@@ -100,39 +96,74 @@ function getNotificationUrl(item: NotificationItem): string {
 export function NotificationDropdown() {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [bellPulse, setBellPulse] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   
   // Client auth session
   const { data: session } = authClient.useSession();
   const roleId = (session?.user as any)?.roleId;
 
-  // Load notifications data
-  const loadData = async () => {
-    try {
-      const count = await getUnreadCount();
-      setUnreadCount(count);
+  // Use the polling hook for real-time detection
+  const {
+    unreadCount,
+    latestNotification,
+    hasNewSince,
+    resetNewSince,
+    refresh,
+  } = useNotificationPolling({ interval: 10000, enabled: true });
 
+  // Show toast and animate bell when a new notification arrives
+  useEffect(() => {
+    if (hasNewSince && latestNotification) {
+      // Trigger bell pulse animation
+      setBellPulse(true);
+      const pulseTimer = setTimeout(() => setBellPulse(false), 3000);
+
+      // Show toast with notification info
+      const notifUrl = getNotificationUrl(latestNotification as NotificationItem);
+      toast(latestNotification.title, {
+        description: latestNotification.message,
+        duration: 5000,
+        action: {
+          label: "Lihat",
+          onClick: () => router.push(notifUrl),
+        },
+      });
+
+      return () => clearTimeout(pulseTimer);
+    }
+  }, [hasNewSince, latestNotification, router]);
+
+  // Load full notification list
+  const loadNotifications = async () => {
+    try {
       const items = await getNotifications();
-      // Items returned from server are serializable, map dates back to Date instances
       const parsedItems = items.map((x) => ({
         ...x,
         createdAt: new Date(x.createdAt),
       })) as NotificationItem[];
-
       setNotifications(parsedItems);
     } catch (err) {
       console.warn("Failed to load notifications:", err);
     }
   };
 
-  // Poll data periodically
+  // Load notifications on mount and when dropdown opens
   useEffect(() => {
-    loadData();
-    const interval = setInterval(loadData, 15000); // refresh every 15 seconds
-    return () => clearInterval(interval);
+    loadNotifications();
   }, []);
+
+  // Auto-refresh list when dropdown opens and there are new notifications
+  useEffect(() => {
+    if (isOpen) {
+      loadNotifications();
+      // Mark that we've seen the new notifications
+      if (hasNewSince) {
+        resetNewSince();
+      }
+    }
+  }, [isOpen, hasNewSince, resetNewSince]);
 
   // Click away listener
   useEffect(() => {
@@ -153,7 +184,7 @@ export function NotificationDropdown() {
         setNotifications((prev) =>
           prev.map((n) => (n.id === id ? { ...n, isRead: true } : n))
         );
-        setUnreadCount((c) => Math.max(0, c - 1));
+        refresh();
       }
     } catch (err) {
       console.error(err);
@@ -165,7 +196,7 @@ export function NotificationDropdown() {
       const res = await markAllAsRead();
       if (res.success) {
         setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
-        setUnreadCount(0);
+        refresh();
       }
     } catch (err) {
       console.error(err);
@@ -181,7 +212,7 @@ export function NotificationDropdown() {
           setNotifications((prev) =>
             prev.map((n) => (n.id === item.id ? { ...n, isRead: true } : n))
           );
-          setUnreadCount((c) => Math.max(0, c - 1));
+          refresh();
         }
       } catch (err) {
         console.warn("Failed to mark notification as read:", err);
@@ -193,7 +224,6 @@ export function NotificationDropdown() {
 
   // Human friendly relative time format
   const formatRelativeTime = (date: Date) => {
-    // eslint-disable-next-line react-hooks/purity
     const elapsed = Date.now() - date.getTime();
     const secs = Math.floor(elapsed / 1000);
     const mins = Math.floor(secs / 60);
@@ -209,8 +239,6 @@ export function NotificationDropdown() {
   // Return icons based on notification type and entityType
   const renderIcon = (type: string, entityType?: string | null) => {
     const baseStyle = "p-2 rounded-lg flex items-center justify-center shrink-0 w-9 h-9 ";
-    // Priority: check entityType for specialized icons
-    // Sprint 3: Notifikasi serah terima — icon violet
     if (entityType === "unit_handover_wait" || type === "handover_waiting") {
       return (
         <div className={baseStyle + "bg-violet-100 text-violet-600"}>
@@ -294,7 +322,6 @@ export function NotificationDropdown() {
   const hasApprovalPending = notifications.some((n) => !n.isRead && n.type === "approval_pending");
   const hasKprSlaWarning = notifications.some((n) => !n.isRead && n.type === "kpr_sla");
   const hasSpkOverdueWarning = notifications.some((n) => !n.isRead && n.type === "spk_overdue");
-  // Sprint 3: Deteksi notifikasi serah terima yang belum dibaca
   const hasHandoverWaiting = notifications.some(
     (n) => !n.isRead && (n.type === "handover_waiting" || n.entityType === "unit_handover_wait")
   );
@@ -307,9 +334,17 @@ export function NotificationDropdown() {
         className="relative p-2 text-muted-foreground hover:text-foreground rounded-full hover:bg-accent transition-all duration-200 focus:outline-none group"
         aria-label="Notifications"
       >
-        <Bell className="w-5 h-5 transition-all duration-300 group-hover:scale-110 group-hover:rotate-12 group-hover:text-[#4F6F52]" />
+        <Bell
+          className={`w-5 h-5 transition-all duration-300 group-hover:scale-110 group-hover:rotate-12 group-hover:text-[#4F6F52] ${
+            bellPulse ? "animate-bounce text-[#4F6F52]" : ""
+          }`}
+        />
         {unreadCount > 0 && (
-          <span className="absolute top-1 right-1 flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-[9px] font-bold text-white ring-2 ring-background animate-pulse font-mono tabular-nums">
+          <span
+            className={`absolute top-1 right-1 flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-[9px] font-bold text-white ring-2 ring-background font-mono tabular-nums ${
+              bellPulse ? "animate-ping" : "animate-pulse"
+            }`}
+          >
             {unreadCount}
           </span>
         )}
@@ -372,7 +407,6 @@ export function NotificationDropdown() {
                       Berkas KPR melewati SLA! Segera hubungi konsumen.
                     </div>
                   )}
-                  {/* Sprint 3: Serah terima pending warning untuk Marketing */}
                   {roleId === "role_marketing" && hasHandoverWaiting && (
                     <div className="mt-2 text-[9px] font-bold text-violet-700 flex items-center gap-1 bg-violet-50/50 p-1 rounded border border-violet-200/50">
                       <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />

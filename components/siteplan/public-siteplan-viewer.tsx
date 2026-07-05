@@ -27,13 +27,65 @@ import {
   Sparkles,
   Clock,
   CheckCircle2,
+  Filter,
 } from "lucide-react";
 import {
   PublicSiteplanData,
   PublicSiteplanShape,
   PUBLIC_STATUS_COLORS,
+  PublicUnitStatus,
   getPublicStatusColor,
 } from "@/lib/public-siteplan-utils";
+
+// Filter categories for public siteplan
+type StatusFilter = "semua" | "tersedia" | "proses" | "terjual";
+
+const STATUS_FILTER_CONFIG: {
+  key: StatusFilter;
+  label: string;
+  description: string;
+  color: string;
+  bgColor: string;
+  borderColor: string;
+  matchStatuses: PublicUnitStatus[];
+}[] = [
+  {
+    key: "semua",
+    label: "Semua",
+    description: "Tampilkan semua kavling",
+    color: "#4F6F52",
+    bgColor: "#F7F8F3",
+    borderColor: "#D6DED2",
+    matchStatuses: [],
+  },
+  {
+    key: "tersedia",
+    label: "Tersedia",
+    description: "Kavling tersedia untuk dibeli",
+    color: "#2D4A30",
+    bgColor: "#DDE8D8",
+    borderColor: "#4F6F52",
+    matchStatuses: ["Tersedia"],
+  },
+  {
+    key: "proses",
+    label: "Proses",
+    description: "Pemesanan, KPR, atau sedang dibangun",
+    color: "#6B4F00",
+    bgColor: "#FFF0A0",
+    borderColor: "#A07C00",
+    matchStatuses: ["Dalam Pemesanan", "Sedang Dibangun"],
+  },
+  {
+    key: "terjual",
+    label: "Terjual",
+    description: "Kavling sudah terjual",
+    color: "#8B1A1A",
+    bgColor: "#FFD6D6",
+    borderColor: "#C0392B",
+    matchStatuses: ["Terjual", "Siap Huni", "Tidak Tersedia"],
+  },
+];
 
 interface PublicSiteplanViewerProps {
   initialData: PublicSiteplanData;
@@ -45,6 +97,7 @@ export function PublicSiteplanViewer({ initialData }: PublicSiteplanViewerProps)
   const [selectedShape, setSelectedShape] = useState<PublicSiteplanShape | null>(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("semua");
 
   // Zoom and Pan State
   const [scale, setScale] = useState(1);
@@ -60,14 +113,27 @@ export function PublicSiteplanViewer({ initialData }: PublicSiteplanViewerProps)
   const width = siteplan?.width || 1200;
   const height = siteplan?.height || 800;
 
-  // Filter shapes by search query
+  // Check if a shape matches the active status filter
+  const matchesStatusFilter = (shape: PublicSiteplanShape): boolean => {
+    if (statusFilter === "semua") return true;
+    const filterConfig = STATUS_FILTER_CONFIG.find((f) => f.key === statusFilter);
+    if (!filterConfig) return true;
+    // Non-unit shapes don't match specific filters
+    if (!shape.unit) return false;
+    return filterConfig.matchStatuses.includes(shape.unit.publicStatus);
+  };
+
+  // Filter shapes by search query AND status filter
   const filteredShapes = shapes.map((shape) => {
-    const isMatching =
+    const matchesSearch =
       searchQuery === "" ||
       shape.unit?.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
       shape.label?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       shape.unit?.cluster?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       shape.unit?.typeName?.toLowerCase().includes(searchQuery.toLowerCase());
+
+    const matchesFilter = matchesStatusFilter(shape);
+    const isMatching = matchesSearch && matchesFilter;
 
     return { ...shape, isMatching };
   });
@@ -199,6 +265,85 @@ export function PublicSiteplanViewer({ initialData }: PublicSiteplanViewerProps)
         </div>
       </div>
 
+      {/* Status Filter Bar & Legend */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-[#D6DED2] shadow-sm">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[10px] font-extrabold uppercase tracking-wider text-[#66736A] flex items-center gap-1.5 pr-2 border-r border-[#D6DED2]/60 shrink-0">
+            <Filter className="h-3.5 w-3.5" />
+            Filter
+          </span>
+          {STATUS_FILTER_CONFIG.map((filter) => {
+            const isActive = statusFilter === filter.key;
+            // Count matching shapes for badge
+            const count =
+              filter.key === "semua"
+                ? shapes.length
+                : shapes.filter(
+                    (s) => s.unit && filter.matchStatuses.includes(s.unit.publicStatus)
+                  ).length;
+
+            return (
+              <button
+                key={filter.key}
+                type="button"
+                onClick={() => setStatusFilter(filter.key)}
+                title={filter.description}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold border transition-all active:scale-95 ${
+                  isActive
+                    ? "shadow-sm ring-1 ring-offset-1"
+                    : "opacity-70 hover:opacity-100 hover:shadow-sm"
+                }`}
+                style={{
+                  backgroundColor: isActive ? filter.bgColor : "transparent",
+                  color: filter.color,
+                  borderColor: isActive ? filter.borderColor : "#D6DED2",
+                  ...(isActive ? { ringColor: filter.borderColor } : {}),
+                }}
+              >
+                {filter.key !== "semua" && (
+                  <span
+                    className="w-2.5 h-2.5 rounded-full border"
+                    style={{
+                      backgroundColor: filter.bgColor,
+                      borderColor: filter.borderColor,
+                    }}
+                  />
+                )}
+                {filter.label}
+                <span
+                  className="text-[9px] font-extrabold rounded-md px-1.5 py-0.5"
+                  style={{
+                    backgroundColor: isActive ? `${filter.borderColor}20` : "#F7F8F3",
+                    color: filter.color,
+                  }}
+                >
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Inline Legend */}
+        <div className="flex items-center gap-3 text-[10px] pl-2 sm:pl-0 sm:border-l sm:border-[#D6DED2]/60 sm:ml-2">
+          <span className="font-extrabold text-[#66736A] uppercase tracking-wider shrink-0 hidden sm:inline">
+            Legenda:
+          </span>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className="w-3 h-3 rounded-sm border" style={{ backgroundColor: "#DDE8D8", borderColor: "#4F6F52" }} />
+            <span className="font-bold text-[#243028]">Tersedia</span>
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className="w-3 h-3 rounded-sm border" style={{ backgroundColor: "#FFF0A0", borderColor: "#A07C00" }} />
+            <span className="font-bold text-[#243028]">Proses</span>
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className="w-3 h-3 rounded-sm border" style={{ backgroundColor: "#FFD6D6", borderColor: "#C0392B" }} />
+            <span className="font-bold text-[#243028]">Terjual</span>
+          </div>
+        </div>
+      </div>
+
       {/* SVG Canvas Area */}
       <div className="relative w-full flex-1 overflow-hidden rounded-3xl border border-[#D6DED2] bg-white shadow-lg h-[65vh] min-h-[450px]">
         {/* Navigation Help overlay */}
@@ -303,9 +448,9 @@ export function PublicSiteplanViewer({ initialData }: PublicSiteplanViewerProps)
               {filteredShapes.map((shape) => {
                 const isSelected = shape.id === selectedShape?.id;
                 const isHovered = shape.id === hoveredShape?.id;
-                const isSearching = searchQuery !== "";
+                const isFiltering = searchQuery !== "" || statusFilter !== "semua";
                 const isMatching = shape.isMatching;
-                const isDimmed = isSearching && !isMatching;
+                const isDimmed = isFiltering && !isMatching;
 
                 // Color definition based on public status mapping
                 const color = shape.colorOverride
@@ -340,7 +485,7 @@ export function PublicSiteplanViewer({ initialData }: PublicSiteplanViewerProps)
                     <polygon
                       points={coordsToPolygonPoints(shape.coordinates)}
                       fill={color.fill}
-                      fillOpacity={isDimmed ? 0.1 : isSelected ? 0.95 : isHovered ? 1.0 : 0.7}
+                      fillOpacity={isDimmed ? 0.15 : isSelected ? 0.95 : isHovered ? 1.0 : 0.7}
                       stroke={isSelected ? "#FF6B00" : isHovered ? color.stroke : color.stroke}
                       strokeWidth={isSelected ? 3.5 : isHovered ? 2.5 : 1.5}
                       filter={

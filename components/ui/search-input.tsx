@@ -1,6 +1,7 @@
 "use client";
 
 import { useI18n } from "@/lib/i18n";
+import { DictionaryKey } from "@/lib/dictionaries";
 import { Search } from "lucide-react";
 
 interface SearchInputProps {
@@ -23,7 +24,7 @@ export function SearchInput({
   className,
 }: SearchInputProps) {
   const { t } = useI18n();
-  const placeholder = t(i18nKey as any) || i18nKey;
+  const placeholder = t(i18nKey as DictionaryKey) || i18nKey;
 
   return (
     <div className="relative w-full">

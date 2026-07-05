@@ -83,7 +83,11 @@ export function getStatusColor(status: string | null | undefined, isReadyStock: 
   return STATUS_COLORS[key as keyof typeof STATUS_COLORS] ?? DEFAULT_SHAPE_COLOR;
 }
 
-export function getUnitStatusLabel(status: string | null | undefined, isReadyStock: boolean = false, t?: any) {
+// Type for the translation function (allows both strict DictionaryKey and plain string usage)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type TranslateFn = (key: any, params?: Record<string, string | number>) => string;
+
+export function getUnitStatusLabel(status: string | null | undefined, isReadyStock: boolean = false, t?: TranslateFn) {
   if (!status) return "—";
   let key = status;
   if (isReadyStock) {
@@ -94,7 +98,7 @@ export function getUnitStatusLabel(status: string | null | undefined, isReadySto
   return t ? t(baseKey) : (STATUS_COLORS[key as keyof typeof STATUS_COLORS]?.label ?? status);
 }
 
-export function getStatusBadge(status: string | null | undefined, isReadyStock: boolean = false, t?: any) {
+export function getStatusBadge(status: string | null | undefined, isReadyStock: boolean = false, t?: TranslateFn) {
   if (!status) return { label: "—", badgeClass: "", dotColor: "#AAAAAA" };
   let key = status;
   if (isReadyStock) {

@@ -52,7 +52,7 @@ interface LeadsTableClientProps {
   renderActions?: (lead: LeadRow) => React.ReactNode;
   /** Data props for action dialogs — replaces renderActions function to fix Server→Client serialization error */
   dialogData?: {
-    projects: { id: string; name: string; code: string; [key: string]: any }[];
+    projects: { id: string; name: string; code: string; [key: string]: unknown }[];
     marketings: { id: string; name: string; email: string; roleId: string | null; roleName: string | null; supervisorId: string | null }[];
     currentUser: { id: string; name: string };
     currentUserRole: {
@@ -121,7 +121,7 @@ export function LeadsTableClient({
         ids: Array.from(selectedIds),
       });
 
-      if (handleActionResult(result, { successMessage: `${result.success ? (result.data as any).rowCount : 0} lead berhasil diekspor` })) {
+      if (handleActionResult(result, { successMessage: `${result.success ? (result.data as { rowCount: number }).rowCount : 0} lead berhasil diekspor` })) {
         // Decode base64 and trigger download
         const data = (result as { success: true; data: { fileBase64: string; fileName: string; rowCount: number } }).data;
         const byteCharacters = atob(data.fileBase64);
@@ -319,7 +319,7 @@ export function LeadsTableClient({
                             <span className="font-medium">
                               <Translate
                                 namespace="lead"
-                                translationKey={`source_${lead.source}` as any}
+                                translationKey={`source_${lead.source}`}
                               />
                             </span>
                           </div>
@@ -355,7 +355,7 @@ export function LeadsTableClient({
                           />
                           <Translate
                             namespace="lead"
-                            translationKey={`status_${lead.status}` as any}
+                            translationKey={`status_${lead.status}`}
                           />
                         </Badge>
                       </td>

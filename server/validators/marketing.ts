@@ -32,7 +32,7 @@ export const followupSchema = z.object({
   nextFollowupAt: z.preprocess(
     (val) => {
       if (!val) return null;
-      const d = new Date(val as any);
+      const d = new Date(val as string | number | Date);
       if (isNaN(d.getTime())) return null;
       return d;
     },
@@ -67,7 +67,7 @@ export const kprProcessSchema = z.object({
   akadDate: z.preprocess(
     (val) => {
       if (!val) return null;
-      const d = new Date(val as any);
+      const d = new Date(val as string | number | Date);
       if (isNaN(d.getTime())) return null;
       return d;
     },
@@ -87,7 +87,7 @@ export const kprUpdateSchema = z.object({
   akadDate: z.preprocess(
     (val) => {
       if (!val) return null;
-      const d = new Date(val as any);
+      const d = new Date(val as string | number | Date);
       if (isNaN(d.getTime())) return null;
       return d;
     },

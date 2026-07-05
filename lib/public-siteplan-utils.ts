@@ -10,6 +10,7 @@ export interface PublicSiteplanShape {
   id: string;
   unitId: string | null;
   shapeType: "polygon" | "rect" | "path";
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   coordinates: any;
   label: string | null;
   colorOverride: string | null;

@@ -8,7 +8,7 @@ import { spks, spkProgressLogs, workItems, complaints, spmbs } from "@/db/schema
 import { auditLogs, attachments } from "@/db/schema/system";
 import { user as userTable, vendorProfiles } from "@/db/schema/auth";
 import { requireAuth, getSessionRole } from "../permissions";
-import { eq, and, or, desc, sql, count, sum, gte, lte, inArray, ne } from "drizzle-orm";
+import { eq, and, or, desc, sql, count, sum, gte, lte, lt, inArray, ne } from "drizzle-orm";
 
 /**
  * Fetch consolidated statistics for the executive dashboard
@@ -344,7 +344,7 @@ export async function getProductionReportsData(projectId?: string, status?: stri
     conditions.push(eq(spks.projectId, projectId));
   }
   if (status) {
-    conditions.push(eq(spks.status, status as any));
+    conditions.push(eq(spks.status, status as "draft" | "active" | "proses_konstruksi" | "selesai_konstruksi" | "completed" | "overdue" | "cancelled"));
   }
 
   const query = db
@@ -470,7 +470,12 @@ export async function getVendorDashboardData() {
   const spkIds = vendorSpks.map(vs => vs.spk.id);
 
   // 3. Fetch progress logs
-  let recentLogs: any[] = [];
+  let recentLogs: {
+    log: typeof spkProgressLogs.$inferSelect;
+    spk: typeof spks.$inferSelect;
+    workItemName: string | null;
+    creatorName: string | null;
+  }[] = [];
   if (spkIds.length > 0) {
     recentLogs = await db
       .select({
@@ -529,7 +534,7 @@ export async function getVendorDashboardData() {
   }
 
   // 5. Fetch BAST attachments & calculate status
-  let bastAttachments: any[] = [];
+  let bastAttachments: typeof attachments.$inferSelect[] = [];
   if (spkIds.length > 0) {
     bastAttachments = await db
       .select()
@@ -542,7 +547,7 @@ export async function getVendorDashboardData() {
       );
   }
   
-  const bastMap: Record<string, any> = {};
+  const bastMap: Record<string, typeof attachments.$inferSelect> = {};
   for (const att of bastAttachments) {
     bastMap[att.entityId] = att;
   }
@@ -701,7 +706,15 @@ export async function getFieldSupervisorDashboardData() {
   const spkIds = supervisorSpks.map(vs => vs.spk.id);
 
   // 3. Fetch progress logs
-  let recentLogs: any[] = [];
+  let recentLogs: {
+    log: typeof spkProgressLogs.$inferSelect;
+    spk: typeof spks.$inferSelect;
+    unitCode: string;
+    projectName: string;
+    workItemName: string | null;
+    creatorName: string | null;
+    vendorName: string | null;
+  }[] = [];
   if (spkIds.length > 0) {
     recentLogs = await db
       .select({
@@ -751,7 +764,7 @@ export async function getFieldSupervisorDashboardData() {
   }
 
   // 5. Fetch BAST attachments & status
-  let bastAttachments: any[] = [];
+  let bastAttachments: typeof attachments.$inferSelect[] = [];
   if (spkIds.length > 0) {
     bastAttachments = await db
       .select()
@@ -764,7 +777,7 @@ export async function getFieldSupervisorDashboardData() {
       );
   }
   
-  const bastMap: Record<string, any> = {};
+  const bastMap: Record<string, typeof attachments.$inferSelect> = {};
   for (const att of bastAttachments) {
     bastMap[att.entityId] = att;
   }
@@ -806,8 +819,19 @@ export async function getFieldSupervisorDashboardData() {
   const pendingBastCount = basts.filter(b => b.statusCode === "pending").length;
 
   // 6. Fetch active complaints in supervisor projects (split by type)
-  let vendorComplaints: any[] = [];
-  let customerComplaints: any[] = [];
+  let vendorComplaints: {
+    complaint: typeof complaints.$inferSelect;
+    unit: typeof units.$inferSelect | null;
+    customer: typeof customers.$inferSelect | null;
+    project: typeof projects.$inferSelect | null;
+    spk: typeof spks.$inferSelect | null;
+  }[] = [];
+  let customerComplaints: {
+    complaint: typeof complaints.$inferSelect;
+    unit: typeof units.$inferSelect | null;
+    customer: typeof customers.$inferSelect | null;
+    project: typeof projects.$inferSelect | null;
+  }[] = [];
   if (projectIds.length > 0) {
     vendorComplaints = await db
       .select({
@@ -924,3 +948,271 @@ export async function getFieldSupervisorDashboardData() {
   };
 }
 
+
+/**
+ * Fetch KPR (mortgage process) reports data with aggregated metrics
+ */
+export async function getKprReportsData(projectId?: string) {
+  await requireAuth();
+
+  const now = new Date();
+
+  // Build WHERE conditions for optional project filter
+  const projectConditions = projectId && projectId !== "all"
+    ? [eq(bookings.projectId, projectId)]
+    : [];
+
+  // 1. Count KPR by status (GROUP BY)
+  const statusRows = await db
+    .select({ status: kprProcesses.status, cnt: count() })
+    .from(kprProcesses)
+    .innerJoin(bookings, eq(kprProcesses.bookingId, bookings.id))
+    .where(projectConditions.length > 0 ? and(...projectConditions) : undefined)
+    .groupBy(kprProcesses.status);
+
+  const statusMap: Record<string, number> = {};
+  for (const row of statusRows) {
+    statusMap[row.status] = row.cnt;
+  }
+
+  // 2. Count by BI check status (GROUP BY)
+  const biCheckRows = await db
+    .select({ biCheckStatus: kprProcesses.biCheckStatus, cnt: count() })
+    .from(kprProcesses)
+    .innerJoin(bookings, eq(kprProcesses.bookingId, bookings.id))
+    .where(projectConditions.length > 0 ? and(...projectConditions) : undefined)
+    .groupBy(kprProcesses.biCheckStatus);
+
+  const biCheckMap: Record<string, number> = {};
+  for (const row of biCheckRows) {
+    biCheckMap[row.biCheckStatus] = row.cnt;
+  }
+
+  // 3. Count SLA overdue (slaDeadlineAt < now AND status not in terminal states)
+  const terminalStatuses = ["approved", "rejected", "akad", "realisasi"] as const;
+  const overdueConditions = [
+    lt(kprProcesses.slaDeadlineAt, now),
+    ...projectConditions,
+  ];
+
+  const [overdueRow] = await db
+    .select({ cnt: count() })
+    .from(kprProcesses)
+    .innerJoin(bookings, eq(kprProcesses.bookingId, bookings.id))
+    .where(and(...overdueConditions));
+
+  const slaOverdueCount = overdueRow?.cnt ?? 0;
+
+  // 4. Count akad this month
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+
+  const akadConditions = [
+    gte(kprProcesses.akadDate, startOfMonth),
+    lte(kprProcesses.akadDate, endOfMonth),
+    ...projectConditions,
+  ];
+
+  const [akadRow] = await db
+    .select({ cnt: count() })
+    .from(kprProcesses)
+    .innerJoin(bookings, eq(kprProcesses.bookingId, bookings.id))
+    .where(and(...akadConditions));
+
+  const akadThisMonthCount = akadRow?.cnt ?? 0;
+
+  // 5. Calculate metrics
+  const totalKprAktif = Object.entries(statusMap)
+    .filter(([key]) => !["approved", "rejected", "realisasi"].includes(key))
+    .reduce((sum, [, cnt]) => sum + cnt, 0);
+
+  const totalKpr = Object.values(statusMap).reduce((s, c) => s + c, 0);
+  const biApprovedCount = biCheckMap["approved"] ?? 0;
+  const biApprovedPct = totalKpr > 0 ? Math.round((biApprovedCount / totalKpr) * 100) : 0;
+
+  // 6. Status distribution for chart
+  const statusLabels: Record<string, string> = {
+    bi_checking: "BI Checking",
+    pemberkasan: "Pemberkasan",
+    proses_bank: "Proses Bank",
+    offering: "Offering",
+    approved: "Approved",
+    rejected: "Rejected",
+    akad: "Akad",
+    realisasi: "Realisasi",
+  };
+
+  const statusDataset = Object.entries(statusLabels).map(([key, label]) => ({
+    name: label,
+    Nominal: statusMap[key] ?? 0,
+    type: key,
+  }));
+
+  // 7. BI Check status distribution for table
+  const biCheckLabels: Record<string, string> = {
+    pending: "Pending",
+    partial: "Partial",
+    approved: "Approved",
+    rejected_refund: "Rejected (Refund)",
+    rejected_no_refund: "Rejected (No Refund)",
+  };
+
+  const biCheckDataset = Object.entries(biCheckLabels).map(([key, label]) => ({
+    key,
+    label,
+    count: biCheckMap[key] ?? 0,
+  }));
+
+  return {
+    totalKprAktif,
+    slaOverdueCount,
+    biApprovedPct,
+    akadThisMonthCount,
+    statusMap,
+    biCheckMap,
+    statusDataset,
+    biCheckDataset,
+  };
+}
+
+
+/**
+ * Fetch complaint statistics and breakdown for Reports → Complaints tab
+ */
+export async function getComplaintReportsData(projectId?: string) {
+  await requireAuth();
+
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  // Build WHERE conditions
+  const conditions: ReturnType<typeof eq>[] = [];
+  if (projectId && projectId !== "all") {
+    conditions.push(eq(complaints.projectId, projectId));
+  }
+
+  // 1. Count by status
+  const statusQuery = db
+    .select({
+      status: complaints.status,
+      cnt: count(),
+    })
+    .from(complaints)
+    .groupBy(complaints.status);
+
+  const statusRows = conditions.length > 0
+    ? await statusQuery.where(and(...conditions))
+    : await statusQuery;
+
+  const statusBreakdown: Record<string, number> = {
+    open: 0,
+    in_progress: 0,
+    resolved: 0,
+    closed: 0,
+    in_review: 0,
+    need_revision: 0,
+    approved_extension: 0,
+    follow_up_required: 0,
+    waiting_customer_confirmation: 0,
+    rejected: 0,
+  };
+  let totalAll = 0;
+  for (const row of statusRows) {
+    statusBreakdown[row.status] = row.cnt;
+    totalAll += row.cnt;
+  }
+
+  // 2. Count by category
+  const categoryQuery = db
+    .select({
+      category: complaints.category,
+      cnt: count(),
+    })
+    .from(complaints)
+    .groupBy(complaints.category);
+
+  const categoryRows = conditions.length > 0
+    ? await categoryQuery.where(and(...conditions))
+    : await categoryQuery;
+
+  const categoryLabels: Record<string, string> = {
+    bangunan: "Bangunan",
+    serah_terima: "Serah Terima",
+    listrik_air: "Listrik & Air",
+    legalitas: "Legalitas",
+    fasilitas: "Fasilitas",
+    pelayanan: "Pelayanan",
+    after_sales: "After Sales",
+    lainnya: "Lainnya",
+  };
+
+  const categoryBreakdown: Array<{ category: string; label: string; count: number }> = [];
+  for (const row of categoryRows) {
+    categoryBreakdown.push({
+      category: row.category,
+      label: categoryLabels[row.category] || row.category,
+      count: row.cnt,
+    });
+  }
+  // Sort descending by count
+  categoryBreakdown.sort((a, b) => b.count - a.count);
+
+  // 3. Average resolution time (resolved complaints with resolvedAt)
+  const resolvedConditions = [...conditions, sql`${complaints.resolvedAt} IS NOT NULL`];
+  const [avgResult] = await db
+    .select({
+      avgDays: sql<number>`avg(julianday(${complaints.resolvedAt}) - julianday(${complaints.createdAt}))`,
+    })
+    .from(complaints)
+    .where(and(...resolvedConditions));
+
+  const avgResolutionDays = avgResult?.avgDays ? Math.round(avgResult.avgDays * 10) / 10 : 0;
+
+  // 4. Total resolved this month
+  const resolvedThisMonthConditions = [
+    ...conditions,
+    sql`${complaints.resolvedAt} IS NOT NULL`,
+    gte(complaints.resolvedAt, startOfMonth),
+  ];
+  const [resolvedThisMonth] = await db
+    .select({ cnt: count() })
+    .from(complaints)
+    .where(and(...resolvedThisMonthConditions));
+
+  // 5. Total open (open + in_progress + follow_up_required + waiting_customer_confirmation)
+  const totalOpen = (statusBreakdown.open || 0)
+    + (statusBreakdown.in_progress || 0)
+    + (statusBreakdown.follow_up_required || 0)
+    + (statusBreakdown.waiting_customer_confirmation || 0)
+    + (statusBreakdown.in_review || 0)
+    + (statusBreakdown.need_revision || 0);
+
+  // 6. Oldest open complaint age
+  const oldestOpenConditions = [
+    ...conditions,
+    inArray(complaints.status, ["open", "in_progress", "follow_up_required", "waiting_customer_confirmation", "in_review", "need_revision"]),
+  ];
+  const [oldestOpen] = await db
+    .select({
+      oldestDays: sql<number>`max(julianday('now') - julianday(${complaints.createdAt}))`,
+    })
+    .from(complaints)
+    .where(and(...oldestOpenConditions));
+
+  const oldestOpenDays = oldestOpen?.oldestDays ? Math.round(oldestOpen.oldestDays) : 0;
+
+  // 7. Most common category
+  const topCategory = categoryBreakdown.length > 0 ? categoryBreakdown[0].label : "-";
+
+  return {
+    statusBreakdown,
+    categoryBreakdown,
+    avgResolutionDays,
+    totalOpen,
+    totalResolved: (statusBreakdown.resolved || 0) + (statusBreakdown.closed || 0),
+    resolvedThisMonth: resolvedThisMonth?.cnt || 0,
+    oldestOpenDays,
+    topCategory,
+    totalAll,
+  };
+}

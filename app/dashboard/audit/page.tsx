@@ -1,13 +1,12 @@
-import { getAuditLogs, getAuditUsers } from "@/server/actions/audit";
+import { getAuditLogsPaginated, getAuditUsers } from "@/server/actions/audit";
 import { requireAuth, getSessionRole, requirePermission } from "@/server/permissions";
 import { redirect } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { Shield, Clock, Terminal, User } from "lucide-react";
+import { Shield } from "lucide-react";
 import { AuditLogFilter } from "@/components/dashboard/audit-filter";
 import { Translate } from "@/components/translate";
 import { getI18n } from "@/lib/i18n-server";
+import { AuditTableClient } from "./audit-table-client";
 
 export const revalidate = 0;
 
@@ -36,9 +35,22 @@ export default async function AuditLogPage({
     redirect("/unauthorized");
   }
 
-  // 3. Fetch data with filters
+  // 3. Resolve search params and build filters
   const resolvedSearchParams = await searchParams;
-  const logs = await getAuditLogs(resolvedSearchParams);
+  const filters = {
+    userId: resolvedSearchParams.userId,
+    module: resolvedSearchParams.module,
+    action: resolvedSearchParams.action,
+    startDate: resolvedSearchParams.startDate,
+    endDate: resolvedSearchParams.endDate,
+  };
+
+  // 4. Fetch initial paginated data using cursor-based pagination
+  const initialResult = await getAuditLogsPaginated(
+    { pageSize: 50 },
+    filters
+  );
+
   const users = await getAuditUsers();
 
   return (
@@ -76,91 +88,12 @@ export default async function AuditLogPage({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="rounded-md border border-[#8FAF9A]/10 overflow-hidden">
-            <Table>
-              <TableHeader className="bg-[#8FAF9A]/5">
-                <TableRow className="hover:bg-transparent border-[#8FAF9A]/10">
-                  <TableHead className="w-[180px] font-semibold text-primary font-sans text-xs uppercase tracking-wider">
-                    <Translate namespace="audit" translationKey="col_time" />
-                  </TableHead>
-                  <TableHead className="w-[180px] font-semibold text-primary font-sans text-xs uppercase tracking-wider">
-                    <Translate namespace="audit" translationKey="col_user" />
-                  </TableHead>
-                  <TableHead className="w-[150px] font-semibold text-primary font-sans text-xs uppercase tracking-wider">
-                    <Translate namespace="audit" translationKey="col_module" />
-                  </TableHead>
-                  <TableHead className="w-[200px] font-semibold text-primary font-sans text-xs uppercase tracking-wider">
-                    <Translate namespace="audit" translationKey="col_action" />
-                  </TableHead>
-                  <TableHead className="font-semibold text-primary font-sans text-xs uppercase tracking-wider">
-                    <Translate namespace="audit" translationKey="col_detail" />
-                  </TableHead>
-                  <TableHead className="w-[120px] font-semibold text-primary font-sans text-xs uppercase tracking-wider text-right">
-                    <Translate namespace="audit" translationKey="col_ip" />
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {logs.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                      <Translate namespace="audit" translationKey="empty" />
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  logs.map((log) => (
-                    <TableRow key={log.id} className="hover:bg-[#8FAF9A]/5 border-[#8FAF9A]/10 transition-colors">
-                      <TableCell className="font-mono text-[11px] text-muted-foreground whitespace-nowrap">
-                        <div className="flex items-center gap-1.5">
-                          <Clock className="h-3 w-3 text-muted-foreground/60" />
-                          {log.createdAt
-                            ? new Date(log.createdAt).toLocaleString("id-ID", {
-                                dateStyle: "short",
-                                timeStyle: "medium",
-                              })
-                            : "-"}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col">
-                          <span className="font-semibold text-foreground text-xs flex items-center gap-1">
-                            <User className="h-3 w-3 text-primary/70" />
-                            {log.userName || t("audit.system")}
-                          </span>
-                          <span className="text-[10px] text-muted-foreground font-mono truncate max-w-[170px]">
-                            {log.userEmail || "system@internal"}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="bg-[#8FAF9A]/5 border-[#8FAF9A]/20 text-primary text-[10px] uppercase font-semibold font-mono tracking-wider">
-                          {log.module}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="font-medium text-foreground text-xs">
-                        {log.action}
-                      </TableCell>
-                      <TableCell className="max-w-[300px]">
-                        <div className="flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground break-all">
-                          <Terminal className="h-3 w-3 text-muted-foreground/50 shrink-0" />
-                          <span>
-                            {log.details
-                              ? typeof log.details === "string"
-                                ? log.details
-                                : JSON.stringify(log.details)
-                              : `ID Entitas: ${log.entityId || "N/A"}`}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="font-mono text-[10px] text-muted-foreground text-right">
-                        {log.ipAddress}
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
+          <AuditTableClient
+            initialData={initialResult.data}
+            initialNextCursor={initialResult.nextCursor}
+            initialHasMore={initialResult.hasMore}
+            filters={filters}
+          />
         </CardContent>
       </Card>
     </div>

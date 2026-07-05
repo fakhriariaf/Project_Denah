@@ -5,8 +5,8 @@ import { usePathname } from "next/navigation"
 import Link from "next/link"
 import { authClient } from "@/lib/auth-client"
 import { useI18n } from "@/lib/i18n"
-import { LayoutDashboard, Users, Home, Map, CircleDollarSign, HardHat, FileText, Settings, Building2, Store, UserCog, User, Landmark, ShieldCheck, Banknote, Clock, Target, Wrench } from "lucide-react"
-import { getUnreadCount } from "@/server/actions/notification"
+import { LayoutDashboard, Users, Home, Map, CircleDollarSign, HardHat, FileText, Settings, Building2, Store, UserCog, User, Landmark, ShieldCheck, Banknote, Clock, Target, Wrench, Bell } from "lucide-react"
+import { useNotificationPolling } from "@/hooks/use-notification-polling"
 
 import {
   Sidebar,
@@ -30,6 +30,7 @@ const data = {
       fallback: "Dashboard",
       items: [
         { tKey: "nav.dashboard", fallback: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
+        { tKey: "nav.notifications", fallback: "Notifikasi", url: "/dashboard/notifications", icon: Bell },
         { tKey: "nav.masterData.siteplan", fallback: "Siteplan Interaktif", url: "/siteplan", icon: Map },
       ],
     },
@@ -84,6 +85,7 @@ const data = {
 // Define role permissions for each route/url mapping matching RBAC_MATRIX.md exactly
 const rolePermissions: Record<string, string[]> = {
   "/dashboard": ["role_super_admin", "role_admin_kantor", "role_marketing_manager", "role_marketing", "role_admin_keuangan", "role_direksi", "role_pengawas", "role_vendor", "role_viewer"],
+  "/dashboard/notifications": ["role_super_admin", "role_admin_kantor", "role_marketing_manager", "role_marketing", "role_admin_keuangan", "role_direksi", "role_pengawas", "role_vendor", "role_viewer"],
   "/siteplan": ["role_super_admin", "role_admin_kantor", "role_marketing_manager", "role_marketing", "role_admin_keuangan", "role_direksi", "role_pengawas", "role_viewer"],
   "/master/projects": ["role_super_admin", "role_admin_kantor", "role_marketing_manager", "role_marketing", "role_admin_keuangan", "role_direksi", "role_pengawas", "role_viewer"],
   "/master/units": ["role_super_admin", "role_admin_kantor", "role_marketing_manager", "role_marketing", "role_admin_keuangan", "role_direksi", "role_pengawas", "role_viewer"],
@@ -114,24 +116,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const userRoleId = (session?.user as any)?.roleId
   const { t } = useI18n()
 
-  const [unreadCount, setUnreadCount] = React.useState(0)
-
-  // Load unread notifications count
-  const loadUnread = React.useCallback(async () => {
-    if (!session?.user) return
-    try {
-      const count = await getUnreadCount()
-      setUnreadCount(count)
-    } catch (err) {
-      console.warn("Failed to load sidebar unread count:", err)
-    }
-  }, [session])
-
-  React.useEffect(() => {
-    loadUnread()
-    const interval = setInterval(loadUnread, 15000) // check every 15s
-    return () => clearInterval(interval)
-  }, [loadUnread])
+  const { unreadCount } = useNotificationPolling({ interval: 10000, enabled: !!session?.user })
 
   // Persistent Sidebar Scroll Position
   React.useEffect(() => {
@@ -221,6 +206,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                         <item.icon className={`h-4 w-4 shrink-0 transition-transform duration-200 ${active ? "text-secondary-foreground" : "group-hover:scale-110"}`} />
                         <span suppressHydrationWarning>{t(item.tKey as any) || item.fallback}</span>
                         {item.url === "/dashboard" && unreadCount > 0 && (
+                          <span className="ml-auto flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-[9px] font-bold text-white font-mono tabular-nums animate-pulse shadow-sm shadow-primary/20">
+                            {unreadCount}
+                          </span>
+                        )}
+                        {item.url === "/dashboard/notifications" && unreadCount > 0 && (
                           <span className="ml-auto flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-[9px] font-bold text-white font-mono tabular-nums animate-pulse shadow-sm shadow-primary/20">
                             {unreadCount}
                           </span>
