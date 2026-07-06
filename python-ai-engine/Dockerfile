@@ -21,5 +21,8 @@ COPY . .
 # Expose port
 EXPOSE 8080
 
-# Run the application using shell form so $PORT is expanded at runtime
-CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8080}
+# Make start script executable
+RUN chmod +x start.sh
+
+# Run via start script for reliable PORT expansion
+CMD ["./start.sh"]
