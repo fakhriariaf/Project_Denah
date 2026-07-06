@@ -178,8 +178,9 @@ export function SiteplanEditor({
 
       setScanStatus(t("siteplan_editor.processing_ai"));
 
-      // Call local Python FastAPI
-      const aiResponse = await fetch("http://127.0.0.1:8000/api/v1/analyze-siteplan", {
+      // Call Python FastAPI AI Engine (configurable via env var for production)
+      const aiBaseUrl = process.env.NEXT_PUBLIC_AI_ENGINE_URL || "http://127.0.0.1:8000";
+      const aiResponse = await fetch(`${aiBaseUrl}/api/v1/analyze-siteplan`, {
         method: "POST",
         body: formData,
       });
