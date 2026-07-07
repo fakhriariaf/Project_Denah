@@ -15,9 +15,11 @@ import { Label } from "@/components/ui/label";
 import { AlertOctagon, AlertCircle } from "lucide-react";
 import { cancelBooking } from "@/server/actions/marketing";
 import { parseServerError } from "@/lib/error-parser";
-import { handleActionResult, type ActionResult } from "@/lib/action-utils";
 import { useI18n } from "@/lib/i18n";
 import { Translate } from "@/components/translate";
+import { useOptimisticAction } from "@/hooks/use-optimistic-action";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 
 interface Props {
   booking: any;
@@ -25,10 +27,32 @@ interface Props {
 
 export default function CancelBookingDialog({ booking }: Props) {
   const { t } = useI18n();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const { execute, isLoading } = useOptimisticAction({
+    action: async (bookingId: string, cancelReason: string) => {
+      return await cancelBooking(bookingId, cancelReason);
+    },
+    onOptimistic: () => {
+      // Optimistically close dialog immediately (feels instant)
+      setOpen(false);
+    },
+    onRollback: () => {
+      // Reopen dialog on error
+      setOpen(true);
+    },
+    onSuccess: () => {
+      setReason("");
+      toast.success(`Booking ${booking.unitCode || ""} berhasil dibatalkan`);
+      router.refresh();
+    },
+    onError: (errMsg) => {
+      setError(errMsg);
+    },
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,24 +60,8 @@ export default function CancelBookingDialog({ booking }: Props) {
       setError(t("booking_form.error_reason"));
       return;
     }
-
-    setLoading(true);
     setError(null);
-    try {
-      const res = await cancelBooking(booking.id, reason);
-      const result: ActionResult<typeof res> = { success: true, data: res };
-      if (handleActionResult(result, { successMessage: `Booking ${booking.unitCode || ""} berhasil dibatalkan` })) {
-        setOpen(false);
-        setReason("");
-        window.location.reload();
-      }
-    } catch (err: any) {
-      const errorMsg = parseServerError(err);
-      handleActionResult({ success: false, error: errorMsg });
-      setError(errorMsg);
-    } finally {
-      setLoading(false);
-    }
+    await execute(booking.id, reason);
   };
 
   return (
@@ -115,10 +123,10 @@ export default function CancelBookingDialog({ booking }: Props) {
             </Button>
             <Button 
               type="submit" 
-              disabled={loading} 
+              disabled={isLoading} 
               className="bg-rose-600 hover:bg-rose-700 text-white shadow-[0_4px_14px_rgba(220,38,38,0.25)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 h-9 rounded-xl font-bold text-xs px-4"
             >
-              {loading ? t("booking_form.processing") : t("booking_form.cancel_confirm")}
+              {isLoading ? t("booking_form.processing") : t("booking_form.cancel_confirm")}
             </Button>
           </DialogFooter>
         </form>

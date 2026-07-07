@@ -3,12 +3,21 @@ import { writeFile, mkdir } from "fs/promises";
 import { join } from "path";
 import { auth } from "@/server/auth";
 import { headers } from "next/headers";
+import { applyRateLimit } from "@/server/middleware/apply-rate-limit";
 
 export async function POST(req: NextRequest) {
   // Auth check
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Rate limit: 5 uploads per minute
+  try {
+    applyRateLimit(session.user.id, "upload");
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "Rate limit exceeded";
+    return NextResponse.json({ error: msg }, { status: 429 });
   }
 
   try {

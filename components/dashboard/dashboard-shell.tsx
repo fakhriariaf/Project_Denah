@@ -276,6 +276,63 @@ export default function DashboardShell({
 
       </div>
 
+      {/* ROLE-SPECIFIC QUICK INSIGHTS */}
+      {/* Marketing: Leads funnel mini-view */}
+      {(isMarketing || (isSuperAdmin && !isDireksi && !isKeuangan)) && stats.leadsFunnel && (
+        <div className="grid gap-4 md:grid-cols-5">
+          {[
+            { label: "Lead Baru", count: stats.leadsFunnel.new, color: "bg-blue-500", link: "/marketing/leads" },
+            { label: "Dihubungi", count: stats.leadsFunnel.contacted, color: "bg-cyan-500", link: "/marketing/leads" },
+            { label: "Follow Up", count: stats.leadsFunnel.follow_up, color: "bg-amber-500", link: "/marketing/leads" },
+            { label: "Converted", count: stats.leadsFunnel.converted, color: "bg-emerald-500", link: "/marketing/bookings" },
+            { label: "Lost", count: stats.leadsFunnel.lost, color: "bg-rose-400", link: "/marketing/leads" },
+          ].map((item) => (
+            <Link key={item.label} href={item.link}>
+              <div className="flex items-center gap-3 p-3.5 bg-white/70 backdrop-blur-md border border-[#D6DED2]/80 rounded-2xl hover:shadow-[0_4px_12px_rgba(143,175,154,0.1)] hover:-translate-y-0.5 transition-all duration-300">
+                <div className={`h-2.5 w-2.5 rounded-full ${item.color} shrink-0`} />
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold text-[#66736A] uppercase tracking-wider truncate">{item.label}</p>
+                  <p className="text-lg font-extrabold text-[#243028] font-mono">{item.count}</p>
+                </div>
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
+
+      {/* Finance: Overdue invoices + pending payments summary */}
+      {(isKeuangan || isDireksi) && stats.financeQuickStats && (
+        <div className="grid gap-4 md:grid-cols-3">
+          <div className="flex items-center gap-3 p-4 bg-white/70 backdrop-blur-md border border-amber-200/80 rounded-2xl">
+            <div className="p-2.5 bg-amber-50 rounded-xl">
+              <Clock className="h-4 w-4 text-amber-600" />
+            </div>
+            <div>
+              <p className="text-[10px] font-bold text-amber-700 uppercase tracking-wider">Invoice Overdue</p>
+              <p className="text-xl font-extrabold text-amber-700 font-mono">{stats.financeQuickStats.overdueInvoices}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 p-4 bg-white/70 backdrop-blur-md border border-blue-200/80 rounded-2xl">
+            <div className="p-2.5 bg-blue-50 rounded-xl">
+              <Activity className="h-4 w-4 text-blue-600" />
+            </div>
+            <div>
+              <p className="text-[10px] font-bold text-blue-700 uppercase tracking-wider">Pending Verifikasi</p>
+              <p className="text-xl font-extrabold text-blue-700 font-mono">{stats.financeQuickStats.pendingVerification}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 p-4 bg-white/70 backdrop-blur-md border border-emerald-200/80 rounded-2xl">
+            <div className="p-2.5 bg-emerald-50 rounded-xl">
+              <TrendingUp className="h-4 w-4 text-emerald-600" />
+            </div>
+            <div>
+              <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">Income Bulan Ini</p>
+              <p className="text-xl font-extrabold text-emerald-700 font-mono">Rp {(stats.financeQuickStats.monthlyIncome || 0).toLocaleString("id-ID")}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 2. ANALYTICAL CHARTS & SIDE ACTIVITIES */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
         

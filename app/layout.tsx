@@ -4,6 +4,7 @@ import "./globals.css";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "sonner";
 import NextTopLoader from "nextjs-toploader";
+import { MobileBottomNav } from "@/components/mobile-bottom-nav";
 
 const inter = Inter({
   variable: "--font-sans",
@@ -61,6 +62,7 @@ export default function RootLayout({
         <TooltipProvider>
           {children}
         </TooltipProvider>
+        <MobileBottomNav />
         <Toaster
           position="top-right"
           toastOptions={{ duration: 4000 }}

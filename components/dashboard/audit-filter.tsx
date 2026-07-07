@@ -27,6 +27,8 @@ export function AuditLogFilter({ users }: AuditFilterProps) {
   const actionName = searchParams.get("action") || "";
   const startDate = searchParams.get("startDate") || "";
   const endDate = searchParams.get("endDate") || "";
+  const levelFilter = searchParams.get("level") || "";
+  const statusFilter = searchParams.get("status") || "";
 
   // Build & push new parameters
   const updateFilters = (newFilters: Record<string, string | null>) => {
@@ -199,9 +201,57 @@ export function AuditLogFilter({ users }: AuditFilterProps) {
             className="w-full text-xs rounded-lg border bg-background px-3 py-2 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/20 outline-none transition-all duration-200"
           />
         </div>
+
+        {/* Level Filter */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold text-muted-foreground">Level</label>
+          <Select
+            value={levelFilter || "all"}
+            onValueChange={(val) => updateFilters({ level: val === "all" ? "" : val })}
+            disabled={isPending}
+          >
+            <SelectTrigger className="w-full text-xs rounded-xl border border-[#D6DED2] bg-white hover:bg-[#F7F8F3]/50 focus:ring-2 focus:ring-[#8FAF9A]/20 h-10 px-3 transition-premium">
+              <SelectValue placeholder="Semua Level">
+                {levelFilter === "" || levelFilter === "all" ? "Semua Level" : ""}
+                {levelFilter === "log" && "🟢 Log"}
+                {levelFilter === "info" && "🔵 Info"}
+                {levelFilter === "error" && "🔴 Error"}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent className="border-[#D6DED2] rounded-xl bg-white/95 backdrop-blur-md">
+              <SelectItem value="all" className="text-xs">Semua Level</SelectItem>
+              <SelectItem value="log" className="text-xs">🟢 Log</SelectItem>
+              <SelectItem value="info" className="text-xs">🔵 Info</SelectItem>
+              <SelectItem value="error" className="text-xs">🔴 Error</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Status Filter */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold text-muted-foreground">Status</label>
+          <Select
+            value={statusFilter || "all"}
+            onValueChange={(val) => updateFilters({ status: val === "all" ? "" : val })}
+            disabled={isPending}
+          >
+            <SelectTrigger className="w-full text-xs rounded-xl border border-[#D6DED2] bg-white hover:bg-[#F7F8F3]/50 focus:ring-2 focus:ring-[#8FAF9A]/20 h-10 px-3 transition-premium">
+              <SelectValue placeholder="Semua Status">
+                {statusFilter === "" || statusFilter === "all" ? "Semua Status" : ""}
+                {statusFilter === "success" && "✅ Success"}
+                {statusFilter === "failed" && "❌ Failed"}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent className="border-[#D6DED2] rounded-xl bg-white/95 backdrop-blur-md">
+              <SelectItem value="all" className="text-xs">Semua Status</SelectItem>
+              <SelectItem value="success" className="text-xs">✅ Success</SelectItem>
+              <SelectItem value="failed" className="text-xs">❌ Failed</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
-      {(userId || moduleName || actionName || startDate || endDate) && (
+      {(userId || moduleName || actionName || startDate || endDate || levelFilter || statusFilter) && (
         <div className="flex justify-end pt-2">
           <button
             onClick={handleReset}

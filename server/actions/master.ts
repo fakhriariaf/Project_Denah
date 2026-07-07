@@ -3,7 +3,7 @@
 import { db } from "@/db";
 import { projects, units, customers, vendors, projectUsers, siteplans, siteplanShapes, financeCategories, financeAccounts } from "@/db/schema/master";
 import { projectSchema, unitSchema, customerSchema, vendorSchema, financeCategorySchema } from "../validators/master";
-import { requireAnyRole } from "../permissions";
+import { requireAnyRole, requireRole } from "../permissions";
 import { bookings } from "@/db/schema/marketing";
 import { spks, spmbs } from "@/db/schema/production";
 import { transactions, budgetLines } from "@/db/schema/finance";
@@ -73,6 +73,108 @@ export async function deleteProject(id: string) {
   revalidatePath("/master/projects");
   revalidatePath("/marketing/bookings");
   return { success: true };
+}
+
+/**
+ * Force-delete a project and ALL dependent data.
+ * Only Super Admin can execute this. No blocking — deletes everything.
+ * Cascade order: SPK progress → SPKs/SPMBs → bookings/KPR → invoices/payments → transactions → units → siteplans → project
+ */
+export async function forceDeleteProject(id: string) {
+  const user = await requireRole("Super Admin");
+  applyRateLimit(user.id);
+
+  // Verify project exists
+  const [project] = await db.select({ id: projects.id, name: projects.name }).from(projects).where(eq(projects.id, id)).limit(1);
+  if (!project) throw new Error("Project tidak ditemukan.");
+
+  await db.transaction(async (tx) => {
+    // Get unit IDs for this project (needed for cascading dependent data)
+    const projectUnitIds = (await tx.select({ id: units.id }).from(units).where(eq(units.projectId, id))).map(u => u.id);
+
+    // Get booking IDs for this project
+    const projectBookingIds = (await tx.select({ id: bookings.id }).from(bookings).where(eq(bookings.projectId, id))).map(b => b.id);
+
+    // Get SPK IDs for this project
+    const projectSpkIds = (await tx.select({ id: spks.id }).from(spks).where(eq(spks.projectId, id))).map(s => s.id);
+
+    // 1. Delete SPK progress logs & work item weights
+    if (projectSpkIds.length > 0) {
+      const { spkProgressLogs, spkWorkItemWeights } = await import("@/db/schema/production");
+      await tx.delete(spkProgressLogs).where(inArray(spkProgressLogs.spkId, projectSpkIds)).run();
+      await tx.delete(spkWorkItemWeights).where(inArray(spkWorkItemWeights.spkId, projectSpkIds)).run();
+      // Delete SPMBs
+      await tx.delete(spmbs).where(inArray(spmbs.spkId, projectSpkIds)).run();
+    }
+
+    // 2. Delete SPKs & material requests
+    await tx.delete(spks).where(eq(spks.projectId, id)).run();
+    const { materialRequests } = await import("@/db/schema/production");
+    await tx.delete(materialRequests).where(eq(materialRequests.projectId, id)).run();
+
+    // 3. Delete KPR processes & booking status histories (via bookings)
+    if (projectBookingIds.length > 0) {
+      const { kprProcesses, bookingStatusHistories } = await import("@/db/schema/marketing");
+      await tx.delete(kprProcesses).where(inArray(kprProcesses.bookingId, projectBookingIds)).run();
+      await tx.delete(bookingStatusHistories).where(inArray(bookingStatusHistories.bookingId, projectBookingIds)).run();
+    }
+
+    // 4. Delete bookings
+    await tx.delete(bookings).where(eq(bookings.projectId, id)).run();
+
+    // 5. Delete invoices, payments, transactions
+    const { invoices, payments } = await import("@/db/schema/finance");
+    await tx.delete(payments).where(eq(payments.projectId, id)).run();
+    await tx.delete(invoices).where(eq(invoices.projectId, id)).run();
+    await tx.delete(transactions).where(eq(transactions.projectId, id)).run();
+
+    // 6. Delete budget lines & budgets
+    const { budgets } = await import("@/db/schema/finance");
+    const projectBudgetIds = (await tx.select({ id: budgets.id }).from(budgets).where(eq(budgets.projectId, id))).map(b => b.id);
+    if (projectBudgetIds.length > 0) {
+      await tx.delete(budgetLines).where(inArray(budgetLines.budgetId, projectBudgetIds)).run();
+    }
+    await tx.delete(budgets).where(eq(budgets.projectId, id)).run();
+
+    // 7. Delete unit status histories
+    if (projectUnitIds.length > 0) {
+      const { unitStatusHistories } = await import("@/db/schema/master");
+      await tx.delete(unitStatusHistories).where(inArray(unitStatusHistories.unitId, projectUnitIds)).run();
+    }
+
+    // 8. Delete siteplan shapes & siteplans
+    const projectSiteplans = await tx.select({ id: siteplans.id }).from(siteplans).where(eq(siteplans.projectId, id)).all();
+    if (projectSiteplans.length > 0) {
+      const spIds = projectSiteplans.map(sp => sp.id);
+      await tx.delete(siteplanShapes).where(inArray(siteplanShapes.siteplanId, spIds)).run();
+    }
+    await tx.delete(siteplans).where(eq(siteplans.projectId, id)).run();
+
+    // 9. Delete units
+    await tx.delete(units).where(eq(units.projectId, id)).run();
+
+    // 10. Delete project users
+    await tx.delete(projectUsers).where(eq(projectUsers.projectId, id)).run();
+
+    // 11. Delete the project itself
+    await tx.delete(projects).where(eq(projects.id, id)).run();
+  });
+
+  await writeAuditLog({
+    action: "delete",
+    module: "master",
+    entityId: id,
+    entityType: "project",
+    details: { forced: true, projectName: project.name },
+  });
+
+  revalidatePath("/master/projects");
+  revalidatePath("/marketing/bookings");
+  revalidatePath("/finance");
+  revalidatePath("/production");
+  revalidatePath("/dashboard");
+  revalidatePath("/siteplan");
+  return { success: true, message: `Proyek "${project.name}" beserta seluruh data terkait berhasil dihapus.` };
 }
 
 // --- UNITS ---

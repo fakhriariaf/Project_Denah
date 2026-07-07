@@ -33,6 +33,7 @@ export default async function ProjectsPage() {
       initialProjects={data}
       allUnits={allUnits}
       isEditor={isEditor}
+      isSuperAdmin={isSuperAdmin}
     />
   )
 }

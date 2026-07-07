@@ -1,4 +1,4 @@
-"use server";
+﻿"use server";
 
 import { db } from "@/db";
 import { auditLogs } from "@/db/schema/system";
@@ -14,6 +14,8 @@ export async function getAuditLogs(filters?: {
   action?: string;
   startDate?: string;
   endDate?: string;
+  level?: string;
+  status?: string;
   page?: number;
   pageSize?: number;
 }) {
@@ -31,6 +33,12 @@ export async function getAuditLogs(filters?: {
     }
     if (filters?.action) {
       conditions.push(eq(auditLogs.action, filters.action));
+    }
+    if (filters?.level) {
+      conditions.push(eq(auditLogs.level, filters.level));
+    }
+    if (filters?.status) {
+      conditions.push(eq(auditLogs.status, filters.status));
     }
     if (filters?.startDate) {
       const parsedStart = new Date(filters.startDate);
@@ -61,9 +69,14 @@ export async function getAuditLogs(filters?: {
         entityType: auditLogs.entityType,
         details: auditLogs.details,
         ipAddress: auditLogs.ipAddress,
+        endpoint: auditLogs.endpoint,
         createdAt: auditLogs.createdAt,
         userName: userTable.name,
         userEmail: userTable.email,
+        level: auditLogs.level,
+        status: auditLogs.status,
+        responseCode: auditLogs.responseCode,
+        durationMs: auditLogs.durationMs,
       })
       .from(auditLogs)
       .leftJoin(userTable, eq(auditLogs.userId, userTable.id))
@@ -94,9 +107,14 @@ export type AuditLogItem = {
   entityType: string | null;
   details: unknown;
   ipAddress: string | null;
+  endpoint: string | null;
   createdAt: Date;
   userName: string | null;
   userEmail: string | null;
+  level: string;
+  status: string;
+  responseCode: number | null;
+  durationMs: number | null;
 };
 
 /**
@@ -113,6 +131,8 @@ export async function getAuditLogsPaginated(
     action?: string;
     startDate?: string;
     endDate?: string;
+    level?: string;
+    status?: string;
   }
 ): Promise<CursorPaginatedResult<AuditLogItem>> {
   // RBAC: only admin-level roles can view audit logs
@@ -122,7 +142,7 @@ export async function getAuditLogsPaginated(
 
   try {
     const conditions = [];
-    // BUG 6 FIX: Store cursor condition explicitly — don't rely on array index for removal
+    // BUG 6 FIX: Store cursor condition explicitly â€” don't rely on array index for removal
     let cursorCondition: ReturnType<typeof lt> | null = null;
 
     // Apply cursor filter: records with createdAt strictly less than cursor (descending order)
@@ -143,6 +163,12 @@ export async function getAuditLogsPaginated(
     }
     if (filters?.action) {
       conditions.push(eq(auditLogs.action, filters.action));
+    }
+    if (filters?.level) {
+      conditions.push(eq(auditLogs.level, filters.level));
+    }
+    if (filters?.status) {
+      conditions.push(eq(auditLogs.status, filters.status));
     }
     if (filters?.startDate) {
       const parsedStart = new Date(filters.startDate);
@@ -169,9 +195,14 @@ export async function getAuditLogsPaginated(
         entityType: auditLogs.entityType,
         details: auditLogs.details,
         ipAddress: auditLogs.ipAddress,
+        endpoint: auditLogs.endpoint,
         createdAt: auditLogs.createdAt,
         userName: userTable.name,
         userEmail: userTable.email,
+        level: auditLogs.level,
+        status: auditLogs.status,
+        responseCode: auditLogs.responseCode,
+        durationMs: auditLogs.durationMs,
       })
       .from(auditLogs)
       .leftJoin(userTable, eq(auditLogs.userId, userTable.id))
@@ -202,9 +233,14 @@ export async function getAuditLogsPaginated(
           entityType: auditLogs.entityType,
           details: auditLogs.details,
           ipAddress: auditLogs.ipAddress,
+          endpoint: auditLogs.endpoint,
           createdAt: auditLogs.createdAt,
           userName: userTable.name,
           userEmail: userTable.email,
+          level: auditLogs.level,
+          status: auditLogs.status,
+          responseCode: auditLogs.responseCode,
+          durationMs: auditLogs.durationMs,
         })
         .from(auditLogs)
         .leftJoin(userTable, eq(auditLogs.userId, userTable.id))
@@ -267,18 +303,35 @@ export async function writeAuditLog({
   entityId,
   entityType,
   details,
+  level = "log",
+  status = "success",
+  responseCode = 200,
+  durationMs,
+  endpoint,
 }: {
   action: string;
   module: string;
   entityId?: string;
   entityType?: string;
   details?: Record<string, unknown>;
+  level?: "log" | "info" | "error";
+  status?: "success" | "failed";
+  responseCode?: number;
+  durationMs?: number;
+  endpoint?: string;
 }) {
   try {
     const user = await getCurrentUser();
     const hdrs = await headers();
     const rawIp = hdrs.get("x-forwarded-for") ?? hdrs.get("x-real-ip") ?? "unknown";
     const ip = rawIp.includes(",") ? rawIp.split(",")[0].trim() : rawIp;
+
+    // Auto-detect endpoint from referer or next-url header if not explicitly provided
+    const resolvedEndpoint = endpoint
+      ?? hdrs.get("x-invoke-path")
+      ?? hdrs.get("next-url")
+      ?? hdrs.get("referer")
+      ?? null;
 
     await db.insert(auditLogs).values({
       id: crypto.randomUUID(),
@@ -289,6 +342,11 @@ export async function writeAuditLog({
       entityType: entityType ?? null,
       details: details ?? null,
       ipAddress: ip,
+      endpoint: resolvedEndpoint,
+      level,
+      status,
+      responseCode,
+      durationMs: durationMs ?? null,
       createdAt: new Date(),
     });
   } catch (err) {

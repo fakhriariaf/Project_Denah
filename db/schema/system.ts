@@ -11,6 +11,11 @@ export const auditLogs = pgTable("audit_logs", {
   entityType: text("entity_type"),
   details: jsonb("details"), // JSONB details
   ipAddress: text("ip_address"),
+  endpoint: text("endpoint"), // URL path that was hit (e.g. '/api/auth/sign-in/email', '/marketing/bookings')
+  level: text("level").default("log").notNull(), // 'log', 'info', 'error'
+  status: text("status").default("success").notNull(), // 'success', 'failed'
+  responseCode: integer("response_code").default(200),
+  durationMs: integer("duration_ms"),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
 });
 

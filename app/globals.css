@@ -717,3 +717,79 @@ select:-webkit-autofill:focus {
     transition-duration: 0ms !important;
   }
 }
+
+/* ──────────────────────────────────────────────────────────
+   📱 MOBILE RESPONSIVE OPTIMIZATION (B4)
+   Targeted styles for iPhone SE, iPhone 14, Android mid-range
+   ────────────────────────────────────────────────────────── */
+
+/* Mobile: Stack dashboard cards vertically */
+@media (max-width: 768px) {
+  /* Tables: smooth touch scrolling */
+  [data-slot="table-container"],
+  .overflow-x-auto {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Tables: slightly smaller font on mobile */
+  [data-slot="table"] {
+    font-size: 12px;
+  }
+
+  /* Forms: full width inputs on mobile */
+  .grid-cols-2:has(input, select, textarea),
+  .md\:grid-cols-2:has(input, select, textarea) {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Dialog/Sheet: full width on mobile */
+  [data-slot="sheet-content"] {
+    max-width: 100vw !important;
+    width: 100% !important;
+  }
+
+  /* Header: reduce padding on mobile */
+  header {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+  }
+
+  /* Content area: reduce padding on mobile */
+  .lg\:p-6 {
+    padding: 0.75rem !important;
+  }
+
+  /* Bottom nav spacer for pages with mobile bottom nav */
+  body {
+    padding-bottom: 4.5rem;
+  }
+}
+
+/* Extra small screens (iPhone SE - 375px) */
+@media (max-width: 390px) {
+  /* Even tighter spacing */
+  .lg\:p-6, .p-4 {
+    padding: 0.5rem !important;
+  }
+
+  /* Smaller page titles */
+  .text-page-title {
+    font-size: 20px !important;
+  }
+
+  .text-section-title {
+    font-size: 16px !important;
+  }
+}
+
+/* Siteplan: pinch-to-zoom and mobile gesture support */
+.siteplan-container {
+  touch-action: pan-x pan-y pinch-zoom;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+/* Prevent iOS bounce/rubber-band effect on siteplan */
+.siteplan-container svg {
+  touch-action: none;
+}

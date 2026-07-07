@@ -3,6 +3,9 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { NotificationDropdown } from "@/components/dashboard/notification-dropdown"
 import { UserIdentityDropdown } from "@/components/dashboard/user-identity-dropdown"
 import { DashboardHeaderTitle } from "@/components/dashboard/dashboard-header-title"
+import { CommandPalette } from "@/components/global-search/command-palette"
+import { ThemeToggle } from "@/components/theme-toggle"
+import { KeyboardShortcutsHelp } from "@/components/keyboard-shortcuts-help"
 
 export default function DashboardLayout({
   children,
@@ -21,10 +24,13 @@ export default function DashboardLayout({
             </h1>
           </div>
           <div className="flex items-center gap-2">
+            <ThemeToggle />
             <NotificationDropdown />
             <UserIdentityDropdown />
           </div>
         </header>
+        <CommandPalette />
+        <KeyboardShortcutsHelp />
         <div className="flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6 bg-background">
           {children}
         </div>

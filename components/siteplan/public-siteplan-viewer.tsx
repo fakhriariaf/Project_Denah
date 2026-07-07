@@ -345,7 +345,7 @@ export function PublicSiteplanViewer({ initialData }: PublicSiteplanViewerProps)
       </div>
 
       {/* SVG Canvas Area */}
-      <div className="relative w-full flex-1 overflow-hidden rounded-3xl border border-[#D6DED2] bg-white shadow-lg h-[65vh] min-h-[450px]">
+      <div className="siteplan-container relative w-full flex-1 overflow-hidden rounded-3xl border border-[#D6DED2] bg-white shadow-lg h-[65vh] min-h-[450px]">
         {/* Navigation Help overlay */}
         <div className="absolute top-4 left-4 z-10 hidden sm:flex items-center gap-2 bg-[#4F6F52]/10 backdrop-blur-md border border-[#4F6F52]/20 px-3.5 py-1.5 rounded-2xl text-[10px] font-bold text-[#4F6F52] pointer-events-none">
           <Compass className="h-3.5 w-3.5 text-[#4F6F52] animate-pulse" />

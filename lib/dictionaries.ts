@@ -9,6 +9,7 @@ export const dictionaries = {
     // Navigation
     "nav.dashboard": "Dashboard",
     "nav.notifications": "Notifikasi",
+    "nav.compare": "Perbandingan Proyek",
     "nav.masterData": "Master Data",
     "nav.masterData.projects": "Data Proyek",
     "nav.masterData.units": "Data Kavling & Unit",

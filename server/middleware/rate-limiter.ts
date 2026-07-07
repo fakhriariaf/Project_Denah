@@ -1,15 +1,3 @@
-/**
- * Rate Limiter Middleware
- *
- * Fixed-window counter implementation for limiting mutation requests
- * per user session. Uses an in-memory Map store by default (development)
- * with a configurable store interface for production (e.g., Redis).
- *
- * Requirements: 3.1, 3.2, 3.6
- */
-
-// --- Store Interface (for future Redis support) ---
-
 export interface RateLimitEntry {
   count: number;
   windowStart: number; // Unix timestamp in milliseconds

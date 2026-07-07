@@ -57,6 +57,7 @@ import { updateUnitDefectList, deleteUnitAttachment } from "@/server/actions/mas
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { updateShape } from "@/server/actions/siteplan";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { UnitTimeline } from "@/app/siteplan/[projectId]/unit-timeline";
 
 export type ShapeWithUnit = {
   id: string;
@@ -1152,7 +1153,7 @@ export function SiteplanViewer({
   };
 
   return (
-    <div className="relative w-full overflow-hidden rounded-3xl border border-[#D6DED2] bg-white shadow-sage-lg h-[74vh]">
+    <div className="siteplan-container relative w-full overflow-hidden rounded-3xl border border-[#D6DED2] bg-white shadow-sage-lg h-[74vh]">
       
       {/* Floating Toolbar (Search & Legend Helper) */}
       <div className="absolute top-4 left-4 z-10 flex flex-col sm:flex-row gap-2.5 max-w-[calc(100%-2rem)] pointer-events-none">
@@ -2593,6 +2594,19 @@ export function SiteplanViewer({
                         }}
                       />
                     )}
+                  </div>
+                )}
+
+                {/* Activity Timeline Section */}
+                {unit && (
+                  <div className="bg-white rounded-[2rem] p-5 border border-[#D6DED2] shadow-sage transition-all hover:shadow-sage-lg mt-5">
+                    <div className="flex items-center gap-2 mb-4">
+                      <Activity className="h-4 w-4 text-[#4F6F52]" />
+                      <span className="text-[10px] font-bold text-[#66736A] uppercase tracking-wider">
+                        Riwayat Aktivitas Unit
+                      </span>
+                    </div>
+                    <UnitTimeline unitId={unit.id} />
                   </div>
                 )}
               </>

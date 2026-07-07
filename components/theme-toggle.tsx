@@ -1,48 +1,62 @@
-"use client"
+"use client";
 
-import React, { useEffect, useState } from "react"
-import { Sun, Moon } from "lucide-react"
+import { useState, useEffect, useCallback } from "react";
+import { Moon, Sun } from "lucide-react";
+
+type Theme = "light" | "dark" | "system";
 
 export function ThemeToggle() {
-  const [theme, setTheme] = useState<"light" | "dark">("light")
+  const [theme, setTheme] = useState<Theme>("light");
+  const [mounted, setMounted] = useState(false);
 
+  // Read initial value from localStorage
   useEffect(() => {
-    // Check initialized theme on mount
-    const isDark = document.documentElement.classList.contains("dark")
-    setTheme(isDark ? "dark" : "light")
-  }, [])
-
-  const toggleTheme = () => {
-    const isDark = document.documentElement.classList.contains("dark")
-    if (isDark) {
-      document.documentElement.classList.remove("dark")
-      localStorage.theme = "light"
-      setTheme("light")
+    setMounted(true);
+    const stored = localStorage.getItem("theme") as Theme | null;
+    if (stored === "dark" || stored === "light") {
+      setTheme(stored);
     } else {
-      document.documentElement.classList.add("dark")
-      localStorage.theme = "dark"
-      setTheme("dark")
+      // system preference
+      setTheme(window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
     }
+  }, []);
+
+  const toggleTheme = useCallback(() => {
+    const next = theme === "dark" ? "light" : "dark";
+    setTheme(next);
+    localStorage.setItem("theme", next);
+
+    if (next === "dark") {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+  }, [theme]);
+
+  // Prevent hydration mismatch
+  if (!mounted) {
+    return (
+      <button
+        className="p-2 rounded-xl hover:bg-[#DDE8D8] dark:hover:bg-[#1C2B22] transition-colors"
+        aria-label="Toggle theme"
+      >
+        <Sun className="h-4 w-4 text-[#66736A]" />
+      </button>
+    );
   }
 
   return (
     <button
       onClick={toggleTheme}
-      type="button"
-      className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg border border-[#D6DED2] dark:border-[#66736A] bg-white dark:bg-[#4F6F52] hover:bg-[#DDE8D8]/45 dark:hover:bg-[#66736A]/50 text-[#66736A] dark:text-[#DDE8D8] transition-all duration-200 w-full font-sans text-xs font-semibold hover:translate-x-0.5"
-      aria-label="Toggle theme"
+      className="p-2 rounded-xl hover:bg-[#DDE8D8] dark:hover:bg-[#1C2B22] transition-colors"
+      aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+      title={theme === "dark" ? "Mode Terang" : "Mode Gelap"}
     >
       {theme === "dark" ? (
-        <>
-          <Sun className="h-4 w-4 text-amber-400 shrink-0" />
-          <span>Mode Terang</span>
-        </>
+        <Sun className="h-4 w-4 text-amber-400" />
       ) : (
-        <>
-          <Moon className="h-4 w-4 text-[#8FAF9A] shrink-0" />
-          <span>Mode Gelap</span>
-        </>
+        <Moon className="h-4 w-4 text-[#66736A]" />
       )}
     </button>
-  )
+  );
 }

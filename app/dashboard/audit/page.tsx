@@ -16,6 +16,8 @@ interface SearchParamsProps {
   action?: string;
   startDate?: string;
   endDate?: string;
+  level?: string;
+  status?: string;
 }
 
 export default async function AuditLogPage({
@@ -43,6 +45,8 @@ export default async function AuditLogPage({
     action: resolvedSearchParams.action,
     startDate: resolvedSearchParams.startDate,
     endDate: resolvedSearchParams.endDate,
+    level: resolvedSearchParams.level,
+    status: resolvedSearchParams.status,
   };
 
   // 4. Fetch initial paginated data using cursor-based pagination

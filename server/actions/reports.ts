@@ -2,8 +2,8 @@
 
 import { db } from "@/db";
 import { projects, units, customers, vendors, projectUsers } from "@/db/schema/master";
-import { bookings, kprProcesses } from "@/db/schema/marketing";
-import { transactions, payments } from "@/db/schema/finance";
+import { bookings, kprProcesses, leads } from "@/db/schema/marketing";
+import { transactions, payments, invoices } from "@/db/schema/finance";
 import { spks, spkProgressLogs, workItems, complaints, spmbs } from "@/db/schema/production";
 import { auditLogs, attachments } from "@/db/schema/system";
 import { user as userTable, vendorProfiles } from "@/db/schema/auth";
@@ -211,6 +211,49 @@ export async function getExecutiveOverviewData() {
     .where(inArray(complaints.status, ["open", "in_progress"]))
     .orderBy(desc(complaints.createdAt));
 
+  // 7. Leads Funnel (for Marketing dashboard widget)
+  const leadStatusRows = await db
+    .select({ status: leads.status, cnt: count() })
+    .from(leads)
+    .groupBy(leads.status);
+
+  const leadsFunnel: Record<string, number> = { new: 0, contacted: 0, follow_up: 0, converted: 0, lost: 0 };
+  for (const row of leadStatusRows) {
+    if (row.status in leadsFunnel) {
+      leadsFunnel[row.status] = row.cnt;
+    }
+  }
+
+  // 8. Finance Quick Stats (for Finance/Direksi widget)
+  const [overdueInvRow] = await db
+    .select({ cnt: count() })
+    .from(invoices)
+    .where(and(eq(invoices.status, "unpaid"), lt(invoices.dueDate, now)));
+
+  const [pendingVerifRow] = await db
+    .select({ cnt: count() })
+    .from(payments)
+    .where(eq(payments.status, "pending"));
+
+  // Monthly income (current month)
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const [monthIncomeRow] = await db
+    .select({ total: sum(transactions.amount) })
+    .from(transactions)
+    .where(
+      and(
+        eq(transactions.type, "income"),
+        eq(transactions.approvalStatus, "not_required"),
+        gte(transactions.transactionDate, startOfMonth)
+      )
+    );
+
+  const financeQuickStats = {
+    overdueInvoices: overdueInvRow?.cnt ?? 0,
+    pendingVerification: pendingVerifRow?.cnt ?? 0,
+    monthlyIncome: Number(monthIncomeRow?.total ?? 0),
+  };
+
   return {
     totalProjects,
     totalUnits,
@@ -225,6 +268,8 @@ export async function getExecutiveOverviewData() {
     pendingApprovalsCount,
     monthlyCashFlow,
     statusDataset,
+    leadsFunnel,
+    financeQuickStats,
     recentLogs: recentLogs.map((log) => ({
       id: log.id,
       action: log.action,
@@ -1161,7 +1206,7 @@ export async function getComplaintReportsData(projectId?: string) {
   const resolvedConditions = [...conditions, sql`${complaints.resolvedAt} IS NOT NULL`];
   const [avgResult] = await db
     .select({
-      avgDays: sql<number>`avg(julianday(${complaints.resolvedAt}) - julianday(${complaints.createdAt}))`,
+      avgDays: sql<number>`avg(EXTRACT(EPOCH FROM (${complaints.resolvedAt} - ${complaints.createdAt})) / 86400)`,
     })
     .from(complaints)
     .where(and(...resolvedConditions));
@@ -1194,7 +1239,7 @@ export async function getComplaintReportsData(projectId?: string) {
   ];
   const [oldestOpen] = await db
     .select({
-      oldestDays: sql<number>`max(julianday('now') - julianday(${complaints.createdAt}))`,
+      oldestDays: sql<number>`max(EXTRACT(EPOCH FROM (now() - ${complaints.createdAt})) / 86400)`,
     })
     .from(complaints)
     .where(and(...oldestOpenConditions));

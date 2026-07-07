@@ -25,17 +25,39 @@ export default function LoginPage() {
     setError("");
 
     try {
-      const { error } = await authClient.signIn.email({
-        email,
-        password,
+      const res = await fetch("/api/auth/sign-in/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+        credentials: "include",
       });
 
-      if (error) {
-        setError(error.message || t("auth.login_failed"));
-      } else {
-        router.push("/dashboard");
-        router.refresh();
+      if (!res.ok) {
+        // Maintenance mode: server returns 503
+        if (res.status === 503) {
+          router.push("/maintenance");
+          return;
+        }
+
+        const body = await res.json().catch(() => ({}));
+        const msg = body?.error?.message || body?.message || body?.error || "";
+        const errorStr = typeof msg === "string" ? msg : JSON.stringify(msg);
+        
+        if (errorStr.includes("pemeliharaan") || errorStr.includes("maintenance")) {
+          router.push("/maintenance");
+          return;
+        }
+        if (errorStr.includes("dinonaktifkan")) {
+          setError(errorStr);
+          return;
+        }
+        setError(errorStr || t("auth.login_failed"));
+        return;
       }
+
+      // Login success — use hard navigation to ensure layout/sidebar
+      // gets fresh session data (role-based menu items)
+      window.location.href = "/dashboard";
     } catch {
       setError(t("auth.login_error"));
     } finally {

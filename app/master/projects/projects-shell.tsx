@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ProjectForm } from "./project-form";
 import { DeleteConfirm } from "@/components/delete-confirm";
-import { deleteProject } from "@/server/actions/master";
+import { deleteProject, forceDeleteProject } from "@/server/actions/master";
 import { Building2, MapPin, Layers, LayoutGrid, CheckCircle2, AlertCircle, Info, Edit3, Trash2 } from "lucide-react";
 import type { ProjectInput } from "@/server/validators/master";
 import { useI18n } from "@/lib/i18n";
@@ -42,10 +42,12 @@ export function ProjectsShell({
   initialProjects,
   allUnits,
   isEditor,
+  isSuperAdmin,
 }: {
   initialProjects: Project[];
   allUnits: { projectId: string; status: string }[];
   isEditor: boolean;
+  isSuperAdmin?: boolean;
 }) {
   const { t } = useI18n();
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
@@ -296,31 +298,59 @@ export function ProjectsShell({
 
                 {/* Actions Integrated */}
                 {isEditor && (
-                  <div className="flex gap-2 pt-4 border-t border-[#D6DED2]/40 animate-in fade-in duration-200">
-                    <div className="flex-1">
-                      <ProjectForm
-                        id={selectedProject.id}
-                        initialData={{
-                          code: selectedProject.code,
-                          name: selectedProject.name,
-                          location: selectedProject.location || undefined,
-                          description: selectedProject.description || undefined,
-                          status: selectedProject.status as ProjectInput["status"],
-                          publicEnabled: selectedProject.publicEnabled,
-                          isFeaturedPublic: selectedProject.isFeaturedPublic,
-                        }}
-                      />
+                  <div className="pt-4 border-t border-[#D6DED2]/40 animate-in fade-in duration-200 space-y-3">
+                    <div className="flex gap-2 items-center">
+                      <div className="flex-1">
+                        <ProjectForm
+                          id={selectedProject.id}
+                          initialData={{
+                            code: selectedProject.code,
+                            name: selectedProject.name,
+                            location: selectedProject.location || undefined,
+                            description: selectedProject.description || undefined,
+                            status: selectedProject.status as ProjectInput["status"],
+                            publicEnabled: selectedProject.publicEnabled,
+                            isFeaturedPublic: selectedProject.isFeaturedPublic,
+                          }}
+                        />
+                      </div>
+                      <div className="shrink-0">
+                        <DeleteConfirm
+                          label={`proyek "${selectedProject.name}"`}
+                          onConfirm={async () => {
+                            const res = await deleteProject(selectedProject.id);
+                            setSelectedProjectId(null);
+                            return res;
+                          }}
+                        />
+                      </div>
                     </div>
-                    <div className="shrink-0">
-                      <DeleteConfirm
-                        label={`proyek "${selectedProject.name}"`}
-                        onConfirm={async () => {
-                          const res = await deleteProject(selectedProject.id);
-                          setSelectedProjectId(null);
-                          return res;
+                    {isSuperAdmin && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full text-xs text-rose-600 border-rose-200 hover:bg-rose-50 hover:border-rose-300 hover:text-rose-700 transition-all"
+                        onClick={async () => {
+                          const confirmed = window.confirm(
+                            `⚠️ HAPUS PERMANEN: Proyek "${selectedProject.name}" beserta SEMUA data terkait (booking, pembayaran, SPK, invoice, dll) akan dihapus permanen.\n\nAksi ini TIDAK DAPAT dibatalkan.\n\nKetik OK untuk melanjutkan.`
+                          );
+                          if (!confirmed) return;
+                          try {
+                            const res = await forceDeleteProject(selectedProject.id);
+                            if (res.success) {
+                              alert(res.message);
+                              setSelectedProjectId(null);
+                              window.location.reload();
+                            }
+                          } catch (err) {
+                            alert(err instanceof Error ? err.message : "Gagal menghapus proyek.");
+                          }
                         }}
-                      />
-                    </div>
+                      >
+                        <Trash2 className="h-3.5 w-3.5 mr-1" />
+                        Hapus Permanen (+ Semua Data)
+                      </Button>
+                    )}
                   </div>
                 )}
               </CardContent>

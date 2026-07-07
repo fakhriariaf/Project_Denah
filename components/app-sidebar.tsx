@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation"
 import Link from "next/link"
 import { authClient } from "@/lib/auth-client"
 import { useI18n } from "@/lib/i18n"
-import { LayoutDashboard, Users, Home, Map, CircleDollarSign, HardHat, FileText, Settings, Building2, Store, UserCog, User, Landmark, ShieldCheck, Banknote, Clock, Target, Wrench, Bell } from "lucide-react"
+import { LayoutDashboard, Users, Home, Map, CircleDollarSign, HardHat, FileText, Settings, Building2, Store, UserCog, User, Landmark, ShieldCheck, Banknote, Clock, Target, Wrench, Bell, GitCompareArrows } from "lucide-react"
 import { useNotificationPolling } from "@/hooks/use-notification-polling"
 
 import {
@@ -31,6 +31,7 @@ const data = {
       items: [
         { tKey: "nav.dashboard", fallback: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
         { tKey: "nav.notifications", fallback: "Notifikasi", url: "/dashboard/notifications", icon: Bell },
+        { tKey: "nav.compare", fallback: "Perbandingan Proyek", url: "/dashboard/compare", icon: GitCompareArrows },
         { tKey: "nav.masterData.siteplan", fallback: "Siteplan Interaktif", url: "/siteplan", icon: Map },
       ],
     },
@@ -86,6 +87,7 @@ const data = {
 const rolePermissions: Record<string, string[]> = {
   "/dashboard": ["role_super_admin", "role_admin_kantor", "role_marketing_manager", "role_marketing", "role_admin_keuangan", "role_direksi", "role_pengawas", "role_vendor", "role_viewer"],
   "/dashboard/notifications": ["role_super_admin", "role_admin_kantor", "role_marketing_manager", "role_marketing", "role_admin_keuangan", "role_direksi", "role_pengawas", "role_vendor", "role_viewer"],
+  "/dashboard/compare": ["role_super_admin", "role_admin_kantor", "role_direksi"],
   "/siteplan": ["role_super_admin", "role_admin_kantor", "role_marketing_manager", "role_marketing", "role_admin_keuangan", "role_direksi", "role_pengawas", "role_viewer"],
   "/master/projects": ["role_super_admin", "role_admin_kantor", "role_marketing_manager", "role_marketing", "role_admin_keuangan", "role_direksi", "role_pengawas", "role_viewer"],
   "/master/units": ["role_super_admin", "role_admin_kantor", "role_marketing_manager", "role_marketing", "role_admin_keuangan", "role_direksi", "role_pengawas", "role_viewer"],
