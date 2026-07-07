@@ -431,7 +431,7 @@ export default function KprCardDetailDialog({
       if (res.success) {
         alert("Dana KPR berhasil direalisasikan!");
         setOpen(false);
-        window.location.reload();
+        router.refresh();
       }
     } catch (err: any) {
       setError(err.message || "Gagal memproses realisasi dana KPR.");
@@ -496,7 +496,7 @@ export default function KprCardDetailDialog({
       if (res.success) {
         alert("Proses alur KPR konsumen berhasil diperbarui!");
         setOpen(false);
-        window.location.reload();
+        router.refresh();
       }
     } catch (err: any) {
       setError(err.message || t("kpr_dialog.error_update"));

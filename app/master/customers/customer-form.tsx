@@ -1,4 +1,5 @@
 "use client";
+import { useRouter } from "next/navigation";
 
 import { useTransition, useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
@@ -49,6 +50,7 @@ export function CustomerForm({
   originalStatus?: string | null;
   paymentScheme?: string | null;
 }) {
+  const router = useRouter();
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -139,7 +141,7 @@ export function CustomerForm({
         }
         setOpen(false);
         if (!id) reset();
-        window.location.reload();
+        router.refresh();
       } catch (err) {
         const errorMsg = parseServerError(err);
         handleActionResult({ success: false, error: errorMsg });

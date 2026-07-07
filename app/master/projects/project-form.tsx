@@ -1,4 +1,5 @@
 "use client";
+import { useRouter } from "next/navigation";
 
 import { useTransition, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -28,6 +29,7 @@ export function ProjectForm({
   initialData?: ProjectInput; 
   id?: string;
 }) {
+  const router = useRouter();
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -61,7 +63,7 @@ export function ProjectForm({
         }
         setOpen(false);
         if (!id) reset();
-        window.location.reload();
+        router.refresh();
       } catch (err) {
         setError(parseServerError(err));
       }

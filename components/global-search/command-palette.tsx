@@ -105,7 +105,7 @@ export function CommandPalette() {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[100]" onClick={() => setOpen(false)}>
+    <div className="fixed inset-0 z-[100]" role="dialog" aria-modal="true" aria-label="Pencarian Global" onClick={() => setOpen(false)}>
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/30 backdrop-blur-[2px]" />
 

@@ -1,4 +1,5 @@
 "use client";
+import { useRouter } from "next/navigation";
 
 import { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -47,6 +48,7 @@ export default function EditLeadDialog({
   currentUser,
   currentUserRole,
 }: Props) {
+  const router = useRouter();
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -105,7 +107,7 @@ export default function EditLeadDialog({
         alert("Data lead/prospek berhasil diperbarui!");
         setOpen(false);
         reset();
-        window.location.reload();
+        router.refresh();
       }
     } catch (err: any) {
       setError(parseServerError(err));

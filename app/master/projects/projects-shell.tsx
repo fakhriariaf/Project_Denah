@@ -1,4 +1,5 @@
 "use client";
+import { useRouter } from "next/navigation";
 
 import { useState } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -49,6 +50,7 @@ export function ProjectsShell({
   isEditor: boolean;
   isSuperAdmin?: boolean;
 }) {
+  const router = useRouter();
   const { t } = useI18n();
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -340,7 +342,7 @@ export function ProjectsShell({
                             if (res.success) {
                               alert(res.message);
                               setSelectedProjectId(null);
-                              window.location.reload();
+                              router.refresh();
                             }
                           } catch (err) {
                             alert(err instanceof Error ? err.message : "Gagal menghapus proyek.");

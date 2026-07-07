@@ -21,7 +21,7 @@ export function KeyboardShortcutsHelp() {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center" onClick={() => setOpen(false)}>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center" role="dialog" aria-modal="true" aria-label="Pintasan Keyboard" onClick={() => setOpen(false)}>
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/30 backdrop-blur-[2px]" />
 

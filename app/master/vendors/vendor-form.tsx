@@ -1,4 +1,5 @@
 "use client";
+import { useRouter } from "next/navigation";
 
 import { useTransition, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -26,6 +27,7 @@ export function VendorForm({
   initialData?: VendorInput; 
   id?: string;
 }) {
+  const router = useRouter();
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -69,7 +71,7 @@ export function VendorForm({
           alert("Data vendor berhasil diperbarui!");
           setOpen(false);
           reset();
-          window.location.reload();
+          router.refresh();
         } else {
           const result = await createVendor(data);
           if (result.accountCreated && result.email && result.tempPassword) {
@@ -82,7 +84,7 @@ export function VendorForm({
             }
             setOpen(false);
             reset();
-            window.location.reload();
+            router.refresh();
           }
         }
       } catch (err) {
@@ -197,7 +199,7 @@ export function VendorForm({
         setCredential(null);
         setOpen(false);
         reset();
-        window.location.reload();
+        router.refresh();
       }}
     >
       <DialogContent className="sm:max-w-md rounded-2xl border border-[#D6DED2] p-0 overflow-hidden font-sans">

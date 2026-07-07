@@ -223,11 +223,11 @@ export default async function LeadsPage({
       {/* ── KPI METRIC CARDS ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Prospek */}
-        <Card className="bg-white border-[#D6DED2] shadow-sage hover:shadow-sage-lg hover:-translate-y-0.5 transition-premium">
+        <Card className="bg-white dark:bg-card border-[#D6DED2] dark:border-border shadow-sage hover:shadow-sage-lg hover:-translate-y-0.5 transition-premium">
           <CardContent className="p-5 flex items-center justify-between gap-3">
             <div className="space-y-1 min-w-0">
-              <p className="text-[10px] text-[#66736A] font-bold uppercase tracking-wider"><Translate namespace="lead" translationKey="total_leads" /></p>
-              <h3 className="text-2xl font-black font-mono tracking-tight text-[#243028] tabular-nums">{totalLeads}</h3>
+              <p className="text-[10px] text-[#66736A] dark:text-muted-foreground font-bold uppercase tracking-wider"><Translate namespace="lead" translationKey="total_leads" /></p>
+              <h3 className="text-2xl font-black font-mono tracking-tight text-[#243028] dark:text-foreground tabular-nums">{totalLeads}</h3>
               <p className="text-[10px] text-[#8FAF9A]">
                 {isBiasaRole ? <Translate namespace="lead" translationKey="total_leads_mine_desc" /> : <Translate namespace="lead" translationKey="total_leads_all_desc" />}
               </p>
@@ -239,10 +239,10 @@ export default async function LeadsPage({
         </Card>
 
         {/* Lead Baru */}
-        <Card className="bg-white border-[#D6DED2] shadow-sage hover:shadow-sage-lg hover:-translate-y-0.5 transition-premium">
+        <Card className="bg-white dark:bg-card border-[#D6DED2] dark:border-border shadow-sage hover:shadow-sage-lg hover:-translate-y-0.5 transition-premium">
           <CardContent className="p-5 flex items-center justify-between gap-3">
             <div className="space-y-1 min-w-0">
-              <p className="text-[10px] text-[#66736A] font-bold uppercase tracking-wider"><Translate namespace="lead" translationKey="new_leads" /></p>
+              <p className="text-[10px] text-[#66736A] dark:text-muted-foreground font-bold uppercase tracking-wider"><Translate namespace="lead" translationKey="new_leads" /></p>
               <h3 className="text-2xl font-black font-mono tracking-tight text-emerald-700 tabular-nums">{newLeads}</h3>
               <p className="text-[10px] text-emerald-500"><Translate namespace="lead" translationKey="new_leads_desc" /></p>
             </div>
@@ -253,10 +253,10 @@ export default async function LeadsPage({
         </Card>
 
         {/* Follow Up */}
-        <Card className="bg-white border-[#D6DED2] shadow-sage hover:shadow-sage-lg hover:-translate-y-0.5 transition-premium">
+        <Card className="bg-white dark:bg-card border-[#D6DED2] dark:border-border shadow-sage hover:shadow-sage-lg hover:-translate-y-0.5 transition-premium">
           <CardContent className="p-5 flex items-center justify-between gap-3">
             <div className="space-y-1 min-w-0">
-              <p className="text-[10px] text-[#66736A] font-bold uppercase tracking-wider"><Translate namespace="lead" translationKey="follow_up" /></p>
+              <p className="text-[10px] text-[#66736A] dark:text-muted-foreground font-bold uppercase tracking-wider"><Translate namespace="lead" translationKey="follow_up" /></p>
               <h3 className="text-2xl font-black font-mono tracking-tight text-amber-700 tabular-nums">{followUpLeads}</h3>
               <p className="text-[10px] text-amber-500"><Translate namespace="lead" translationKey="follow_up_desc" /></p>
             </div>
@@ -267,10 +267,10 @@ export default async function LeadsPage({
         </Card>
 
         {/* Conversion Rate */}
-        <Card className="bg-white border-[#D6DED2] shadow-sage hover:shadow-sage-lg hover:-translate-y-0.5 transition-premium">
+        <Card className="bg-white dark:bg-card border-[#D6DED2] dark:border-border shadow-sage hover:shadow-sage-lg hover:-translate-y-0.5 transition-premium">
           <CardContent className="p-5 flex items-center justify-between gap-3">
             <div className="space-y-1 min-w-0">
-              <p className="text-[10px] text-[#66736A] font-bold uppercase tracking-wider"><Translate namespace="lead" translationKey="converted" /></p>
+              <p className="text-[10px] text-[#66736A] dark:text-muted-foreground font-bold uppercase tracking-wider"><Translate namespace="lead" translationKey="converted" /></p>
               <h3 className="text-2xl font-black font-mono tracking-tight text-[#4F6F52] tabular-nums">{convertedLeads}</h3>
               <p className="text-[10px] text-[#8FAF9A]">
                 <Translate namespace="lead" translationKey="converted_desc" values={{ rate: conversionRate.toString() }} />
@@ -284,7 +284,7 @@ export default async function LeadsPage({
       </div>
 
       {/* ── FILTER & SEARCH BAR ── */}
-      <div className="bg-white border border-[#D6DED2] rounded-2xl shadow-sage p-4">
+      <div className="bg-white dark:bg-card border border-[#D6DED2] dark:border-border rounded-2xl shadow-sage p-4">
         <form method="GET" className="flex flex-col md:flex-row items-center gap-3">
           {/* Search Input */}
           <SearchInput

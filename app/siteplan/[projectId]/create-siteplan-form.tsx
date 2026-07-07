@@ -1,4 +1,5 @@
 "use client";
+import { useRouter } from "next/navigation";
 
 import { useState, useTransition } from "react";
 import { useForm } from "react-hook-form";
@@ -13,6 +14,7 @@ import { Plus, Check, X, FileUp, AlertCircle } from "lucide-react";
 import { parseServerError } from "@/lib/error-parser";
 
 export function CreateSiteplanForm({ projectId }: { projectId: string }) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -36,7 +38,7 @@ export function CreateSiteplanForm({ projectId }: { projectId: string }) {
         await createSiteplan(data);
         alert("Gambar siteplan berhasil disimpan!");
         setOpen(false);
-        window.location.reload();
+        router.refresh();
       } catch (err) {
         setError(parseServerError(err));
       }

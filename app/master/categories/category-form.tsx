@@ -1,4 +1,5 @@
 "use client";
+import { useRouter } from "next/navigation";
 
 import { useTransition, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -23,6 +24,7 @@ export function CategoryForm({
   id?: string;
   categories?: Array<{ id: string; name: string; type: string }>;
 }) {
+  const router = useRouter();
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -52,7 +54,7 @@ export function CategoryForm({
         }
         setOpen(false);
         if (!id) reset();
-        window.location.reload();
+        router.refresh();
       } catch (err) {
         setError(parseServerError(err));
       }

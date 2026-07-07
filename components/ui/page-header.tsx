@@ -30,7 +30,7 @@ export function PageHeader({
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#DDE8D8]/70 via-white/95 to-[#DDE8D8]/40 border border-[#D6DED2] p-6 shadow-sage animate-in fade-in duration-500",
+        "relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#DDE8D8]/70 via-white/95 to-[#DDE8D8]/40 dark:from-[#18221D]/70 dark:via-[#151E1A]/95 dark:to-[#18221D]/40 border border-[#D6DED2] dark:border-[#1F2E26] p-6 shadow-sage animate-in fade-in duration-500",
         className
       )}
     >
@@ -48,11 +48,11 @@ export function PageHeader({
 
           {/* Title and description */}
           <div>
-            <h1 className="text-2xl font-black text-[#243028] tracking-tight font-inter">
+            <h1 className="text-2xl font-black text-[#243028] dark:text-[#E3EAE6] tracking-tight font-inter">
               {title}
             </h1>
             {description && (
-              <p className="text-sm text-[#66736A] mt-0.5">{description}</p>
+              <p className="text-sm text-[#66736A] dark:text-[#8AA293] mt-0.5">{description}</p>
             )}
           </div>
         </div>

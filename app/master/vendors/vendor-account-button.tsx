@@ -1,4 +1,5 @@
 "use client";
+import { useRouter } from "next/navigation";
 
 import { useState, useTransition } from "react";
 import { provisionVendorAccount } from "@/server/actions/master";
@@ -15,6 +16,7 @@ interface VendorAccountButtonProps {
 }
 
 export function VendorAccountButton({ vendorId, hasEmail }: VendorAccountButtonProps) {
+  const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [credential, setCredential] = useState<{
     email: string;
@@ -75,7 +77,7 @@ export function VendorAccountButton({ vendorId, hasEmail }: VendorAccountButtonP
         open={!!credential}
         onOpenChange={() => {
           setCredential(null);
-          window.location.reload();
+          router.refresh();
         }}
       >
         <DialogContent className="sm:max-w-md rounded-2xl border border-[#D6DED2] p-0 overflow-hidden">

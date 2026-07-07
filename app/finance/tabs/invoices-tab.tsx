@@ -1,4 +1,5 @@
 "use client";
+import { useRouter } from "next/navigation";
 
 import * as React from "react";
 import { useI18n } from "@/lib/i18n";
@@ -116,6 +117,7 @@ export function InvoicesTab({
   selectedProjectId,
   searchQuery,
 }: InvoicesTabProps) {
+  const router = useRouter();
   const { t } = useI18n();
 
   // Internal state for dialogs/forms
@@ -180,7 +182,7 @@ export function InvoicesTab({
         alert(t("finance.invoice_created"));
         setInvoiceForm(f => ({ ...f, amount: "", notes: "", dueDate: "" }));
         setInvoiceOpen(false);
-        window.location.reload();
+        router.refresh();
       }
     } catch (err: any) {
       setErrorMsg(err.message || "Gagal membuat invoice");
@@ -198,7 +200,7 @@ export function InvoicesTab({
       const res = await deleteInvoice(invoiceId);
       if (res.success) {
         alert(t("finance.invoice_deleted"));
-        window.location.reload();
+        router.refresh();
       }
     } catch (err: any) {
       alert(err.message || "Gagal menghapus invoice");

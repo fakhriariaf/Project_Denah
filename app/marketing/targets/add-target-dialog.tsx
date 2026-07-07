@@ -1,4 +1,5 @@
 "use client";
+import { useRouter } from "next/navigation";
 
 import { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -141,6 +142,7 @@ function TargetForm({
 }
 
 export function AddMarketingTargetDialog({ projects, marketings }: Props) {
+  const router = useRouter();
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -161,7 +163,7 @@ export function AddMarketingTargetDialog({ projects, marketings }: Props) {
       await createMarketingTarget(values);
       alert("Target marketing berhasil disimpan!");
       setOpen(false);
-      window.location.reload();
+      router.refresh();
     } catch (err: unknown) {
       setErrorMsg(parseServerError(err));
     } finally {
@@ -197,6 +199,7 @@ export function AddMarketingTargetDialog({ projects, marketings }: Props) {
 }
 
 export function EditMarketingTargetDialog({ projects, marketings, target }: EditProps) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -217,7 +220,7 @@ export function EditMarketingTargetDialog({ projects, marketings, target }: Edit
       await updateMarketingTarget(target.id, values);
       alert("Target berhasil diperbarui!");
       setOpen(false);
-      window.location.reload();
+      router.refresh();
     } catch (err: unknown) {
       setErrorMsg(parseServerError(err));
     } finally {

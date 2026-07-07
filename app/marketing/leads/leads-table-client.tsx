@@ -198,9 +198,9 @@ export function LeadsTableClient({
       />
 
       {/* Data Table */}
-      <div className="bg-white border border-[#D6DED2] rounded-2xl shadow-sage overflow-hidden">
+      <div className="bg-white dark:bg-card border border-[#D6DED2] dark:border-border rounded-2xl shadow-sage overflow-hidden">
         {/* Table Header */}
-        <div className="px-6 py-3.5 border-b border-[#D6DED2] bg-[#F7F8F3]/70">
+        <div className="px-6 py-3.5 border-b border-[#D6DED2] dark:border-border bg-[#F7F8F3]/70 dark:bg-background/70">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-[#66736A] uppercase tracking-wider">
               <Translate namespace="lead" translationKey="list_title" />

@@ -1,4 +1,5 @@
 "use client";
+import { useRouter } from "next/navigation";
 
 import { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -29,6 +30,7 @@ interface Props {
 }
 
 export default function AddFollowupDialog({ lead }: Props) {
+  const router = useRouter();
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -84,7 +86,7 @@ export default function AddFollowupDialog({ lead }: Props) {
         alert("Catatan follow-up berhasil disimpan!");
         setOpen(false);
         reset();
-        window.location.reload();
+        router.refresh();
       }
     } catch (err: any) {
       setError(parseServerError(err));

@@ -514,7 +514,7 @@ export function SiteplanViewer({
 
       if (res.success) {
         alert("Foto defect berhasil diunggah!");
-        window.location.reload();
+        router.refresh();
       }
     } catch (err: unknown) {
       alert((err instanceof Error ? err.message : null) || "Gagal mengunggah foto.");
@@ -546,7 +546,7 @@ export function SiteplanViewer({
       const res = await updateShape(selectedShape.id, { unitId: selectedUnitId });
       if (res.success) {
         alert("Kavling berhasil dikaitkan dengan unit/kavling yang dipilih!");
-        window.location.reload();
+        router.refresh();
       }
     } catch (err: unknown) {
       alert((err instanceof Error ? err.message : null) || "Gagal mengaitkan unit.");
@@ -648,7 +648,7 @@ export function SiteplanViewer({
         setBastSpk(null);
         setBastPdfFile(null);
         setSelectedShape(null);
-        window.location.reload();
+        router.refresh();
       }
     } catch (e: unknown) {
       setErrorMessage((e instanceof Error ? e.message : null) || "Gagal menyelesaikan pembangunan unit.");
@@ -1722,7 +1722,7 @@ export function SiteplanViewer({
                           initialUnitId={unit.id}
                           onSuccess={() => {
                             router.refresh();
-                            window.location.reload();
+                            router.refresh();
                           }}
                           triggerButton={
                             <Button className="w-full bg-[#4F6F52] hover:bg-[#3D563F] text-white font-extrabold rounded-2xl py-3 flex items-center justify-center gap-2 shadow-[0_4px_12px_rgba(79,111,82,0.25)] hover:scale-[1.01] active:scale-[0.99] transition-all">
@@ -1763,7 +1763,7 @@ export function SiteplanViewer({
                                     const res = await startPhysicalConstructionManual(unit.id);
                                     if (res.success) {
                                       alert(`Unit "${unit.code}" berhasil masuk ke tahap Pembangunan Fisik!`);
-                                      window.location.reload();
+                                      router.refresh();
                                     }
                                   } catch (err: unknown) {
                                     setErrorMessage((err instanceof Error ? err.message : null) || "Gagal memulai pembangunan fisik.");

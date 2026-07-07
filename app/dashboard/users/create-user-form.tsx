@@ -1,4 +1,5 @@
 "use client";
+import { useRouter } from "next/navigation";
 
 import { useState, useTransition } from "react";
 import { useForm } from "react-hook-form";
@@ -30,6 +31,7 @@ type FormValues = z.infer<typeof schema>;
 type RoleOption = { id: string; name: string };
 
 export function CreateUserForm({ roles }: { roles: RoleOption[] }) {
+  const router = useRouter();
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -53,7 +55,7 @@ export function CreateUserForm({ roles }: { roles: RoleOption[] }) {
         alert("Pengguna baru berhasil dibuat!");
         setOpen(false);
         reset();
-        window.location.reload();
+        router.refresh();
       } catch (err) {
         setError(parseServerError(err));
       }

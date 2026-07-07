@@ -1,4 +1,5 @@
 "use client";
+import { useRouter } from "next/navigation";
 
 import { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -20,6 +21,7 @@ interface Props {
 }
 
 export function AddToWaitingListDialog({ projects, customers }: Props) {
+  const router = useRouter();
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -51,7 +53,7 @@ export function AddToWaitingListDialog({ projects, customers }: Props) {
       alert("Antrean pembeli (waiting list) berhasil disimpan!");
       setOpen(false);
       form.reset();
-      window.location.reload();
+      router.refresh();
     } catch (err: unknown) {
       setErrorMsg(parseServerError(err));
     } finally {

@@ -1,4 +1,5 @@
 "use client";
+import { useRouter } from "next/navigation";
 
 import { useState } from "react";
 import { updateBooking } from "@/server/actions/marketing";
@@ -48,6 +49,7 @@ export default function EditBookingDialog({
   triggerButton,
   onSuccess,
 }: Props) {
+  const router = useRouter();
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -111,7 +113,7 @@ export default function EditBookingDialog({
           if (onSuccess) {
             onSuccess();
           } else {
-            window.location.reload();
+            router.refresh();
           }
         }, 1200);
       }

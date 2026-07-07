@@ -1,4 +1,5 @@
-﻿"use client";
+"use client";
+import { useRouter } from "next/navigation";
 
 import * as React from "react";
 import { useI18n } from "@/lib/i18n";
@@ -180,6 +181,7 @@ export default function FinanceShell({
   budgets: initialBudgets,
   defaultTab,
 }: FinanceShellProps) {
+  const router = useRouter();
   const { t } = useI18n();
   const [mounted, setMounted] = React.useState(false);
   const [activeTab, setActiveTab] = React.useState<"invoices" | "payments" | "transactions" | "approvals" | "budgets" | "reports">(defaultTab || "invoices");
@@ -238,7 +240,7 @@ export default function FinanceShell({
   const [verificationAccount, setVerificationAccount] = React.useState("");
   const [verificationNotes, setVerificationNotes] = React.useState("");
 
-  // ── Client-side paginated payment state ──
+  // -- Client-side paginated payment state --
   const PAYMENT_PAGE_SIZE = 20;
   const paymentPageData: PaginatedResult<PaymentListItem> = React.useMemo(() => {
     const filtered = initialPayments.filter(pay => {
@@ -352,7 +354,7 @@ export default function FinanceShell({
         alert(t("finance.payment_recorded"));
         setPaymentForm(f => ({ ...f, amount: "", invoiceId: "", unitId: "", customerId: "" }));
         setPaymentOpen(false);
-        window.location.reload();
+        router.refresh();
       }
     } catch (err: any) {
       setErrorMsg(err.message || "Gagal mencatat pembayaran");
@@ -373,15 +375,15 @@ export default function FinanceShell({
         verificationNotes
       );
       if (res.success) {
-        // Sprint 3: Structured feedback — tampilkan info handover jika triggered
+        // Sprint 3: Structured feedback � tampilkan info handover jika triggered
         if (isApproved && res.handoverTriggered) {
-          alert(`✅ ${t("finance.payment_verified")}\n\n${t("finance.handover_triggered")}`);
+          alert(`? ${t("finance.payment_verified")}\n\n${t("finance.handover_triggered")}`);
         } else {
           alert(isApproved ? t("finance.payment_verified") : t("finance.payment_rejected"));
         }
         setSelectedPayment(null);
         setVerificationNotes("");
-        window.location.reload();
+        router.refresh();
       }
     } catch (err: any) {
       setErrorMsg(err.message || "Gagal memverifikasi pembayaran");
@@ -401,7 +403,7 @@ export default function FinanceShell({
       if (res.success) {
         alert(t("finance.payment_deleted"));
         setSelectedPayment(null);
-        window.location.reload();
+        router.refresh();
       }
     } catch (err: any) {
       setErrorMsg(err.message || "Gagal menghapus pembayaran");
@@ -427,7 +429,7 @@ export default function FinanceShell({
       if (res.success) {
         alert(t("finance.expense_submitted"));
         setExpenseForm(f => ({ ...f, amount: "", description: "" }));
-        window.location.reload();
+        router.refresh();
       }
     } catch (err: any) {
       setErrorMsg(err.message || "Gagal mengajukan kas keluar");
@@ -451,7 +453,7 @@ export default function FinanceShell({
         alert(isApproved ? t("finance.expense_approved") : t("finance.expense_rejected_msg"));
         setSelectedExpense(null);
         setApprovalNotes("");
-        window.location.reload();
+        router.refresh();
       }
     } catch (err: any) {
       setErrorMsg(err.message || "Operasi persetujuan gagal");
@@ -482,7 +484,7 @@ export default function FinanceShell({
         alert(t("finance.budget_created"));
         setBudgetForm(f => ({ ...f, name: "", totalAmount: "", allocatedAmount: "" }));
         setBudgetOpen(false);
-        window.location.reload();
+        router.refresh();
       }
     } catch (err: any) {
       setErrorMsg(err.message || "Gagal membuat anggaran");
@@ -505,7 +507,7 @@ export default function FinanceShell({
     <>
     <div className="flex flex-col gap-6">
       
-      {/* ── PREMIUM HEADER ── */}
+      {/* -- PREMIUM HEADER -- */}
       <PageHeader
         icon={<CircleDollarSign className="h-6 w-6" />}
         title={t("finance.title")}

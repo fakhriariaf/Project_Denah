@@ -64,6 +64,7 @@ export default function RootLayout({
         </TooltipProvider>
         <MobileBottomNav />
         <Toaster
+          theme="system"
           position="top-right"
           toastOptions={{ duration: 4000 }}
           visibleToasts={3}
