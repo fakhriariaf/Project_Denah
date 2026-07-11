@@ -1,6 +1,7 @@
 import { AppSidebar } from "@/components/app-sidebar"
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { NotificationDropdown } from "@/components/dashboard/notification-dropdown"
+import { ChatNavButton } from "@/components/dashboard/chat-nav-button"
 import { UserIdentityDropdown } from "@/components/dashboard/user-identity-dropdown"
 import { DashboardHeaderTitle } from "@/components/dashboard/dashboard-header-title"
 import { CommandPalette } from "@/components/global-search/command-palette"
@@ -30,6 +31,7 @@ export default function DashboardLayout({
             </h1>
           </div>
           <div className="flex items-center gap-2">
+            <ChatNavButton />
             <NotificationDropdown />
             <UserIdentityDropdown />
           </div>

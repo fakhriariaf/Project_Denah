@@ -6,7 +6,7 @@ import Link from "next/link"
 import { authClient } from "@/lib/auth-client"
 import { useI18n } from "@/lib/i18n"
 import { LayoutDashboard, Users, Home, Map, CircleDollarSign, HardHat, FileText, Settings, Building2, Store, UserCog, User, Landmark, ShieldCheck, Banknote, Clock, Target, Wrench, Bell, GitCompareArrows, ChevronRight } from "lucide-react"
-import { useNotificationPolling } from "@/hooks/use-notification-polling"
+import { useNotificationContext } from "@/components/providers/notification-provider"
 
 import {
   Sidebar,
@@ -87,6 +87,7 @@ const data = {
 const rolePermissions: Record<string, string[]> = {
   "/dashboard": ["role_super_admin", "role_admin_kantor", "role_marketing_manager", "role_marketing", "role_admin_keuangan", "role_direksi", "role_pengawas", "role_vendor", "role_viewer"],
   "/dashboard/notifications": ["role_super_admin", "role_admin_kantor", "role_marketing_manager", "role_marketing", "role_admin_keuangan", "role_direksi", "role_pengawas", "role_vendor", "role_viewer"],
+  "/chat": ["role_super_admin", "role_admin_kantor", "role_marketing_manager", "role_marketing", "role_admin_keuangan", "role_direksi", "role_pengawas", "role_vendor", "role_viewer"],
   "/dashboard/compare": ["role_super_admin", "role_admin_kantor", "role_direksi"],
   "/siteplan": ["role_super_admin", "role_admin_kantor", "role_marketing_manager", "role_marketing", "role_admin_keuangan", "role_direksi", "role_pengawas", "role_viewer"],
   "/master/projects": ["role_super_admin", "role_admin_kantor", "role_marketing_manager", "role_marketing", "role_admin_keuangan", "role_direksi", "role_pengawas", "role_viewer"],
@@ -118,7 +119,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const userRoleId = (session?.user as any)?.roleId
   const { t } = useI18n()
 
-  const { unreadCount } = useNotificationPolling({ interval: 10000, enabled: !!session?.user })
+  const { unreadCount } = useNotificationContext()
 
   // Persistent Sidebar Scroll Position
   React.useEffect(() => {

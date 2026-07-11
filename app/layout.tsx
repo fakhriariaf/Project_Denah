@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "sonner";
 import NextTopLoader from "nextjs-toploader";
 import { MobileBottomNav } from "@/components/mobile-bottom-nav";
+import { AuthenticatedProviders } from "@/components/providers/authenticated-providers";
 
 const roboto = Roboto({
   variable: "--font-sans",
@@ -36,15 +37,6 @@ export default function RootLayout({
     >
       <head suppressHydrationWarning />
       <body className="min-h-full flex flex-col" suppressHydrationWarning>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              try {
-                localStorage.removeItem('theme');
-              } catch (_) {}
-            `,
-          }}
-        />
         <NextTopLoader 
           color="#4F6F52" 
           initialPosition={0.08}
@@ -57,9 +49,11 @@ export default function RootLayout({
           shadow="0 0 10px #4F6F52,0 0 5px #4F6F52"
         />
         <TooltipProvider>
-          {children}
+          <AuthenticatedProviders>
+            {children}
+            <MobileBottomNav />
+          </AuthenticatedProviders>
         </TooltipProvider>
-        <MobileBottomNav />
         <Toaster
           theme="light"
           position="top-right"

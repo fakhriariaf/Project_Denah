@@ -15,6 +15,13 @@
       "when": 1780491423940,
       "tag": "0001_add_performance_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1783755313576,
+      "tag": "0002_tricky_paladin",
+      "breakpoints": true
     }
   ]
 }

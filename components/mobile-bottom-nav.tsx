@@ -5,27 +5,29 @@ import Link from "next/link";
 import {
   LayoutDashboard,
   Target,
+  MessageCircle,
   CircleDollarSign,
-  HardHat,
   Menu,
 } from "lucide-react";
+import { ChatBadge } from "@/app/chat/_components/chat-badge";
 
 const NAV_ITEMS = [
   { label: "Home", href: "/dashboard", icon: LayoutDashboard },
   { label: "Marketing", href: "/marketing/bookings", icon: Target },
-  { label: "Finance", href: "/finance", icon: CircleDollarSign },
-  { label: "Produksi", href: "/production", icon: HardHat },
+  { label: "Chat", href: "/chat", icon: MessageCircle },
+  { label: "Keuangan", href: "/finance", icon: CircleDollarSign },
   { label: "Lainnya", href: "/master/projects", icon: Menu },
 ];
 
 export function MobileBottomNav() {
   const pathname = usePathname();
 
-  // Don't render on login/auth pages or public pages
+  // Don't render on login/auth pages, public pages, or chat (has own mobile layout)
   if (
     pathname.startsWith("/login") ||
     pathname.startsWith("/maintenance") ||
     pathname.startsWith("/siteplan-public") ||
+    pathname.startsWith("/chat") ||
     pathname === "/"
   ) {
     return null;
@@ -49,7 +51,14 @@ export function MobileBottomNav() {
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              <Icon className="h-5 w-5" strokeWidth={isActive ? 2.2 : 1.8} />
+              <span className="relative">
+                <Icon className="h-5 w-5" strokeWidth={isActive ? 2.2 : 1.8} />
+                {item.href === "/chat" && (
+                  <span className="absolute -top-1.5 -right-2.5">
+                    <ChatBadge />
+                  </span>
+                )}
+              </span>
               <span className="text-[10px] font-medium leading-tight">
                 {item.label}
               </span>

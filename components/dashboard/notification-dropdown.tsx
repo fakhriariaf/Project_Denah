@@ -11,7 +11,6 @@ import {
   Check,
   Shield,
   Hammer,
-  HandshakeIcon,
 } from "lucide-react";
 import {
   getNotifications,
@@ -19,7 +18,7 @@ import {
   markAllAsRead,
 } from "@/server/actions/notification";
 import { authClient } from "@/lib/auth-client";
-import { useNotificationPolling } from "@/hooks/use-notification-polling";
+import { useNotificationContext } from "@/components/providers/notification-provider";
 import { toast } from "sonner";
 
 interface NotificationItem {
@@ -98,20 +97,29 @@ export function NotificationDropdown() {
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [bellPulse, setBellPulse] = useState(false);
+  const [relativeTimeNow, setRelativeTimeNow] = useState<number | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   
   // Client auth session
   const { data: session } = authClient.useSession();
   const roleId = (session?.user as any)?.roleId;
 
-  // Use the polling hook for real-time detection
+  // Use the shared NotificationProvider context (single polling instance)
   const {
     unreadCount,
     latestNotification,
     hasNewSince,
     resetNewSince,
     refresh,
-  } = useNotificationPolling({ interval: 10000, enabled: true });
+  } = useNotificationContext();
+
+  useEffect(() => {
+    const updateRelativeTimeNow = () => setRelativeTimeNow(Date.now());
+    updateRelativeTimeNow();
+
+    const intervalId = window.setInterval(updateRelativeTimeNow, 60_000);
+    return () => window.clearInterval(intervalId);
+  }, []);
 
   // Show toast and animate bell when a new notification arrives
   useEffect(() => {
@@ -203,7 +211,7 @@ export function NotificationDropdown() {
     }
   };
 
-  const handleNotificationClick = async (item: NotificationItem, e: React.MouseEvent) => {
+  const handleNotificationClick = async (item: NotificationItem, _e: React.MouseEvent) => {
     setIsOpen(false);
     if (!item.isRead) {
       try {
@@ -224,7 +232,7 @@ export function NotificationDropdown() {
 
   // Human friendly relative time format
   const formatRelativeTime = (date: Date) => {
-    const elapsed = Date.now() - date.getTime();
+    const elapsed = (relativeTimeNow ?? date.getTime()) - date.getTime();
     const secs = Math.floor(elapsed / 1000);
     const mins = Math.floor(secs / 60);
     const hours = Math.floor(mins / 60);

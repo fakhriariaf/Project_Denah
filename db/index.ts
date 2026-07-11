@@ -27,6 +27,7 @@ import * as masterSchema from './schema/master';
 import * as marketingSchema from './schema/marketing';
 import * as financeSchema from './schema/finance';
 import * as productionSchema from './schema/production';
+import * as chatSchema from './schema/chat';
 
 export const schema = {
   ...authSchema,
@@ -36,6 +37,7 @@ export const schema = {
   ...marketingSchema,
   ...financeSchema,
   ...productionSchema,
+  ...chatSchema,
 };
 
 let connectionString = process.env.DATABASE_URL || '';

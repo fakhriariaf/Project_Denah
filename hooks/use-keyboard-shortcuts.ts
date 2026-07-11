@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useCallback, useRef } from "react";
+import { useEffect, useRef } from "react";
 
 export interface ShortcutConfig {
   /** Key to match (e.g. "k", "n", "Escape", "?") */
@@ -32,7 +32,10 @@ export interface ShortcutConfig {
  */
 export function useKeyboardShortcuts(shortcuts: ShortcutConfig[]) {
   const shortcutsRef = useRef(shortcuts);
-  shortcutsRef.current = shortcuts;
+
+  useEffect(() => {
+    shortcutsRef.current = shortcuts;
+  }, [shortcuts]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -76,7 +79,10 @@ export function useKeyboardShortcut(
   options: { ctrl?: boolean; shift?: boolean; alt?: boolean; ignoreInInput?: boolean } = {}
 ) {
   const callbackRef = useRef(callback);
-  callbackRef.current = callback;
+
+  useEffect(() => {
+    callbackRef.current = callback;
+  }, [callback]);
 
   useKeyboardShortcuts([
     {

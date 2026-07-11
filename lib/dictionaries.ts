@@ -36,6 +36,19 @@ export const dictionaries = {
     "nav.settings.page": "Pengaturan Sistem",
     "nav.settings.roles": "Peran & Hak Akses",
 
+    // Chat
+    "nav.chat": "Chat",
+    "chat.title": "Chat Internal",
+    "chat.conversations": "Daftar Percakapan",
+    "chat.noConversations": "Belum ada percakapan",
+    "chat.searchPlaceholder": "Cari pesan...",
+    "chat.inputPlaceholder": "Ketik pesan...",
+    "chat.send": "Kirim",
+    "chat.online": "Online",
+    "chat.offline": "Offline",
+    "chat.unread": "belum dibaca",
+    "chat.connectionError": "Koneksi bermasalah",
+
     // Common Actions
     "action.save": "Simpan",
     "action.cancel": "Batal",
