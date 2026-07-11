@@ -74,6 +74,3 @@ ehthumbs.db
 # storybook
 /storybook-static
 
-# Codex local notes
-/.codex/
-

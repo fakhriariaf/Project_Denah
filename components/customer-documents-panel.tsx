@@ -296,15 +296,15 @@ export function CustomerDocumentsPanel({
             const status = docObj?.customer_documents.status;
             
             let pillClass = "bg-[#F7F8F3] border-[#D6DED2] text-[#A8B0AA]";
-            let pillIcon = "â—‹";
+            let pillIcon = "○";
             
             if (docObj) {
               if (status === "rejected") {
                 pillClass = "bg-rose-50 border-rose-100 text-rose-700";
-                pillIcon = "âœ—";
+                pillIcon = "✗";
               } else {
                 pillClass = "bg-emerald-50 border-emerald-100 text-emerald-700";
-                pillIcon = "âœ“";
+                pillIcon = "✓";
               }
             }
             
@@ -480,7 +480,7 @@ export function CustomerDocumentsPanel({
                       </button>
                     )}
 
-                    {/* Verify/Reject â€” for authorized roles */}
+                    {/* Verify/Reject — for authorized roles */}
                     {canVerify && doc.customer_documents.status === "uploaded" && (
                       <>
                         <button

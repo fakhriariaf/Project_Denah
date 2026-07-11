@@ -1,6 +1,7 @@
 import { AppSidebar } from "@/components/app-sidebar"
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { NotificationDropdown } from "@/components/dashboard/notification-dropdown"
+import { ChatNavButton } from "@/components/dashboard/chat-nav-button"
 import { UserIdentityDropdown } from "@/components/dashboard/user-identity-dropdown"
 import { CommandPalette } from "@/components/global-search/command-palette"
 import { KeyboardShortcutsHelp } from "@/components/keyboard-shortcuts-help"
@@ -34,6 +35,7 @@ export default async function ReportsLayout({
             <h1 className="font-semibold text-lg font-sans"><Translate namespace="dash" translationKey="menu_reports" /></h1>
           </div>
           <div className="flex items-center gap-2">
+            <ChatNavButton />
             <NotificationDropdown />
             <UserIdentityDropdown />
           </div>

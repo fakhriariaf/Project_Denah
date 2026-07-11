@@ -8,5 +8,6 @@
  */
 
 export * from "./booking.repo";
+export * from "./chat.repo";
 export * from "./finance.repo";
 export * from "./production.repo";

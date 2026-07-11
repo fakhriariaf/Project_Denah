@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -306,8 +306,8 @@ export default function KprCardDetailDialog({
       `Pembangunan fisik unit ${kpr.unitCode} masih berjalan (${kpr.constructionProgress ?? 0}%). ` +
       "Proses Akad hanya bisa dilakukan setelah pembangunan fisik selesai 100%. " +
       "Pantau progress di modul Produksi.";
-  // NOTE: BAST gate removed â€” BAST diupload SETELAH akad/realisasi, bukan sebelum akad.
-  // Urutan benar: KPR approved â†’ Akad â†’ Realisasi â†’ Upload BAST â†’ Verifikasi BAST â†’ Serah Terima
+  // NOTE: BAST gate removed — BAST diupload SETELAH akad/realisasi, bukan sebelum akad.
+  // Urutan benar: KPR approved → Akad → Realisasi → Upload BAST → Verifikasi BAST → Serah Terima
   } else if (status === "rejected" && kpr.status === "approved") {
     clientValidationError =
       "KPR yang sudah berstatus Approved tidak dapat dikembalikan ke Ditolak (Rejected). " +
@@ -357,7 +357,7 @@ export default function KprCardDetailDialog({
         setMemoAttachmentId(res.attachmentId);
         setMemoFileName(file.name);
         setMemoFileUrl(fileData.url);
-        setError("âœ“ Memo pencairan bank berhasil diunggah!");
+        setError("✓ Memo pencairan bank berhasil diunggah!");
       }
     } catch (err: any) {
       setError(err.message || "Gagal mengunggah berkas memo pencairan.");
@@ -402,7 +402,7 @@ export default function KprCardDetailDialog({
 
     if (!confirm(
       "Apakah Anda yakin ingin melakukan Realisasi Dana KPR?\n\n" +
-      "âš ï¸ Aksi ini berdampak pada:\n" +
+      "⚠️ Aksi ini berdampak pada:\n" +
       "1. Status KPR -> 'Realisasi' (permanen)\n" +
       "2. Buku Kas Finance -> Pencatatan kas masuk bersih Rp " + net.toLocaleString("id-ID") + "\n" +
       "3. Status Unit -> 'Menunggu Serah Terima'\n" +
@@ -445,8 +445,8 @@ export default function KprCardDetailDialog({
     e.preventDefault();
     if (clientValidationError) return;
 
-    // Check for unverified files â€” only mandatory KPR docs (KTP, NPWP, Slip Gaji, KK)
-    // Supporting docs like BAST, SPJB, kpr_doc are uploaded AFTER akad/realisasi â€” do NOT gate here
+    // Check for unverified files — only mandatory KPR docs (KTP, NPWP, Slip Gaji, KK)
+    // Supporting docs like BAST, SPJB, kpr_doc are uploaded AFTER akad/realisasi — do NOT gate here
     const MANDATORY_DOC_TYPES = ["ktp", "npwp", "slip_gaji", "kk"];
     const mandatoryDocs = docsList.filter(d => MANDATORY_DOC_TYPES.includes(d.documentType));
     const hasUnverifiedDocs = mandatoryDocs.some(d => d.status !== "verified");
@@ -578,7 +578,7 @@ export default function KprCardDetailDialog({
       });
       if (res.success) {
         setEditingSubId(null);
-        setError("âœ“ Status pengajuan bank berhasil diperbarui!");
+        setError("✓ Status pengajuan bank berhasil diperbarui!");
         router.refresh();
       }
     } catch (err: any) {
@@ -597,7 +597,7 @@ export default function KprCardDetailDialog({
       const res = await deleteBankSubmission(subId);
       if (res.success) {
         setEditingSubId(null);
-        setError("âœ“ Pengajuan bank berhasil dihapus!");
+        setError("✓ Pengajuan bank berhasil dihapus!");
         router.refresh();
       }
     } catch (err: any) {
@@ -635,7 +635,7 @@ export default function KprCardDetailDialog({
           setDocStatus("incomplete");
         }
 
-        setError(`âœ“ Status dokumen berhasil diperbarui!`);
+        setError(`✓ Status dokumen berhasil diperbarui!`);
         router.refresh();
       }
     } catch (err: any) {
@@ -798,9 +798,9 @@ export default function KprCardDetailDialog({
       "Konfirmasi Selesaikan Serah Terima\n\n" +
       "Aksi ini akan mengubah status unit menjadi 'Serah Terima Selesai' secara PERMANEN.\n\n" +
       "Pastikan:\n" +
-      "â€¢ BAST Developer â†’ Konsumen sudah ditandatangani\n" +
-      "â€¢ Dokumen BAST sudah diverifikasi Admin\n" +
-      "â€¢ Konsumen sudah menerima kunci unit\n\n" +
+      "• BAST Developer → Konsumen sudah ditandatangani\n" +
+      "• Dokumen BAST sudah diverifikasi Admin\n" +
+      "• Konsumen sudah menerima kunci unit\n\n" +
       "Lanjutkan?"
     )) return;
 
@@ -809,7 +809,7 @@ export default function KprCardDetailDialog({
     try {
       const res = await approveBastKonsumen(kpr.bookingId);
       if (res.success) {
-        setError("âœ“ Serah Terima Selesai! Status unit telah diperbarui menjadi Handover Complete.");
+        setError("✓ Serah Terima Selesai! Status unit telah diperbarui menjadi Handover Complete.");
         router.refresh();
       }
     } catch (err: any) {
@@ -865,7 +865,7 @@ export default function KprCardDetailDialog({
                         {kpr.unitCode}
                       </span>
                     </span>
-                    <span className="text-[10px] text-muted-foreground/70 font-bold">â€¢</span>
+                    <span className="text-[10px] text-muted-foreground/70 font-bold">•</span>
                     <span className="text-xs text-muted-foreground font-bold">{kpr.projectName}</span>
                     {kpr.isReadyStock && (
                       <Badge className="bg-[#4B286D]/15 text-[#4B286D] hover:bg-[#4B286D]/20 border-none font-extrabold text-[9px] px-2 py-0.5 rounded-full shrink-0">
@@ -1342,13 +1342,13 @@ export default function KprCardDetailDialog({
                         : "text-orange-700"
                     }`}>
                       {kpr.unitStatus === "construction_done"
-                        ? "âœ“ Pembangunan fisik selesai. Unit siap melanjutkan ke Akad."
-                        : `â³ Pembangunan fisik sedang berjalan. Akad baru bisa dilakukan setelah konstruksi selesai 100%.`}
+                        ? "✓ Pembangunan fisik selesai. Unit siap melanjutkan ke Akad."
+                        : `⏳ Pembangunan fisik sedang berjalan. Akad baru bisa dilakukan setelah konstruksi selesai 100%.`}
                     </p>
                   </div>
                 )}
 
-                {/* â”€â”€ STATUS: Menunggu Serah Terima â”€â”€ */}
+                {/* ── STATUS: Menunggu Serah Terima ── */}
                 {kpr.unitStatus === "menunggu_serah_terima" && !isHandoverDone && (
                   <div className="rounded-2xl border border-violet-200 bg-violet-50/60 p-3.5 space-y-2 shadow-sm">
                     <div className="flex items-center gap-2">
@@ -1356,19 +1356,19 @@ export default function KprCardDetailDialog({
                       <span className="text-[10px] font-black uppercase tracking-wider text-violet-700">Menunggu Serah Terima</span>
                     </div>
                     <p className="text-[10px] font-semibold text-violet-700 leading-relaxed">
-                      â³ Dana KPR telah direalisasikan. Unit menunggu proses serah terima fisik kepada konsumen.
+                      ⏳ Dana KPR telah direalisasikan. Unit menunggu proses serah terima fisik kepada konsumen.
                     </p>
                   </div>
                 )}
 
-                {/* â”€â”€ SERAH TERIMA â€” Tombol Approve â”€â”€ */}
+                {/* ── SERAH TERIMA — Tombol Approve ── */}
                 {canShowHandoverSection && (
                   <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-3.5 space-y-2.5 shadow-sm">
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700">Serah Terima Konsumen</span>
                     </div>
                     <p className="text-[10px] font-semibold text-emerald-700 leading-relaxed">
-                      âœ“ BAST Developer â†’ Konsumen telah diverifikasi. Unit siap untuk diserahterimakan.
+                      ✓ BAST Developer → Konsumen telah diverifikasi. Unit siap untuk diserahterimakan.
                     </p>
                     <Button
                       type="button"
@@ -1376,12 +1376,12 @@ export default function KprCardDetailDialog({
                       onClick={handleApproveHandover}
                       className="w-full h-9 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl shadow-sm transition-all disabled:opacity-60"
                     >
-                      {handoverLoading ? "Memproses..." : "âœ… Selesaikan Serah Terima"}
+                      {handoverLoading ? "Memproses..." : "✅ Selesaikan Serah Terima"}
                     </Button>
                   </div>
                 )}
 
-                {/* â”€â”€ STATUS: Serah Terima Selesai â”€â”€ */}
+                {/* ── STATUS: Serah Terima Selesai ── */}
                 {isHandoverDone && (
                   <div className="rounded-2xl border border-teal-200 bg-teal-50/60 p-3.5 space-y-1.5 shadow-sm">
                     <div className="flex items-center gap-2">
@@ -1389,7 +1389,7 @@ export default function KprCardDetailDialog({
                       <span className="text-[10px] font-black uppercase tracking-wider text-teal-700">Serah Terima Selesai</span>
                     </div>
                     <p className="text-[10px] font-semibold text-teal-700 leading-relaxed">
-                      âœ“ Unit telah resmi diserahterimakan kepada konsumen. BAST Developer â†’ Konsumen telah disetujui.
+                      ✓ Unit telah resmi diserahterimakan kepada konsumen. BAST Developer → Konsumen telah disetujui.
                     </p>
                   </div>
                 )}
@@ -1626,13 +1626,13 @@ export default function KprCardDetailDialog({
                               <span>{t("kpr_dialog.date_val", { date: new Date(sub.submissionDate).toLocaleDateString("id-ID") })}</span>
                               {sub.plafondAmount && (
                                 <>
-                                  <span className="text-[#D6DED2]">â€¢</span>
+                                  <span className="text-[#D6DED2]">•</span>
                                   <span className="font-semibold text-foreground">{formatRupiah(sub.plafondAmount)}</span>
                                 </>
                               )}
                               {sub.tenorYear && (
                                 <>
-                                  <span className="text-[#D6DED2]">â€¢</span>
+                                  <span className="text-[#D6DED2]">•</span>
                                   <span>{t("kpr_dialog.tenor_val", { val: sub.tenorYear })}</span>
                                 </>
                               )}

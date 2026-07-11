@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
 
 /**
@@ -53,7 +53,10 @@ export function useOptimisticAction<TArgs extends unknown[], TResult>(
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const optionsRef = useRef(options);
-  optionsRef.current = options;
+
+  useEffect(() => {
+    optionsRef.current = options;
+  }, [options]);
 
   const execute = useCallback(async (...args: TArgs) => {
     const opts = optionsRef.current;
@@ -113,13 +116,10 @@ export function useOptimisticList<T extends { id: string }>(initialItems: T[]) {
   const [items, setItems] = useState<T[]>(initialItems);
   const [snapshot, setSnapshot] = useState<T[]>(initialItems);
 
-  // Sync with server data when props change
-  const prevInitialRef = useRef(initialItems);
-  if (prevInitialRef.current !== initialItems) {
-    prevInitialRef.current = initialItems;
+  useEffect(() => {
     setItems(initialItems);
     setSnapshot(initialItems);
-  }
+  }, [initialItems]);
 
   /** Save current state before optimistic mutation */
   const saveSnapshot = useCallback(() => {

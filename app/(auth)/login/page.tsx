@@ -88,17 +88,17 @@ export default function LoginPage() {
       <div className="relative mx-auto grid min-h-screen max-w-[1720px] grid-cols-1 lg:h-full lg:min-h-0 lg:grid-cols-[minmax(0,1.07fr)_minmax(0,.93fr)]">
         <LoginBranding />
 
-        <section className="flex min-h-screen items-center justify-center px-5 py-20 sm:px-8 lg:min-h-0 lg:py-8 lg:pl-12 lg:pr-10 xl:px-16">
-          <div className="flex w-full max-w-[630px] flex-col overflow-hidden rounded-[2rem] border border-border bg-card px-6 py-10 shadow-[0_24px_60px_rgba(51,75,55,0.13)] backdrop-blur-md sm:px-12 sm:py-12 [@media(min-height:900px)]:min-h-[780px]">
+        <section className="flex min-h-screen items-center justify-center px-5 py-14 sm:px-8 sm:py-20 lg:min-h-0 lg:py-8 lg:pl-12 lg:pr-10 xl:px-16">
+          <div className="flex w-full max-w-[630px] flex-col overflow-hidden rounded-[2rem] border border-border bg-card px-6 py-9 shadow-[0_24px_60px_rgba(51,75,55,0.13)] backdrop-blur-md sm:px-12 sm:py-12 [@media(min-width:1024px)_and_(min-height:900px)]:min-h-[780px]">
             <div className="text-center">
-              <div className="mx-auto flex size-20 items-center justify-center rounded-full bg-secondary text-primary">
-                <Building2 className="size-10" strokeWidth={1.8} />
+              <div className="mx-auto flex size-20 items-center justify-center rounded-full bg-secondary text-primary max-[480px]:size-16">
+                <Building2 className="size-10 max-[480px]:size-8" strokeWidth={1.8} />
               </div>
-              <h2 className="mt-5 font-serif text-4xl font-semibold tracking-tight text-primary">{t("auth.login_title")}</h2>
-              <p className="mx-auto mt-3 max-w-[360px] text-[15px] leading-6 text-muted-foreground">{t("auth.login_subtitle")}</p>
+              <h2 className="mt-5 font-serif text-4xl font-semibold tracking-tight text-primary max-[480px]:text-[2rem]">{t("auth.login_title")}</h2>
+              <p className="mx-auto mt-3 max-w-[360px] text-[15px] leading-6 text-muted-foreground max-[480px]:text-sm">{t("auth.login_subtitle")}</p>
             </div>
 
-            <form onSubmit={handleLogin} className="mt-14 space-y-6 [@media(max-height:860px)]:mt-10 [@media(max-height:860px)]:space-y-5">
+            <form onSubmit={handleLogin} className="mt-12 space-y-6 max-[480px]:mt-10 [@media(max-height:860px)]:mt-10 [@media(max-height:860px)]:space-y-5">
               <div>
                 <label htmlFor="email" className="mb-2 block text-xs font-bold tracking-wide text-foreground">
                   {t("auth.email_label").toUpperCase()}
@@ -183,11 +183,11 @@ export default function LoginPage() {
               </Button>
             </form>
 
-            <div aria-hidden="true" className="mt-auto pt-12 [@media(max-height:860px)]:pt-8">
+            <div aria-hidden="true" className="mt-auto pt-10 max-[480px]:pt-8 [@media(max-height:860px)]:pt-8">
               <div className="h-px w-full bg-border/75" />
             </div>
 
-            <div className="-mx-6 -mb-10 mt-6 rounded-b-[2rem] bg-muted px-6 py-5 text-center text-xs leading-5 text-muted-foreground sm:-mx-12 sm:-mb-12 sm:px-12">
+            <div className="-mx-6 mt-6 bg-muted px-6 py-5 text-center text-xs leading-5 text-muted-foreground sm:-mx-12 sm:px-12 lg:-mb-12 lg:rounded-b-[2rem]">
               <span className="mx-auto block max-w-[360px]">{t("auth.footer_secure")}</span>
             </div>
 
