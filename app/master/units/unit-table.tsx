@@ -9,6 +9,7 @@ import { UnitForm } from "./unit-form";
 import { DeleteConfirm } from "@/components/delete-confirm";
 import { deleteUnit, bulkDeleteUnits } from "@/server/actions/master";
 import { DataTablePagination } from "@/components/ui/data-table-pagination";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Trash2, CheckSquare, Square, MinusSquare, AlertTriangle, Loader2 } from "lucide-react";
 import type { UnitInput } from "@/server/validators/master";
 import { useI18n } from "@/lib/i18n";
@@ -100,11 +101,11 @@ export function UnitTable({
   };
 
   return (
-    <div className="bg-white border border-[#D6DED2] rounded-2xl shadow-sage overflow-hidden">
+    <div className="bg-white border border-border rounded-2xl shadow-sage overflow-hidden">
       {/* Table Title Bar */}
-      <div className="px-6 py-4 border-b border-[#D6DED2] bg-[#F7F8F3]/70">
+      <div className="px-6 py-4 border-b border-border bg-muted/40">
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <span className="text-xs font-bold text-[#66736A] uppercase tracking-wider">
+          <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
             {t("unit_table.title")}
           </span>
           <div className="flex items-center gap-3">
@@ -133,13 +134,13 @@ export function UnitTable({
                   variant="outline"
                   onClick={() => setSelectedIds(new Set())}
                   disabled={isPending}
-                  className="text-xs h-8 rounded-xl font-bold border-[#D6DED2] text-[#66736A] hover:text-[#243028] px-3"
+                  className="text-xs h-8 rounded-xl font-bold border-border text-muted-foreground hover:text-foreground px-3"
                 >
                   {t("unit_table.cancel_selection")}
                 </Button>
               </div>
             )}
-            <span className="text-xs font-mono text-[#8FAF9A] tabular-nums">
+            <span className="text-xs font-mono text-primary/70 tabular-nums">
               {totalFilteredItems} {t("unit_table.units_found")}
             </span>
           </div>
@@ -155,30 +156,22 @@ export function UnitTable({
       </div>
 
       {paginated.length === 0 ? (
-        <div className="py-16 text-center">
-          <div className="flex flex-col items-center gap-3">
-            <div className="h-16 w-16 rounded-full bg-[#DDE8D8]/50 flex items-center justify-center">
-              <Square className="h-8 w-8 text-[#8FAF9A]" />
-            </div>
-            <div>
-              <p className="font-semibold text-[#243028] text-sm">{t("unit_table.not_found")}</p>
-              <p className="text-xs text-[#66736A] mt-1">
-                {t("unit_table.not_found_desc")}
-              </p>
-            </div>
-          </div>
-        </div>
+        <EmptyState
+          title={t("unit_table.not_found")}
+          description={t("unit_table.not_found_desc")}
+          icon={<Square className="h-6 w-6" />}
+        />
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="border-b border-[#D6DED2] text-[#66736A] text-xs font-bold uppercase tracking-wider">
+              <tr className="border-b border-border text-muted-foreground text-xs font-bold uppercase tracking-wider">
                 {isEditor && (
                   <th className="py-3.5 px-4 w-10">
                     <button
                       type="button"
                       onClick={toggleAll}
-                      className="flex items-center justify-center h-5 w-5 text-[#4F6F52] hover:text-[#243028] transition-colors focus:outline-none focus:ring-2 focus:ring-[#4F6F52]/20 rounded"
+                      className="flex items-center justify-center h-5 w-5 text-primary hover:text-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-ring/20 rounded"
                       title={allSelected ? t("unit_table.deselect_all") : t("unit_table.select_all")}
                     >
                       {allSelected ? (
@@ -186,7 +179,7 @@ export function UnitTable({
                       ) : someSelected ? (
                         <MinusSquare className="h-[18px] w-[18px]" />
                       ) : (
-                        <Square className="h-[18px] w-[18px] text-[#D6DED2]" />
+                        <Square className="h-[18px] w-[18px] text-muted-foreground/50" />
                       )}
                     </button>
                   </th>
@@ -200,7 +193,7 @@ export function UnitTable({
                 {isEditor && <th className="py-3.5 px-6 text-right">{t("unit_table.col_action")}</th>}
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#D6DED2]/60 text-sm">
+            <tbody className="divide-y divide-border/60 text-sm">
               {paginated.map(({ unit: u, projectName }) => {
                 const isChecked = selectedIds.has(u.id);
                 return (
@@ -209,7 +202,7 @@ export function UnitTable({
                     className={`transition-colors duration-150 group ${
                       isChecked
                         ? "bg-rose-50/50 hover:bg-rose-50/70"
-                        : "hover:bg-[#F7F8F3]/80"
+                        : "hover:bg-muted/50"
                     }`}
                   >
                     {isEditor && (
@@ -217,10 +210,10 @@ export function UnitTable({
                         <button
                           type="button"
                           onClick={() => toggleOne(u.id)}
-                          className={`flex items-center justify-center h-5 w-5 transition-colors focus:outline-none focus:ring-2 focus:ring-[#4F6F52]/20 rounded ${
+                          className={`flex items-center justify-center h-5 w-5 transition-colors focus:outline-none focus:ring-2 focus:ring-ring/20 rounded ${
                             isChecked
                               ? "text-rose-600"
-                              : "text-[#D6DED2] hover:text-[#8FAF9A]"
+                              : "text-muted-foreground/50 hover:text-primary/70"
                           }`}
                         >
                           {isChecked ? (
@@ -231,21 +224,21 @@ export function UnitTable({
                         </button>
                       </td>
                     )}
-                    <td className="py-4 px-6 font-semibold text-[#243028]">
-                      {projectName || "—"}
+                    <td className="py-4 px-6 font-semibold text-foreground">
+                      {projectName || "â€”"}
                     </td>
                     <td className="py-4 px-6">
-                      <span className="font-mono bg-[#DDE8D8]/60 text-[#4F6F52] px-2 py-0.5 rounded text-[11px] font-bold border border-[#8FAF9A]/20">
+                      <span className="font-mono bg-secondary/60 text-primary px-2 py-0.5 rounded text-[11px] font-bold border border-primary/20">
                         {u.code}
                       </span>
                     </td>
-                    <td className="py-4 px-6 text-[#66736A] font-medium">
-                      {u.typeName || "—"}
+                    <td className="py-4 px-6 text-muted-foreground font-medium">
+                      {u.typeName || "â€”"}
                     </td>
-                    <td className="py-4 px-6 text-right font-mono text-[#243028] tabular-nums">
+                    <td className="py-4 px-6 text-right font-mono text-foreground tabular-nums">
                       {u.landArea} / {u.buildingArea}
                     </td>
-                    <td className="py-4 px-6 text-right font-mono font-semibold text-[#4F6F52] tabular-nums">
+                    <td className="py-4 px-6 text-right font-mono font-semibold text-primary tabular-nums">
                       {formatRupiah(u.price)}
                     </td>
                     <td className="py-4 px-6 text-center">

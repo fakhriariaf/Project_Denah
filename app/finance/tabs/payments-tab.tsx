@@ -172,22 +172,22 @@ export function PaymentsTab({
   return (
     <div className="space-y-6">
       {/* Verification queue for Keuangan */}
-      <Card className="bg-white/70 backdrop-blur-md border border-[#D6DED2]/80 shadow-sage hover:shadow-sage-lg transition-premium rounded-3xl">
+      <Card className="bg-white/70 backdrop-blur-md border border-border/80 shadow-sage hover:shadow-sage-lg transition-premium rounded-3xl">
         <CardHeader className="flex flex-row items-center justify-between pb-3">
           <div>
-            <CardTitle className="text-base font-bold text-[#243028]">{t("finance.verify_queue_title")}</CardTitle>
-            <CardDescription className="text-xs text-[#66736A] font-medium">{t("finance.verify_queue_desc")}</CardDescription>
+            <CardTitle className="text-base font-bold text-foreground">{t("finance.verify_queue_title")}</CardTitle>
+            <CardDescription className="text-xs text-muted-foreground font-medium">{t("finance.verify_queue_desc")}</CardDescription>
           </div>
           <Dialog open={paymentOpen} onOpenChange={setPaymentOpen}>
             <DialogTrigger nativeButton={true} render={
-              <Button className="bg-[#8FAF9A] hover:bg-[#4F6F52] text-white flex items-center gap-1.5 text-xs px-2.5 h-8.5 rounded-xl shadow-sage hover:scale-[1.02] active:scale-[0.98] transition-premium">
+              <Button className="bg-[#8FAF9A] hover:bg-primary text-white flex items-center gap-1.5 text-xs px-2.5 h-8.5 rounded-xl btn-premium">
                 <Plus className="h-3.5 w-3.5" /> {t("finance.payment_btn_new")}
               </Button>
             } />
-            <DialogContent className="bg-white/95 backdrop-blur-md border-[#D6DED2] shadow-sage-lg rounded-3xl p-6 max-w-md sm:max-w-xl">
+            <DialogContent className="bg-popover backdrop-blur-md border-border shadow-sage-lg rounded-3xl p-6 max-w-md sm:max-w-xl">
               <DialogHeader>
-                <DialogTitle className="text-lg font-bold text-[#243028]">{t("finance.payment_form_title")}</DialogTitle>
-                <DialogDescription className="text-xs text-[#66736A]">{t("finance.payment_form_desc")}</DialogDescription>
+                <DialogTitle className="text-lg font-bold text-foreground">{t("finance.payment_form_title")}</DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground">{t("finance.payment_form_desc")}</DialogDescription>
               </DialogHeader>
               {errorMsg && (
                 <div className="p-3 bg-rose-50 text-[#8B3443] border border-rose-100 rounded-xl text-xs font-semibold animate-shake">
@@ -196,7 +196,7 @@ export function PaymentsTab({
               )}
               <form onSubmit={onCreatePaymentSubmit} className="space-y-4 pt-2">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-[#243028] uppercase tracking-wider block">{t("finance.payment_lbl_invoice")}</label>
+                  <label className="text-xs font-bold text-foreground uppercase tracking-wider block">{t("finance.payment_lbl_invoice")}</label>
                   <Select
                     value={paymentForm.invoiceId}
                     onValueChange={(val) => {
@@ -215,7 +215,7 @@ export function PaymentsTab({
                     }}
                     items={initialInvoices.filter(i => i.status !== "paid").map(i => ({ label: `${i.invoiceNumber} - ${i.customerName} (Rp ${i.amount.toLocaleString()})`, value: i.id }))}
                   >
-                    <SelectTrigger className="bg-[#F7F8F3] border-[#D6DED2] rounded-xl focus:ring-[#4F6F52] font-semibold text-xs h-9.5 text-[#243028]">
+                    <SelectTrigger className="bg-muted/30 border-border rounded-xl focus:ring-ring font-semibold text-xs h-9.5 text-foreground">
                       <SelectValue placeholder={t("finance.verify_lbl_deposit_account")}>
                         {paymentForm.invoiceId ? (() => {
                           const inv = initialInvoices.find(i => i.id === paymentForm.invoiceId);
@@ -223,7 +223,7 @@ export function PaymentsTab({
                         })() : undefined}
                       </SelectValue>
                     </SelectTrigger>
-                    <SelectContent className="border-[#D6DED2] rounded-xl">
+                    <SelectContent className="border-border rounded-xl">
                       {initialInvoices.filter(i => i.status !== "paid").map(i => (
                         <SelectItem key={i.id} value={i.id} className="text-xs font-medium">{i.invoiceNumber} - {i.customerName} (Rp {i.amount.toLocaleString()})</SelectItem>
                       ))}
@@ -233,18 +233,18 @@ export function PaymentsTab({
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-[#243028] uppercase tracking-wider block">{t("finance.payment_lbl_project")}</label>
+                    <label className="text-xs font-bold text-foreground uppercase tracking-wider block">{t("finance.payment_lbl_project")}</label>
                     <Select
                       value={paymentForm.projectId}
                       onValueChange={(val) => setPaymentForm(f => ({ ...f, projectId: val || "" }))}
                       items={projects.map(p => ({ label: p.name, value: p.id }))}
                     >
-                      <SelectTrigger className="bg-[#F7F8F3] border-[#D6DED2] rounded-xl focus:ring-[#4F6F52] font-semibold text-xs h-9.5 text-[#243028]">
+                      <SelectTrigger className="bg-muted/30 border-border rounded-xl focus:ring-ring font-semibold text-xs h-9.5 text-foreground">
                         <SelectValue placeholder={t("finance.payment_lbl_project")}>
                           {paymentForm.projectId ? projects.find(p => p.id === paymentForm.projectId)?.name : undefined}
                         </SelectValue>
                       </SelectTrigger>
-                      <SelectContent className="border-[#D6DED2] rounded-xl">
+                      <SelectContent className="border-border rounded-xl">
                         {projects.map(p => (
                           <SelectItem key={p.id} value={p.id} className="text-xs font-medium">{p.name}</SelectItem>
                         ))}
@@ -252,22 +252,22 @@ export function PaymentsTab({
                     </Select>
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-[#243028] uppercase tracking-wider block">{t("finance.payment_lbl_amount")}</label>
+                    <label className="text-xs font-bold text-foreground uppercase tracking-wider block">{t("finance.payment_lbl_amount")}</label>
                     <Input
                       type="number"
                       placeholder="Rp 0"
                       value={paymentForm.amount}
                       onChange={(e) => setPaymentForm(f => ({ ...f, amount: e.target.value }))}
-                      className="bg-[#F7F8F3] border-[#D6DED2] rounded-xl focus-visible:ring-[#4F6F52] font-mono font-bold text-xs h-9.5 text-[#243028]"
+                      className="bg-muted/30 border-border rounded-xl focus-visible:ring-ring font-mono font-bold text-xs h-9.5 text-foreground"
                       required
                     />
                   </div>
                 </div>
 
                 {paymentForm.amount && !isNaN(Number(paymentForm.amount)) && (
-                  <div className="p-2.5 bg-[#DDE8D8]/50 border border-[#8FAF9A]/30 rounded-xl space-y-0.5 animate-in slide-in-from-top-1 duration-200">
-                    <span className="text-[9px] font-bold text-[#66736A] uppercase tracking-wider block">{t("finance.invoice_format_rupiah")}</span>
-                    <span className="font-mono font-extrabold text-sm text-[#4F6F52] tracking-tight tabular-nums">
+                  <div className="p-2.5 bg-secondary/50 border border-primary/30 rounded-xl space-y-0.5 animate-in slide-in-from-top-1 duration-200">
+                    <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider block">{t("finance.invoice_format_rupiah")}</span>
+                    <span className="font-mono font-extrabold text-sm text-primary tracking-tight tabular-nums">
                       Rp {Number(paymentForm.amount).toLocaleString("id-ID")}
                     </span>
                   </div>
@@ -275,7 +275,7 @@ export function PaymentsTab({
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-[#243028] uppercase tracking-wider block">{t("finance.payment_lbl_method")}</label>
+                    <label className="text-xs font-bold text-foreground uppercase tracking-wider block">{t("finance.payment_lbl_method")}</label>
                     <Select
                       value={paymentForm.paymentMethod}
                       onValueChange={(val: any) => setPaymentForm(f => ({ ...f, paymentMethod: val }))}
@@ -286,7 +286,7 @@ export function PaymentsTab({
                         { label: t("finance.payment_method_other"), value: "other" },
                       ]}
                     >
-                      <SelectTrigger className="bg-[#F7F8F3] border-[#D6DED2] rounded-xl focus:ring-[#4F6F52] font-semibold text-xs h-9.5 text-[#243028]">
+                      <SelectTrigger className="bg-muted/30 border-border rounded-xl focus:ring-ring font-semibold text-xs h-9.5 text-foreground">
                         <SelectValue placeholder={t("finance.payment_lbl_method")}>
                           {paymentForm.paymentMethod === "transfer" && t("finance.payment_method_transfer")}
                           {paymentForm.paymentMethod === "cash" && t("finance.payment_method_cash")}
@@ -294,7 +294,7 @@ export function PaymentsTab({
                           {paymentForm.paymentMethod === "other" && t("finance.payment_method_other")}
                         </SelectValue>
                       </SelectTrigger>
-                      <SelectContent className="border-[#D6DED2] rounded-xl">
+                      <SelectContent className="border-border rounded-xl">
                         <SelectItem value="transfer" className="text-xs font-medium">{t("finance.payment_method_transfer")}</SelectItem>
                         <SelectItem value="cash" className="text-xs font-medium">{t("finance.payment_method_cash")}</SelectItem>
                         <SelectItem value="giro" className="text-xs font-medium">{t("finance.payment_method_giro")}</SelectItem>
@@ -303,12 +303,12 @@ export function PaymentsTab({
                     </Select>
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-[#243028] uppercase tracking-wider block">{t("finance.payment_lbl_date")}</label>
+                    <label className="text-xs font-bold text-foreground uppercase tracking-wider block">{t("finance.payment_lbl_date")}</label>
                     <Input
                       type="date"
                       value={paymentForm.paymentDate}
                       onChange={(e) => setPaymentForm(f => ({ ...f, paymentDate: e.target.value }))}
-                      className="bg-[#F7F8F3] border-[#D6DED2] rounded-xl focus-visible:ring-[#4F6F52] font-medium text-xs h-9.5 text-[#243028]"
+                      className="bg-muted/30 border-border rounded-xl focus-visible:ring-ring font-medium text-xs h-9.5 text-foreground"
                       required
                     />
                   </div>
@@ -317,7 +317,7 @@ export function PaymentsTab({
                 <DialogFooter className="pt-2">
                   <Button
                     type="submit"
-                    className="w-full bg-[#4F6F52] hover:bg-[#3D563F] text-white text-xs font-bold h-10 rounded-xl shadow-sage hover:shadow-sage-lg hover:-translate-y-0.5 transition-premium"
+                    className="w-full bg-primary hover:bg-primary/90 text-white text-xs font-bold h-10 rounded-xl shadow-sage hover:shadow-sage-lg hover:-translate-y-0.5 transition-premium"
                     disabled={isSubmitting}
                   >
                     {isSubmitting ? t("finance.saving") : t("finance.payment_btn_submit")}
@@ -330,18 +330,18 @@ export function PaymentsTab({
 
         <CardContent className="p-0 space-y-3 px-4 pb-4">
           {paymentPageData.data.filter(p => p.status === "pending").length === 0 ? (
-            <div className="text-center py-8 text-[#A8B0AA] text-xs font-medium">
+            <div className="text-center py-8 text-muted-foreground/70 text-xs font-medium">
               {t("finance.payment_empty")}
             </div>
           ) : (
             paymentPageData.data.filter(p => p.status === "pending").map((pay) => (
-              <Card key={pay.id} className="p-4 border border-[#D6DED2] bg-gradient-to-br from-white to-[#F7F8F3] shadow-sm rounded-2xl hover:border-[#8FAF9A] hover:shadow-sage transition-premium duration-300 space-y-3 relative overflow-hidden group">
+              <Card key={pay.id} className="p-4 border border-border bg-gradient-to-br from-white to-[#F7F8F3] shadow-sm rounded-2xl hover:border-primary/50 hover:shadow-sage transition-premium duration-300 space-y-3 relative overflow-hidden group">
                 <div className="absolute top-0 left-0 w-1 h-full bg-[#E9C46A]" />
                 <div className="flex justify-between items-start pl-1">
                   <div>
-                    <p className="font-mono text-xs font-bold text-[#243028]">{pay.paymentNumber}</p>
-                    <p className="text-[11px] text-[#66736A] mt-1">
-                      Customer: <span className="font-semibold text-[#243028]">{pay.customerName || "—"}</span>
+                    <p className="font-mono text-xs font-bold text-foreground">{pay.paymentNumber}</p>
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      Customer: <span className="font-semibold text-foreground">{pay.customerName || "â€”"}</span>
                     </p>
                   </div>
                   <Badge className="bg-[#FFF2C2] text-[#9A7D21] border border-[#E9C46A]/30 text-[10px] rounded-full px-2 py-0.5">
@@ -350,10 +350,10 @@ export function PaymentsTab({
                 </div>
 
                 <div className="flex justify-between items-center text-xs pl-1">
-                  <span className="font-mono font-extrabold text-sm text-[#4F6F52] tabular-nums">
+                  <span className="font-mono font-extrabold text-sm text-primary tabular-nums">
                     Rp {pay.amount.toLocaleString("id-ID")}
                   </span>
-                  <span className="text-[10px] text-[#66736A] uppercase font-bold bg-[#DDE8D8]/50 px-2 py-0.5 rounded-md">
+                  <span className="text-[10px] text-muted-foreground uppercase font-bold bg-secondary/50 px-2 py-0.5 rounded-md">
                     {pay.paymentMethod}
                   </span>
                 </div>
@@ -366,7 +366,7 @@ export function PaymentsTab({
                     }
                     setVerificationNotes("");
                   }}
-                  className="w-full bg-[#4F6F52] hover:bg-[#3D563F] text-white text-xs font-bold py-1 h-8 rounded-xl shadow-sage hover:scale-[1.02] active:scale-[0.98] transition-premium"
+                  className="w-full bg-primary hover:bg-primary/90 text-white text-xs font-bold py-1 h-8 rounded-xl btn-premium"
                 >
                   {t("finance.payment_btn_verify")}
                 </Button>
@@ -378,10 +378,10 @@ export function PaymentsTab({
 
       {/* Payment Verification Dialog */}
       <Dialog open={!!selectedPayment} onOpenChange={(open) => { if (!open) setSelectedPayment(null); }}>
-        <DialogContent className="bg-white/95 backdrop-blur-md border-[#D6DED2] shadow-sage-lg rounded-3xl p-6 w-full max-w-md sm:max-w-md overflow-hidden">
+        <DialogContent className="bg-popover backdrop-blur-md border-border shadow-sage-lg rounded-3xl p-6 w-full max-w-md sm:max-w-md overflow-hidden">
           <DialogHeader>
-            <DialogTitle className="text-lg font-bold text-[#243028]">{t("finance.verify_title")}</DialogTitle>
-            <DialogDescription className="text-xs text-[#66736A]">{t("finance.verify_desc")}</DialogDescription>
+            <DialogTitle className="text-lg font-bold text-foreground">{t("finance.verify_title")}</DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">{t("finance.verify_desc")}</DialogDescription>
           </DialogHeader>
           {errorMsg && (
             <div className="p-3 bg-rose-50 text-[#8B3443] border border-rose-100 rounded-xl text-xs font-semibold animate-shake">
@@ -401,19 +401,19 @@ export function PaymentsTab({
                   return otherPayment?.proofFileUrl || null;
                 })();
                 return (
-                  <div className="p-3.5 bg-gradient-to-br from-white to-[#F7F8F3] border border-[#D6DED2] rounded-2xl space-y-1.5 relative overflow-hidden">
+                  <div className="p-3.5 bg-gradient-to-br from-white to-[#F7F8F3] border border-border rounded-2xl space-y-1.5 relative overflow-hidden">
                     <div className="absolute top-0 left-0 w-1 h-full bg-[#8FAF9A]" />
-                    <p className="text-xs text-[#66736A]">{t("finance.verify_lbl_payment_no")} <span className="font-mono font-bold text-[#243028] pl-1">{selectedPayment.paymentNumber}</span></p>
-                    <p className="text-xs text-[#66736A]">{t("finance.verify_lbl_customer")} <span className="font-semibold text-[#243028] pl-1">{selectedPayment.customerName}</span></p>
-                    <p className="text-xs text-[#66736A]">{t("finance.verify_lbl_amount")} <span className="font-mono font-extrabold text-sm text-[#4F6F52] pl-1">Rp {selectedPayment.amount.toLocaleString("id-ID")}</span></p>
+                    <p className="text-xs text-muted-foreground">{t("finance.verify_lbl_payment_no")} <span className="font-mono font-bold text-foreground pl-1">{selectedPayment.paymentNumber}</span></p>
+                    <p className="text-xs text-muted-foreground">{t("finance.verify_lbl_customer")} <span className="font-semibold text-foreground pl-1">{selectedPayment.customerName}</span></p>
+                    <p className="text-xs text-muted-foreground">{t("finance.verify_lbl_amount")} <span className="font-mono font-extrabold text-sm text-primary pl-1">Rp {selectedPayment.amount.toLocaleString("id-ID")}</span></p>
                     {proofUrl && (
-                      <p className="text-xs text-[#66736A] flex items-center gap-1 mt-1 pt-1.5 border-t border-[#D6DED2]/50">
+                      <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1 pt-1.5 border-t border-border/50">
                         {t("finance.verify_lbl_proof")}
                         <a
                           href={proofUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-[#4F6F52] hover:text-[#3D563F] underline font-bold inline-flex items-center gap-1 ml-1"
+                          className="text-primary hover:text-[#3D563F] underline font-bold inline-flex items-center gap-1 ml-1"
                         >
                           <Eye className="h-3.5 w-3.5" /> {t("finance.view_proof")}
                         </a>
@@ -424,13 +424,13 @@ export function PaymentsTab({
               })()}
 
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-[#243028] uppercase tracking-wider block">{t("finance.verify_lbl_deposit_account")}</label>
+                <label className="text-xs font-bold text-foreground uppercase tracking-wider block">{t("finance.verify_lbl_deposit_account")}</label>
                 <Select
                   value={verificationAccount}
                   onValueChange={(val) => setVerificationAccount(val || "")}
                   items={accounts.map(acc => ({ label: `${acc.name} (Saldo: Rp ${acc.openingBalance.toLocaleString()})`, value: acc.id }))}
                 >
-                  <SelectTrigger className="w-full max-w-full min-w-0 overflow-hidden bg-[#F7F8F3] border-[#D6DED2] rounded-[12px] focus:ring-[#4F6F52] font-semibold text-xs h-10 text-[#243028]">
+                  <SelectTrigger className="w-full max-w-full min-w-0 overflow-hidden bg-muted/30 border-border rounded-[12px] focus:ring-ring font-semibold text-xs h-10 text-foreground">
                     <SelectValue placeholder={t("finance.verify_lbl_deposit_account")}>
                       {verificationAccount ? (() => {
                         const acc = accounts.find(a => a.id === verificationAccount);
@@ -442,7 +442,7 @@ export function PaymentsTab({
                       })() : undefined}
                     </SelectValue>
                   </SelectTrigger>
-                  <SelectContent className="border-[#D6DED2] rounded-[12px]">
+                  <SelectContent className="border-border rounded-[12px]">
                     {accounts.map(acc => (
                       <SelectItem key={acc.id} value={acc.id} className="text-xs font-medium">{acc.name} ({t("finance.balance_lbl")} Rp {acc.openingBalance.toLocaleString()})</SelectItem>
                     ))}
@@ -451,18 +451,18 @@ export function PaymentsTab({
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-[#243028] uppercase tracking-wider block">{t("finance.verify_lbl_notes")}</label>
+                <label className="text-xs font-bold text-foreground uppercase tracking-wider block">{t("finance.verify_lbl_notes")}</label>
                 <textarea
                   placeholder={t("finance.verify_notes_ph")}
                   value={verificationNotes}
                   onChange={(e) => setVerificationNotes(e.target.value)}
-                  className="flex min-h-[80px] w-full rounded-[12px] border border-[#D6DED2] bg-[#F7F8F3]/60 px-3 py-2 text-xs focus:border-[#4F6F52] focus-visible:outline-none focus:bg-white transition-all font-medium leading-normal resize-none text-[#243028]"
+                  className="flex min-h-[80px] w-full rounded-[12px] border border-border bg-muted/30/60 px-3 py-2 text-xs focus:border-[#4F6F52] focus-visible:outline-none focus:bg-card transition-all font-medium leading-normal resize-none text-foreground"
                 />
               </div>
 
               <div className="bg-amber-50/80 border border-amber-200/50 rounded-2xl p-4 text-[11px] text-[#8A6D1D] leading-relaxed space-y-2">
                 <p className="font-extrabold flex items-center gap-1.5 uppercase tracking-wider text-[10px] text-[#8A6D1D]">
-                  ⚠️ {t("finance.verify_warning_title")}
+                  âš ï¸ {t("finance.verify_warning_title")}
                 </p>
                 <ul className="list-disc list-inside space-y-1 font-semibold pl-1">
                   <li><strong>{t("finance.verify_btn_approve")}:</strong> {t("finance.verify_warning_approve")}</li>
@@ -474,14 +474,14 @@ export function PaymentsTab({
                 <div className="grid grid-cols-2 gap-3">
                   <Button
                     onClick={() => onVerifyPaymentSubmit(false)}
-                    className="bg-white text-[#D77A7A] border border-rose-200 hover:bg-rose-50 font-bold text-xs h-10 rounded-[12px] hover:scale-[1.02] active:scale-[0.98] transition-premium"
+                    className="bg-card text-[#D77A7A] border border-rose-200 hover:bg-rose-50 font-bold text-xs h-10 rounded-[12px] btn-premium"
                     disabled={isSubmitting}
                   >
                     {t("finance.verify_btn_reject")}
                   </Button>
                   <Button
                     onClick={() => onVerifyPaymentSubmit(true)}
-                    className="bg-[#4F6F52] hover:bg-[#3D563F] text-white font-bold text-xs h-10 rounded-[12px] shadow-sage hover:scale-[1.02] active:scale-[0.98] transition-premium"
+                    className="bg-primary hover:bg-primary/90 text-white font-bold text-xs h-10 rounded-[12px] btn-premium"
                     disabled={isSubmitting}
                   >
                     {t("finance.verify_btn_approve")}
@@ -491,7 +491,7 @@ export function PaymentsTab({
                 {isSuperAdmin && (
                   <Button
                     onClick={onDeletePaymentSubmit}
-                    className="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs h-10 rounded-[12px] shadow-[0_4px_14px_rgba(220,38,38,0.25)] hover:scale-[1.02] active:scale-[0.98] transition-premium"
+                    className="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs h-10 rounded-[12px] shadow-[0_4px_14px_rgba(220,38,38,0.25)] btn-premium"
                     disabled={isSubmitting}
                   >
                     {t("finance.verify_btn_delete")}

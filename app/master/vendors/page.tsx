@@ -19,7 +19,7 @@ import { DataTablePagination } from "@/components/ui/data-table-pagination"
 export const revalidate = 0
 
 const STATUS_MAP: Record<string, { label: string; className: string }> = {
-  active:   { label: "Aktif",     className: "bg-[#DDE8D8] text-[#4F6F52] border-[#8FAF9A]/30" },
+  active:   { label: "Aktif",     className: "bg-secondary text-primary border-primary/40/30" },
   inactive: { label: "Nonaktif",  className: "bg-[#E7E9E7] text-[#5F6861] border-[#5F6861]/20" },
 }
 
@@ -79,18 +79,18 @@ export default async function VendorsPage({
     <div className="flex flex-col gap-6">
       
       {/* ── PREMIUM HEADER ── */}
-      <div className="relative rounded-2xl overflow-hidden bg-gradient-to-r from-[#DDE8D8]/70 via-white/95 to-[#DDE8D8]/40 border border-[#D6DED2] shadow-sage p-6">
+      <div className="relative rounded-2xl overflow-hidden bg-gradient-to-r from-[#DDE8D8]/70 via-white/95 to-[#DDE8D8]/40 border border-border shadow-sage p-6">
         <div className="absolute -top-6 -right-6 h-28 w-28 rounded-full bg-[#8FAF9A]/10 blur-2xl pointer-events-none" />
-        <div className="absolute bottom-0 left-1/3 h-20 w-20 rounded-full bg-[#4F6F52]/8 blur-xl pointer-events-none" />
+        <div className="absolute bottom-0 left-1/3 h-20 w-20 rounded-full bg-primary/8 blur-xl pointer-events-none" />
 
         <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-start gap-3">
-            <div className="h-12 w-12 rounded-2xl bg-[#4F6F52] flex items-center justify-center shadow-[0_4px_12px_rgba(79,111,82,0.3)] shrink-0">
+            <div className="h-12 w-12 rounded-2xl bg-primary flex items-center justify-center shadow-[0_4px_12px_rgba(79,111,82,0.3)] shrink-0">
               <Store className="h-6 w-6 text-white" />
             </div>
             <div>
-              <h1 className="text-2xl font-black text-[#243028] tracking-tight"><Translate namespace="vendor" translationKey="title" /></h1>
-              <p className="text-sm text-[#66736A] mt-0.5"><Translate namespace="vendor" translationKey="subtitle" /></p>
+              <h1 className="text-2xl font-black text-foreground tracking-tight"><Translate namespace="vendor" translationKey="title" /></h1>
+              <p className="text-sm text-muted-foreground mt-0.5"><Translate namespace="vendor" translationKey="subtitle" /></p>
             </div>
           </div>
           {isEditor && (
@@ -104,24 +104,24 @@ export default async function VendorsPage({
       {/* ── KPI METRIC CARDS ── */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Total Vendor */}
-        <Card className="bg-white border-[#D6DED2] shadow-sage hover:shadow-sage-lg hover:-translate-y-0.5 transition-premium">
+        <Card className="bg-card border-border shadow-sage hover:shadow-sage-lg hover:-translate-y-0.5 transition-premium">
           <CardContent className="p-5 flex items-center justify-between gap-3">
             <div className="space-y-1 min-w-0">
-              <p className="text-[10px] text-[#66736A] font-bold uppercase tracking-wider"><Translate namespace="vendor" translationKey="total" /></p>
-              <h3 className="text-2xl font-black font-mono tracking-tight text-[#243028] tabular-nums">{totalVendors}</h3>
-              <p className="text-[10px] text-[#8FAF9A]"><Translate namespace="vendor" translationKey="total_desc" /></p>
+              <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider"><Translate namespace="vendor" translationKey="total" /></p>
+              <h3 className="text-2xl font-black font-mono tracking-tight text-foreground tabular-nums">{totalVendors}</h3>
+              <p className="text-[10px] text-primary/70"><Translate namespace="vendor" translationKey="total_desc" /></p>
             </div>
-            <div className="h-11 w-11 rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400 flex items-center justify-center shrink-0">
+            <div className="h-11 w-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
               <Users className="h-5 w-5" />
             </div>
           </CardContent>
         </Card>
 
         {/* Aktif */}
-        <Card className="bg-white border-[#D6DED2] shadow-sage hover:shadow-sage-lg hover:-translate-y-0.5 transition-premium">
+        <Card className="bg-card border-border shadow-sage hover:shadow-sage-lg hover:-translate-y-0.5 transition-premium">
           <CardContent className="p-5 flex items-center justify-between gap-3">
             <div className="space-y-1 min-w-0">
-              <p className="text-[10px] text-[#66736A] font-bold uppercase tracking-wider"><Translate namespace="vendor" translationKey="active" /></p>
+              <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider"><Translate namespace="vendor" translationKey="active" /></p>
               <h3 className="text-2xl font-black font-mono tracking-tight text-emerald-700 tabular-nums">{activeCount}</h3>
               <p className="text-[10px] text-emerald-500"><Translate namespace="vendor" translationKey="active_desc" /></p>
             </div>
@@ -132,10 +132,10 @@ export default async function VendorsPage({
         </Card>
 
         {/* Nonaktif */}
-        <Card className="bg-white border-[#D6DED2] shadow-sage hover:shadow-sage-lg hover:-translate-y-0.5 transition-premium">
+        <Card className="bg-card border-border shadow-sage hover:shadow-sage-lg hover:-translate-y-0.5 transition-premium">
           <CardContent className="p-5 flex items-center justify-between gap-3">
             <div className="space-y-1 min-w-0">
-              <p className="text-[10px] text-[#66736A] font-bold uppercase tracking-wider"><Translate namespace="vendor" translationKey="inactive" /></p>
+              <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider"><Translate namespace="vendor" translationKey="inactive" /></p>
               <h3 className="text-2xl font-black font-mono tracking-tight text-rose-700 tabular-nums">{inactiveCount}</h3>
               <p className="text-[10px] text-rose-500"><Translate namespace="vendor" translationKey="inactive_desc" /></p>
             </div>
@@ -147,7 +147,7 @@ export default async function VendorsPage({
       </div>
 
       {/* ── FILTER & SEARCH BAR ── */}
-      <div className="bg-white/70 backdrop-blur-md border border-[#D6DED2] rounded-2xl p-4 shadow-sage">
+      <div className="bg-background/70 backdrop-blur-md border border-border rounded-2xl p-4 shadow-sage">
         <form method="GET" className="flex flex-col gap-4">
           <div className="flex flex-col md:flex-row items-center gap-3">
             <SearchInput
@@ -157,14 +157,14 @@ export default async function VendorsPage({
             />
             <input type="hidden" name="status" value={status} />
             
-            <button type="submit" className="w-full md:w-auto h-10 px-5 bg-[#4F6F52] hover:bg-[#3F5941] text-white rounded-xl shadow-glow-sage hover:scale-[1.02] active:scale-[0.98] transition-all font-semibold text-sm">
+            <button type="submit" className="w-full md:w-auto h-10 px-5 bg-primary hover:bg-[#3F5941] text-white rounded-xl btn-premium transition-all font-semibold text-sm">
               <Translate namespace="action" translationKey="search" />
             </button>
 
             {(q || status) ? (
               <a
                 href="?"
-                className="w-full md:w-auto h-10 px-4 flex items-center justify-center text-xs font-semibold rounded-xl border-[#D6DED2] text-[#66736A] hover:bg-[#F7F8F3] transition-colors"
+                className="w-full md:w-auto h-10 px-4 flex items-center justify-center text-xs font-semibold rounded-xl border-border text-muted-foreground hover:bg-muted/30 transition-colors"
               >
                 <Translate namespace="action" translationKey="reset" />
               </a>
@@ -172,15 +172,15 @@ export default async function VendorsPage({
           </div>
 
           {/* Status Pills */}
-          <div className="flex flex-wrap gap-2 pt-3 border-t border-[#D6DED2]/40">
+          <div className="flex flex-wrap gap-2 pt-3 border-t border-border/40">
             {(["", "active", "inactive"] as const).map((s) => (
               <a
                 key={s}
                 href={`?q=${q}&status=${s}`}
                 className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all duration-200 whitespace-nowrap
                   ${status === s || (!status && s === "")
-                    ? "bg-[#4F6F52] text-white border-[#4F6F52] shadow-[0_2px_8px_rgba(79,111,82,0.3)]"
-                    : "bg-white text-[#66736A] border-[#D6DED2] hover:border-[#8FAF9A] hover:text-[#4F6F52] hover:bg-[#DDE8D8]/30"
+                    ? "bg-primary text-white border-[#4F6F52] shadow-[0_2px_8px_rgba(79,111,82,0.3)]"
+                    : "bg-card text-muted-foreground border-border hover:border-primary/40 hover:text-primary hover:bg-secondary/30"
                   }`}
               >
                 {s === "" ? <Translate namespace="vendor" translationKey="all_status" /> : <Translate namespace="vendor_form" translationKey={`status_${s}` as `vendor_form.status_${string}`} fallback={STATUS_MAP[s]?.label ?? s} />}
@@ -191,14 +191,14 @@ export default async function VendorsPage({
       </div>
 
       {/* ── DATA TABLE ── */}
-      <div className="bg-white border border-[#D6DED2] rounded-2xl shadow-sage overflow-hidden">
+      <div className="bg-card border border-border rounded-2xl shadow-sage overflow-hidden">
         {/* Table Title Bar */}
-        <div className="px-6 py-4 border-b border-[#D6DED2] bg-[#F7F8F3]/70">
+        <div className="px-6 py-4 border-b border-border bg-muted/30/70">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-[#66736A] uppercase tracking-wider">
+            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
               <Translate namespace="vendor" translationKey="list_title" />
             </span>
-            <span className="text-xs font-mono text-[#8FAF9A] tabular-nums">
+            <span className="text-xs font-mono text-primary/70 tabular-nums">
               <Translate namespace="vendor" translationKey="found" values={{ count: filtered.length.toString() }} />
             </span>
           </div>
@@ -207,12 +207,12 @@ export default async function VendorsPage({
         {filtered.length === 0 ? (
           <div className="py-16 text-center">
             <div className="flex flex-col items-center gap-3">
-              <div className="h-16 w-16 rounded-full bg-[#DDE8D8]/50 flex items-center justify-center">
-                <Store className="h-8 w-8 text-[#8FAF9A]" />
+              <div className="h-16 w-16 rounded-full bg-secondary/50 flex items-center justify-center">
+                <Store className="h-8 w-8 text-primary/70" />
               </div>
               <div>
-                <p className="font-semibold text-[#243028] text-sm"><Translate namespace="vendor" translationKey="not_found" /></p>
-                <p className="text-xs text-[#66736A] mt-1">
+                <p className="font-semibold text-foreground text-sm"><Translate namespace="vendor" translationKey="not_found" /></p>
+                <p className="text-xs text-muted-foreground mt-1">
                   {q || status 
                     ? <Translate namespace="vendor" translationKey="not_found_desc_1" />
                     : <Translate namespace="vendor" translationKey="not_found_desc_2" />}
@@ -224,7 +224,7 @@ export default async function VendorsPage({
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-[#D6DED2] text-[#66736A] text-xs font-bold uppercase tracking-wider">
+                <tr className="border-b border-border text-muted-foreground text-xs font-bold uppercase tracking-wider">
                   <th className="py-3.5 px-6"><Translate namespace="vendor" translationKey="col_name" /></th>
                   <th className="py-3.5 px-6"><Translate namespace="vendor" translationKey="col_phone" /></th>
                   <th className="py-3.5 px-6"><Translate namespace="vendor" translationKey="col_email" /></th>
@@ -239,22 +239,22 @@ export default async function VendorsPage({
                   const initials = v.name.slice(0, 2).toUpperCase()
                   const st = STATUS_MAP[v.status]
                   return (
-                    <tr key={v.id} className="hover:bg-[#F7F8F3]/80 transition-colors duration-150 group">
+                    <tr key={v.id} className="hover:bg-muted/30/80 transition-colors duration-150 group">
                       <td className="py-4 px-6">
                         <div className="flex items-center gap-3">
-                          <div className="h-8 w-8 rounded-full bg-[#DDE8D8] text-[#4F6F52] flex items-center justify-center font-bold text-xs shrink-0 border border-[#8FAF9A]/20">
+                          <div className="h-8 w-8 rounded-full bg-secondary text-primary flex items-center justify-center font-bold text-xs shrink-0 border border-primary/40/20">
                             {initials}
                           </div>
-                          <span className="font-semibold text-[#243028] text-sm">{v.name}</span>
+                          <span className="font-semibold text-foreground text-sm">{v.name}</span>
                         </div>
                       </td>
-                      <td className="py-4 px-6 font-mono text-[#66736A] text-xs">
+                      <td className="py-4 px-6 font-mono text-muted-foreground text-xs">
                         {v.phone || "—"}
                       </td>
-                      <td className="py-4 px-6 text-[#66736A]">
+                      <td className="py-4 px-6 text-muted-foreground">
                         {v.email || "—"}
                       </td>
-                      <td className="py-4 px-6 font-mono text-xs text-[#66736A]">
+                      <td className="py-4 px-6 font-mono text-xs text-muted-foreground">
                         {v.legalDocNumber || "—"}
                       </td>
                       <td className="py-4 px-6 text-center">

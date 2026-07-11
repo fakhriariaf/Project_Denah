@@ -65,7 +65,7 @@ export default function BookingActionsClient({
           marketings={marketings}
           currentUser={currentUser}
           triggerButton={
-            <Button className="bg-[#4F6F52] hover:bg-[#3F5941] text-white font-bold rounded-xl px-3.5 py-2 flex items-center gap-1.5 shadow-[0_2px_8px_rgba(79,111,82,0.25)] hover:scale-[1.02] active:scale-[0.98] transition-all text-xs h-9 shrink-0">
+            <Button className="bg-primary hover:bg-[#3F5941] text-white font-bold rounded-xl px-3.5 py-2 flex items-center gap-1.5 shadow-[0_2px_8px_rgba(79,111,82,0.25)] hover:scale-[1.02] active:scale-[0.98] transition-all text-xs h-9 shrink-0">
               <Edit3 className="h-3.5 w-3.5" />
               {t("booking_detail.edit_booking")}
             </Button>

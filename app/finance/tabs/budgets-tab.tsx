@@ -96,21 +96,21 @@ export function BudgetsTab({
   const { t } = useI18n();
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       <div className="lg:col-span-2 space-y-6">
-        <Card className="bg-white border-[#D6DED2]">
+        <Card className="bg-card border-input">
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
-              <CardTitle className="text-lg text-[#243028]">{t("finance.budget_list_title")}</CardTitle>
+              <CardTitle className="text-lg text-foreground">{t("finance.budget_list_title")}</CardTitle>
               <CardDescription className="text-xs">{t("finance.budget_list_desc")}</CardDescription>
             </div>
             <Dialog open={budgetOpen} onOpenChange={setBudgetOpen}>
               <DialogTrigger nativeButton={true} render={
-                <Button className="bg-[#8FAF9A] hover:bg-[#4F6F52] text-white flex items-center gap-1.5 text-xs">
+                <Button className="bg-[#8FAF9A] hover:bg-primary text-white flex items-center gap-1.5 text-xs">
                   <Plus className="h-3.5 w-3.5" /> {t("finance.budget_btn_new")}
                 </Button>
               } />
-              <DialogContent className="bg-white">
+              <DialogContent className="bg-card">
                 <DialogHeader>
                   <DialogTitle>{t("finance.budget_form_title")}</DialogTitle>
                   <DialogDescription>{t("finance.budget_form_desc")}</DialogDescription>
@@ -122,13 +122,13 @@ export function BudgetsTab({
                 )}
                 <form onSubmit={onCreateBudgetSubmit} className="space-y-4">
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold text-[#243028]">{t("finance.budget_lbl_project")}</label>
+                    <label className="text-xs font-semibold text-foreground">{t("finance.budget_lbl_project")}</label>
                     <Select
                       value={budgetForm.projectId}
                       onValueChange={(val) => setBudgetForm(f => ({ ...f, projectId: val || "" }))}
                       items={projects.map(p => ({ label: p.name, value: p.id }))}
                     >
-                      <SelectTrigger className="bg-white border-[#D6DED2]">
+                      <SelectTrigger className="bg-card border-input">
                         <SelectValue placeholder="Pilih Perumahan">
                           {budgetForm.projectId ? projects.find(p => p.id === budgetForm.projectId)?.name : undefined}
                         </SelectValue>
@@ -142,34 +142,34 @@ export function BudgetsTab({
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold text-[#243028]">{t("finance.budget_lbl_name")}</label>
+                    <label className="text-xs font-semibold text-foreground">{t("finance.budget_lbl_name")}</label>
                     <Input
                       placeholder={t("finance.budget_lbl_name_ph")}
                       value={budgetForm.name}
                       onChange={(e) => setBudgetForm(f => ({ ...f, name: e.target.value }))}
-                      className="bg-white border-[#D6DED2]"
+                      className="bg-card border-input"
                       required
                     />
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="space-y-1">
-                      <label className="text-xs font-semibold text-[#243028]">{t("finance.budget_lbl_start")}</label>
+                      <label className="text-xs font-semibold text-foreground">{t("finance.budget_lbl_start")}</label>
                       <Input
                         type="date"
                         value={budgetForm.periodStart}
                         onChange={(e) => setBudgetForm(f => ({ ...f, periodStart: e.target.value }))}
-                        className="bg-white border-[#D6DED2]"
+                        className="bg-card border-input"
                         required
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-xs font-semibold text-[#243028]">{t("finance.budget_lbl_end")}</label>
+                      <label className="text-xs font-semibold text-foreground">{t("finance.budget_lbl_end")}</label>
                       <Input
                         type="date"
                         value={budgetForm.periodEnd}
                         onChange={(e) => setBudgetForm(f => ({ ...f, periodEnd: e.target.value }))}
-                        className="bg-white border-[#D6DED2]"
+                        className="bg-card border-input"
                         required
                       />
                     </div>
@@ -177,13 +177,13 @@ export function BudgetsTab({
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="space-y-1">
-                      <label className="text-xs font-semibold text-[#243028]">{t("finance.budget_lbl_category")}</label>
+                      <label className="text-xs font-semibold text-foreground">{t("finance.budget_lbl_category")}</label>
                       <Select
                         value={budgetForm.categoryId}
                         onValueChange={(val) => setBudgetForm(f => ({ ...f, categoryId: val || "" }))}
                         items={categories.filter(c => c.type === "expense").map(c => ({ label: c.name, value: c.id }))}
                       >
-                        <SelectTrigger className="bg-white border-[#D6DED2]">
+                        <SelectTrigger className="bg-card border-input">
                           <SelectValue placeholder="Pilih Kategori">
                             {budgetForm.categoryId ? categories.find(c => c.id === budgetForm.categoryId)?.name : undefined}
                           </SelectValue>
@@ -196,43 +196,43 @@ export function BudgetsTab({
                       </Select>
                     </div>
                     <div className="space-y-1">
-                      <label className="text-xs font-semibold text-[#243028]">{t("finance.budget_lbl_alloc")}</label>
+                      <label className="text-xs font-semibold text-foreground">{t("finance.budget_lbl_alloc")}</label>
                       <Input
                         type="number"
                         placeholder="Rp 0"
                         value={budgetForm.allocatedAmount}
                         onChange={(e) => setBudgetForm(f => ({ ...f, allocatedAmount: e.target.value }))}
-                        className="bg-white border-[#D6DED2]"
+                        className="bg-card border-input"
                         required
                       />
                     </div>
                   </div>
 
                   {budgetForm.allocatedAmount && !isNaN(Number(budgetForm.allocatedAmount)) && (
-                    <div className="p-2.5 bg-[#DDE8D8]/50 border border-[#8FAF9A]/30 rounded-xl space-y-0.5 animate-in slide-in-from-top-1 duration-200">
-                      <span className="text-[9px] font-bold text-[#66736A] uppercase tracking-wider block">Format Rupiah Terbaca</span>
-                      <span className="font-mono font-extrabold text-sm text-[#4F6F52] tracking-tight tabular-nums">
+                    <div className="p-2.5 bg-secondary/50 border border-primary/30 rounded-xl space-y-0.5 animate-in slide-in-from-top-1 duration-200">
+                      <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider block">Format Rupiah Terbaca</span>
+                      <span className="font-mono font-extrabold text-sm text-primary tracking-tight tabular-nums">
                         Rp {Number(budgetForm.allocatedAmount).toLocaleString("id-ID")}
                       </span>
                     </div>
                   )}
 
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold text-[#243028]">{t("finance.budget_lbl_total")}</label>
+                    <label className="text-xs font-semibold text-foreground">{t("finance.budget_lbl_total")}</label>
                     <Input
                       type="number"
                       placeholder="Rp 0"
                       value={budgetForm.totalAmount}
                       onChange={(e) => setBudgetForm(f => ({ ...f, totalAmount: e.target.value }))}
-                      className="bg-white border-[#D6DED2]"
+                      className="bg-card border-input"
                       required
                     />
                   </div>
 
                   {budgetForm.totalAmount && !isNaN(Number(budgetForm.totalAmount)) && (
-                    <div className="p-2.5 bg-[#DDE8D8]/50 border border-[#8FAF9A]/30 rounded-xl space-y-0.5 animate-in slide-in-from-top-1 duration-200">
-                      <span className="text-[9px] font-bold text-[#66736A] uppercase tracking-wider block">Format Rupiah Terbaca</span>
-                      <span className="font-mono font-extrabold text-sm text-[#4F6F52] tracking-tight tabular-nums">
+                    <div className="p-2.5 bg-secondary/50 border border-primary/30 rounded-xl space-y-0.5 animate-in slide-in-from-top-1 duration-200">
+                      <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider block">Format Rupiah Terbaca</span>
+                      <span className="font-mono font-extrabold text-sm text-primary tracking-tight tabular-nums">
                         Rp {Number(budgetForm.totalAmount).toLocaleString("id-ID")}
                       </span>
                     </div>
@@ -241,7 +241,7 @@ export function BudgetsTab({
                   <DialogFooter>
                     <Button
                       type="submit"
-                      className="bg-[#4F6F52] hover:bg-[#8FAF9A] text-white w-full"
+                      className="bg-primary hover:bg-[#8FAF9A] text-white w-full"
                       disabled={isSubmitting}
                     >
                       {isSubmitting ? t("finance.saving") : t("finance.budget_btn_submit")}
@@ -267,12 +267,12 @@ export function BudgetsTab({
                   <TableRow>
                     <TableCell colSpan={5} className="py-12 text-center">
                       <div className="flex flex-col items-center gap-3">
-                        <div className="h-16 w-16 rounded-full bg-[#DDE8D8]/50 flex items-center justify-center mx-auto">
-                          <FolderOpen className="h-8 w-8 text-[#4F6F52]" />
+                        <div className="h-16 w-16 rounded-full bg-secondary/50 flex items-center justify-center mx-auto">
+                          <FolderOpen className="h-8 w-8 text-primary" />
                         </div>
                         <div>
-                          <p className="font-semibold text-[#243028] text-sm">{t("finance.budget_empty")}</p>
-                          <p className="text-xs text-[#66736A] mt-1">{t("finance.budget_empty_desc")}</p>
+                          <p className="font-semibold text-foreground text-sm">{t("finance.budget_empty")}</p>
+                          <p className="text-xs text-muted-foreground mt-1">{t("finance.budget_empty_desc")}</p>
                         </div>
                       </div>
                     </TableCell>
@@ -280,20 +280,20 @@ export function BudgetsTab({
                 ) : (
                   filteredBudgets.map((b) => (
                     <TableRow key={b.id}>
-                      <TableCell className="text-xs font-semibold text-[#243028]">
+                      <TableCell className="text-xs font-semibold text-foreground">
                         {b.name}
                       </TableCell>
-                      <TableCell className="text-xs text-[#66736A]">
+                      <TableCell className="text-xs text-muted-foreground">
                         {b.projectName}
                       </TableCell>
-                      <TableCell className="text-xs text-[#66736A]">
+                      <TableCell className="text-xs text-muted-foreground">
                         {new Date(b.periodStart).toLocaleDateString("id-ID")} - {new Date(b.periodEnd).toLocaleDateString("id-ID")}
                       </TableCell>
-                      <TableCell className="text-right font-mono font-bold tabular-nums text-xs text-[#243028]">
+                      <TableCell className="text-right font-mono font-bold tabular-nums text-xs text-foreground">
                         Rp {b.totalAmount.toLocaleString("id-ID")}
                       </TableCell>
                       <TableCell className="text-center">
-                        <Badge className="bg-[#DDE8D8] text-[#4F6F52]">{t("finance.badge_active")}</Badge>
+                        <Badge className="bg-secondary text-primary">{t("finance.badge_active")}</Badge>
                       </TableCell>
                     </TableRow>
                   ))
@@ -306,10 +306,10 @@ export function BudgetsTab({
 
       {/* Visual budgets monitoring cards */}
       <div className="space-y-6">
-        <Card className="bg-white/70 backdrop-blur-md border border-[#D6DED2]/80 shadow-sage hover:shadow-sage-lg transition-premium rounded-3xl overflow-hidden">
+        <Card className="bg-white/70 backdrop-blur-md border border-border/80 shadow-sage hover:shadow-sage-lg transition-premium rounded-3xl overflow-hidden">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base font-bold text-[#243028]">{t("finance.absorption_title")}</CardTitle>
-            <CardDescription className="text-xs text-[#66736A] font-medium">{t("finance.absorption_desc")}</CardDescription>
+            <CardTitle className="text-base font-bold text-foreground">{t("finance.absorption_title")}</CardTitle>
+            <CardDescription className="text-xs text-muted-foreground font-medium">{t("finance.absorption_desc")}</CardDescription>
           </CardHeader>
           <CardContent className="p-4 pt-0 space-y-4 font-sans">
             {[
@@ -319,18 +319,18 @@ export function BudgetsTab({
               { name: "Pemasaran, Brosur & Iklan", value: 88 },
             ].map((item, idx) => {
               const colorClass = item.value < 50 ? "bg-[#8FAF9A]" : item.value < 80 ? "bg-[#E9C46A]" : "bg-[#D77A7A]";
-              const textClass = item.value < 50 ? "text-[#4F6F52]" : item.value < 80 ? "text-[#9A7D21]" : "text-[#D77A7A]";
-              const bgClass = item.value < 50 ? "bg-[#DDE8D8]/30" : item.value < 80 ? "bg-amber-50" : "bg-rose-50";
+              const textClass = item.value < 50 ? "text-primary" : item.value < 80 ? "text-[#9A7D21]" : "text-[#D77A7A]";
+              const bgClass = item.value < 50 ? "bg-secondary/30" : item.value < 80 ? "bg-amber-50" : "bg-rose-50";
 
               return (
                 <div key={idx} className="space-y-2 group">
                   <div className="flex justify-between items-center text-xs font-bold">
-                    <span className="text-[#243028] group-hover:text-[#4F6F52] transition-colors">{item.name}</span>
+                    <span className="text-foreground group-hover:text-primary transition-colors">{item.name}</span>
                     <span className={`font-mono font-extrabold tabular-nums px-2 py-0.5 rounded-md ${bgClass} ${textClass}`}>
                       {item.value}%
                     </span>
                   </div>
-                  <div className="w-full bg-[#F7F8F3] border border-[#D6DED2] rounded-full h-2.5 overflow-hidden p-0.5 shadow-inner">
+                  <div className="w-full bg-muted/30 border border-border rounded-full h-2.5 overflow-hidden p-0.5 shadow-inner">
                     <div
                       className={`h-full rounded-full transition-all duration-1000 ${colorClass}`}
                       style={{ width: `${item.value}%` }}

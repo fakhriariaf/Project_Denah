@@ -17,11 +17,11 @@ export default function BookingsLoading() {
       {/* KPI METRIC CARDS */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {Array.from({ length: 4 }).map((_, i) => (
-          <Card key={i} className="shadow-sm border-slate-100 bg-white">
+          <Card key={i} className="shadow-sm border-slate-100 bg-card">
             <CardContent className="p-5 flex items-center justify-between">
               <div className="space-y-2">
                 <Skeleton className="h-3.5 w-24 bg-slate-100" />
-                <Skeleton className={`h-6 w-32 ${i === 0 ? "bg-[#DDE8D8]" : "bg-slate-100"}`} />
+                <Skeleton className={`h-6 w-32 ${i === 0 ? "bg-secondary" : "bg-slate-100"}`} />
               </div>
               <Skeleton className="h-10 w-10 bg-slate-100 rounded-xl" />
             </CardContent>
@@ -30,16 +30,16 @@ export default function BookingsLoading() {
       </div>
 
       {/* FILTER & SEARCH */}
-      <Card className="shadow-sm border-slate-100 bg-white">
+      <Card className="shadow-sm border-slate-100 bg-card">
         <CardContent className="p-4 flex flex-col md:flex-row items-center gap-3">
           <Skeleton className="h-10 flex-1 bg-slate-50" />
           <Skeleton className="h-10 w-full md:w-[160px] bg-slate-50" />
-          <Skeleton className="h-10 w-20 bg-[#4F6F52]/10" />
+          <Skeleton className="h-10 w-20 bg-primary/10" />
         </CardContent>
       </Card>
 
       {/* DATA TABLE VIEW */}
-      <Card className="shadow-sm border-slate-100 overflow-hidden bg-white">
+      <Card className="shadow-sm border-slate-100 overflow-hidden bg-card">
         <div className="overflow-x-auto">
           <Table>
             <TableHeader className="bg-muted/40">
@@ -84,7 +84,7 @@ export default function BookingsLoading() {
                   </TableCell>
                   {/* Status */}
                   <TableCell className="py-4 px-6 text-center">
-                    <Skeleton className="h-5.5 w-20 bg-[#DDE8D8]/40 border border-[#8FAF9A]/10 rounded-full mx-auto" />
+                    <Skeleton className="h-5.5 w-20 bg-secondary/40 border border-primary/50/10 rounded-full mx-auto" />
                   </TableCell>
                   {/* Aksi */}
                   <TableCell className="py-4 px-6 text-right">

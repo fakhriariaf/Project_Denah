@@ -21,13 +21,13 @@ interface Props {
 }
 
 const ACTION_COLORS: Record<string, string> = {
-  create: "text-emerald-600 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-950/20",
-  read:   "text-sky-600 bg-sky-50 dark:text-sky-400 dark:bg-sky-950/20",
-  update: "text-amber-600 bg-amber-50 dark:text-amber-400 dark:bg-amber-950/20",
-  delete: "text-rose-600 bg-rose-50 dark:text-rose-400 dark:bg-rose-950/20",
-  approve:"text-purple-600 bg-purple-50 dark:text-purple-400 dark:bg-purple-950/20",
-  reject: "text-red-600 bg-red-50 dark:text-red-400 dark:bg-red-950/20",
-  export: "text-indigo-600 bg-indigo-50 dark:text-indigo-400 dark:bg-indigo-950/20",
+  create: "text-emerald-600 bg-emerald-50",
+  read:   "text-sky-600 bg-sky-50",
+  update: "text-amber-600 bg-amber-50",
+  delete: "text-rose-600 bg-rose-50",
+  approve:"text-purple-600 bg-purple-50",
+  reject: "text-red-600 bg-red-50",
+  export: "text-indigo-600 bg-indigo-50",
 };
 
 function getFriendlyActionInfo(action: string, t: any) {
@@ -68,7 +68,7 @@ function getFriendlyActionInfo(action: string, t: any) {
   if (labelMap[action]) {
     return {
       label: labelMap[action],
-      colorClass: ACTION_COLORS[colorKeyMap[action]] ?? "text-slate-600 bg-slate-50 dark:text-slate-400 dark:bg-slate-900/30",
+      colorClass: ACTION_COLORS[colorKeyMap[action]] ?? "text-slate-600 bg-slate-50",
     };
   }
 
@@ -86,7 +86,7 @@ function getFriendlyActionInfo(action: string, t: any) {
   };
 
   const friendlyLabel = baseLabelMap[baseAction] ?? baseAction;
-  const colorClass = ACTION_COLORS[baseAction] ?? "text-slate-600 bg-slate-50 dark:text-slate-400 dark:bg-slate-900/30";
+  const colorClass = ACTION_COLORS[baseAction] ?? "text-slate-600 bg-slate-50";
 
   return {
     label: friendlyLabel,

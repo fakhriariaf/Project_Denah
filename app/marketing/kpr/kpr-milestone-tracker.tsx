@@ -89,13 +89,13 @@ export function KprMilestoneTracker({
         let Icon = CircleDot;
 
         if (isCompleted) {
-          colorClasses = "bg-[#4F6F52] text-white border-[#4F6F52]";
+          colorClasses = "bg-primary text-white border-[#4F6F52]";
           Icon = Check;
         } else if (isActive) {
-          colorClasses = "bg-white text-[#4F6F52] border-[#4F6F52] border-2 shadow-sm ring-4 ring-[#DDE8D8]/50";
+          colorClasses = "bg-card text-primary border-[#4F6F52] border-2 shadow-sm ring-4 ring-[#DDE8D8]/50";
           Icon = CircleDot;
         } else {
-          colorClasses = "bg-[#F7F8F3] text-[#A8B0AA] border-[#D6DED2]";
+          colorClasses = "bg-muted/30 text-muted-foreground/70 border-border";
           Icon = CircleDot;
         }
 
@@ -108,7 +108,7 @@ export function KprMilestoneTracker({
                   orientation === "vertical" 
                     ? "left-4 top-8 bottom-[-8px] w-[2px]" 
                     : "top-4 left-[50%] right-[-50%] h-[2px]"
-                } ${isCompleted ? "bg-[#4F6F52]" : "bg-[#D6DED2]"}`} 
+                } ${isCompleted ? "bg-primary" : "bg-[#D6DED2]"}`} 
               />
             )}
             
@@ -117,11 +117,11 @@ export function KprMilestoneTracker({
                 <Icon className={`w-4 h-4 ${isActive ? "animate-pulse" : ""}`} />
               </div>
               <div className={`${orientation === "vertical" ? "text-left" : "text-center mt-2"} flex-1`}>
-                <p className={`text-xs ${isActive ? "font-black text-[#243028]" : isCompleted ? "font-bold text-[#66736A]" : "font-medium text-[#A8B0AA]"}`}>
+                <p className={`text-xs ${isActive ? "font-black text-foreground" : isCompleted ? "font-bold text-muted-foreground" : "font-medium text-muted-foreground/70"}`}>
                   {stage.label}
                 </p>
                 {isActive && (
-                  <p className="text-[10px] text-[#4F6F52] font-semibold mt-0.5">Tahap Saat Ini</p>
+                  <p className="text-[10px] text-primary font-semibold mt-0.5">Tahap Saat Ini</p>
                 )}
               </div>
             </div>

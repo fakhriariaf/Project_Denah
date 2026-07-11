@@ -1,11 +1,11 @@
-"use client"
+﻿"use client"
 
 import * as React from "react"
 import { usePathname } from "next/navigation"
 import Link from "next/link"
 import { authClient } from "@/lib/auth-client"
 import { useI18n } from "@/lib/i18n"
-import { LayoutDashboard, Users, Home, Map, CircleDollarSign, HardHat, FileText, Settings, Building2, Store, UserCog, User, Landmark, ShieldCheck, Banknote, Clock, Target, Wrench, Bell, GitCompareArrows } from "lucide-react"
+import { LayoutDashboard, Users, Home, Map, CircleDollarSign, HardHat, FileText, Settings, Building2, Store, UserCog, User, Landmark, ShieldCheck, Banknote, Clock, Target, Wrench, Bell, GitCompareArrows, ChevronRight } from "lucide-react"
 import { useNotificationPolling } from "@/hooks/use-notification-polling"
 
 import {
@@ -172,6 +172,28 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     return { ...group, items };
   }).filter((group) => group.items.length > 0);
 
+  // All groups default to expanded (no collapsing needed)
+  const [openGroups, setOpenGroups] = React.useState<Set<string>>(() => {
+    return new Set(filteredNavMain.map(g => g.tKey));
+  });
+
+  // Keep all groups expanded when nav changes
+  React.useEffect(() => {
+    setOpenGroups(new Set(filteredNavMain.map(g => g.tKey)));
+  }, [filteredNavMain.length]);
+
+  const toggleGroup = (tKey: string) => {
+    setOpenGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(tKey)) {
+        next.delete(tKey);
+      } else {
+        next.add(tKey);
+      }
+      return next;
+    });
+  };
+
   return (
     <Sidebar {...props}>
       <SidebarHeader className="border-b border-border/40 p-4">
@@ -186,11 +208,23 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </div>
       </SidebarHeader>
       <SidebarContent id="app-sidebar-content" className="py-2">
-        {filteredNavMain.map((group) => (
+        {filteredNavMain.map((group) => {
+          const isOpen = openGroups.has(group.tKey);
+          return (
           <SidebarGroup key={group.tKey} className="px-3">
-            <SidebarGroupLabel suppressHydrationWarning className="font-sans font-bold text-[10px] uppercase tracking-wider text-muted-foreground/70 px-2 py-1.5">
-              {t(group.tKey as any) || group.fallback}
+            <SidebarGroupLabel
+              suppressHydrationWarning
+              className="font-sans font-bold text-[10px] uppercase tracking-wider text-muted-foreground/70 px-2 py-1.5 cursor-pointer select-none flex items-center justify-between hover:text-muted-foreground transition-colors duration-150"
+              onClick={() => toggleGroup(group.tKey)}
+              role="button"
+              aria-expanded={isOpen}
+            >
+              <span>{t(group.tKey as any) || group.fallback}</span>
+              <ChevronRight className={`h-3 w-3 shrink-0 transition-transform duration-200 ${isOpen ? "rotate-90" : ""}`} />
             </SidebarGroupLabel>
+            <div
+              className={`overflow-hidden transition-[max-height,opacity] duration-200 ease-in-out ${isOpen ? "max-h-[500px] opacity-100" : "max-h-0 opacity-0"}`}
+            >
             <SidebarGroupContent>
               <SidebarMenu>
                 {group.items.map((item) => {
@@ -208,12 +242,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                         <item.icon className={`h-4 w-4 shrink-0 transition-transform duration-200 ${active ? "text-secondary-foreground" : "group-hover:scale-110"}`} />
                         <span suppressHydrationWarning>{t(item.tKey as any) || item.fallback}</span>
                         {item.url === "/dashboard" && unreadCount > 0 && (
-                          <span className="ml-auto flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-[9px] font-bold text-white font-mono tabular-nums animate-pulse shadow-sm shadow-primary/20">
+                          <span className="ml-auto flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-success text-[9px] font-bold text-white font-mono tabular-nums animate-pulse shadow-sm shadow-primary/20">
                             {unreadCount}
                           </span>
                         )}
                         {item.url === "/dashboard/notifications" && unreadCount > 0 && (
-                          <span className="ml-auto flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-[9px] font-bold text-white font-mono tabular-nums animate-pulse shadow-sm shadow-primary/20">
+                          <span className="ml-auto flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-success text-[9px] font-bold text-white font-mono tabular-nums animate-pulse shadow-sm shadow-primary/20">
                             {unreadCount}
                           </span>
                         )}
@@ -226,12 +260,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 })}
               </SidebarMenu>
             </SidebarGroupContent>
+            </div>
           </SidebarGroup>
-        ))}
+          );
+        })}
       </SidebarContent>
-      <SidebarFooter className="border-t border-border/40 p-3 flex flex-row items-center justify-between">
-        <span suppressHydrationWarning className="text-[10px] font-semibold text-muted-foreground ml-1">{t("profile.myAccount")}</span>
-      </SidebarFooter>
       <SidebarRail />
     </Sidebar>
   )

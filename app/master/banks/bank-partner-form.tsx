@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { FormLabel, FieldError, FormFieldGroup } from "@/components/ui/form-primitives";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -18,6 +18,7 @@ import { createBankPartner, updateBankPartner } from "@/server/actions/marketing
 import { PlusCircle, Edit2, Banknote, Loader2, AlertCircle } from "lucide-react";
 import { parseServerError } from "@/lib/error-parser";
 import { useI18n } from "@/lib/i18n";
+import { toast } from "sonner";
 
 const schema = z.object({
   name: z.string().min(2, "Nama bank wajib diisi"),
@@ -57,10 +58,10 @@ export function BankPartnerForm({ id, initialData }: Props) {
     try {
       if (id) {
         await updateBankPartner(id, values);
-        alert("Mitra bank berhasil diperbarui!");
+        toast.success("Mitra bank berhasil diperbarui!");
       } else {
         await createBankPartner(values);
-        alert("Mitra bank berhasil disimpan!");
+        toast.success("Mitra bank berhasil disimpan!");
       }
       setOpen(false);
       form.reset();
@@ -115,77 +116,74 @@ export function BankPartnerForm({ id, initialData }: Props) {
 
           <form onSubmit={form.handleSubmit(onSubmit)} className="p-6 space-y-4 overflow-y-auto max-h-[75vh]">
             {errorMsg && (
-              <div className="flex items-start gap-2 p-3 bg-rose-50 border border-rose-100 text-rose-700 text-xs font-semibold rounded-xl">
+              <div role="alert" className="flex items-start gap-2 p-3 bg-destructive/10 border border-destructive/20 text-destructive text-xs font-semibold rounded-xl">
                 <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
                 {errorMsg}
               </div>
             )}
 
-            <div className="space-y-1.5">
-              <Label htmlFor="name" className="text-xs font-semibold text-[#243028]">
-                {t("bank_form.name")} <span className="text-red-500">*</span>
-              </Label>
+            <FormFieldGroup>
+              <FormLabel htmlFor="name" required>{t("bank_form.name")}</FormLabel>
               <Input
                 id="name"
                 required
                 {...form.register("name")}
                 placeholder={t("bank_form.name_placeholder")}
-                className="bg-white border-[#D6DED2] rounded-xl text-xs h-9 focus:ring-[#8FAF9A]"
+                aria-invalid={!!form.formState.errors.name}
+                className="bg-card border-input rounded-xl text-xs h-9 focus-visible:ring-2 focus-visible:ring-ring aria-[invalid=true]:border-destructive"
               />
-              {form.formState.errors.name && (
-                <p className="text-xs text-rose-500">{t("bank_form.error_name")}</p>
-              )}
-            </div>
+              <FieldError>{form.formState.errors.name && t("bank_form.error_name")}</FieldError>
+            </FormFieldGroup>
 
             <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="contactPerson" className="text-xs font-semibold text-[#243028]">
-                  {t("bank_form.contact")} (Opsional)
-                </Label>
+              <FormFieldGroup>
+                <FormLabel htmlFor="contactPerson">
+                  {t("bank_form.contact")} <span className="font-normal text-muted-foreground">(Opsional)</span>
+                </FormLabel>
                 <Input
                   id="contactPerson"
                   {...form.register("contactPerson")}
                   placeholder={t("bank_form.contact_placeholder")}
-                  className="bg-white border-[#D6DED2] rounded-xl text-xs h-9 focus:ring-[#8FAF9A]"
+                  className="bg-card border-input rounded-xl text-xs h-9 focus-visible:ring-2 focus-visible:ring-ring"
                 />
-              </div>
+              </FormFieldGroup>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="phone" className="text-xs font-semibold text-[#243028]">
-                  {t("bank_form.phone")} (Opsional)
-                </Label>
+              <FormFieldGroup>
+                <FormLabel htmlFor="phone">
+                  {t("bank_form.phone")} <span className="font-normal text-muted-foreground">(Opsional)</span>
+                </FormLabel>
                 <Input
                   id="phone"
                   {...form.register("phone")}
                   placeholder={t("bank_form.phone_placeholder")}
-                  className="bg-white border-[#D6DED2] rounded-xl text-xs h-9 focus:ring-[#8FAF9A] font-mono"
+                  className="bg-card border-input rounded-xl text-xs h-9 focus-visible:ring-2 focus-visible:ring-ring font-mono"
                 />
-              </div>
+              </FormFieldGroup>
             </div>
 
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold text-[#243028]">{t("bank_form.status")} <span className="text-red-500">*</span></Label>
+            <FormFieldGroup>
+              <FormLabel required>{t("bank_form.status")}</FormLabel>
               <Select required value={statusValue} onValueChange={(val: string | null) => form.setValue("status", val ?? "active")}>
-                <SelectTrigger className="w-full text-xs rounded-xl border border-[#D6DED2] bg-white hover:bg-[#F7F8F3]/50 focus:ring-2 focus:ring-[#8FAF9A]/20 h-9 px-3 transition-premium">
+                <SelectTrigger className="w-full text-xs rounded-xl border border-input bg-card hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring h-9 px-3 transition-premium">
                   <SelectValue>
                     {statusValue ? t(`bank.status_${statusValue}` as any) : undefined}
                   </SelectValue>
                 </SelectTrigger>
-                <SelectContent className="border-[#D6DED2] rounded-xl bg-white/95 backdrop-blur-md">
+                <SelectContent className="border-input rounded-xl bg-popover backdrop-blur-md">
                   <SelectItem value="active" className="text-xs">{t("bank.status_active")}</SelectItem>
                   <SelectItem value="inactive" className="text-xs">{t("bank.status_inactive")}</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
+            </FormFieldGroup>
 
-            <DialogFooter className="pt-4 gap-2 border-t border-[#D6DED2] mt-2">
-              <Button type="button" variant="outline" onClick={() => setOpen(false)} className="rounded-xl border-[#D6DED2] text-xs h-9 hover:bg-[#F7F8F3]/50">
+            <DialogFooter className="pt-4 gap-2 border-t border-border mt-2">
+              <Button type="button" variant="outline" onClick={() => setOpen(false)} className="rounded-xl text-xs h-9">
                 {t("action.cancel")}
               </Button>
               <Button
                 type="submit"
                 disabled={loading}
-                className="bg-[#4F6F52] hover:bg-[#3D563F] text-white active:scale-95 shadow-[0_4px_14px_rgba(79,111,82,0.25)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 h-9 rounded-xl font-bold text-xs px-4 gap-2"
+                className="bg-primary hover:bg-primary/90 text-primary-foreground btn-premium h-9 rounded-xl font-bold text-xs px-4 gap-2"
               >
                 {loading && <Loader2 className="h-4 w-4 animate-spin" />}
                 {id ? t("bank_form.save_edit") : t("bank_form.save_add")}

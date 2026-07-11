@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useTransition, useRef } from "react";
 import { updateSiteplanImage, deleteSiteplan, updateSiteplanPublicStatus } from "@/server/actions/siteplan";
@@ -11,6 +11,7 @@ import { ImageIcon, Link2, Save, Upload, X, FileImage, Loader2, Trash2, AlertTri
 import { parseServerError } from "@/lib/error-parser";
 import { useI18n } from "@/lib/i18n";
 import { Separator } from "@/components/ui/separator";
+import { toast } from "sonner";
 
 export function ImageUploadForm({
   siteplanId,
@@ -189,14 +190,14 @@ export function ImageUploadForm({
               startTransition(async () => {
                 try {
                   await updateSiteplanPublicStatus(siteplanId, val);
-                  alert(`Akses publik siteplan berhasil ${val ? "diaktifkan" : "dinonaktifkan"}!`);
+                  toast.success(`Akses publik siteplan berhasil ${val ? "diaktifkan" : "dinonaktifkan"}!`);
                 } catch (err) {
                   setPublicEnabled(!val);
-                  alert(parseServerError(err));
+                  toast.error(parseServerError(err));
                 }
               });
             }}
-            className="w-5 h-5 rounded-lg border-[#D6DED2] text-[#4F6F52] focus:ring-[#8FAF9A] rounded cursor-pointer accent-[#4F6F52]"
+            className="w-5 h-5 rounded-lg border-[#D6DED2] text-[#4F6F52] focus:ring-ring rounded cursor-pointer accent-[#4F6F52]"
           />
         </div>
 

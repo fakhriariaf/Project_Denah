@@ -19,6 +19,7 @@ import {
 import { UserPlus, Loader2, AlertCircle } from "lucide-react";
 import { parseServerError } from "@/lib/error-parser";
 import { useI18n } from "@/lib/i18n";
+import { toast } from "sonner";
 
 const schema = z.object({
   name: z.string().min(2, "Nama minimal 2 karakter"),
@@ -52,12 +53,14 @@ export function CreateUserForm({ roles }: { roles: RoleOption[] }) {
       setError(null);
       try {
         await createUser(data);
-        alert("Pengguna baru berhasil dibuat!");
+        toast.success("Pengguna baru berhasil dibuat!");
         setOpen(false);
         reset();
         router.refresh();
       } catch (err) {
-        setError(parseServerError(err));
+        const msg = parseServerError(err);
+        setError(msg);
+        toast.error(msg);
       }
     });
   };
@@ -65,7 +68,7 @@ export function CreateUserForm({ roles }: { roles: RoleOption[] }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger nativeButton={true} render={
-        <Button className="bg-[#4F6F52] hover:bg-[#3D563F] text-white active:scale-95 shadow-[0_4px_14px_rgba(79,111,82,0.25)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 h-9 rounded-xl font-bold text-xs px-4">
+        <Button className="bg-[#4F6F52] hover:bg-[#3D563F] text-white active:scale-95 btn-premium h-9 rounded-xl font-bold text-xs px-4">
           <UserPlus className="mr-2 h-4 w-4" />
           {t("users.btn_create")}
         </Button>
@@ -100,7 +103,7 @@ export function CreateUserForm({ roles }: { roles: RoleOption[] }) {
               required
               {...register("name")} 
               placeholder={t("users.ph_name")} 
-              className="bg-white border-[#D6DED2] rounded-xl text-xs h-9 focus:ring-[#8FAF9A] focus:ring-2 focus:border-transparent transition-all"
+              className="bg-white border-[#D6DED2] rounded-xl text-xs h-9 focus:ring-ring focus:ring-2 focus:border-transparent transition-all"
             />
             {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name.message}</p>}
           </div>
@@ -113,7 +116,7 @@ export function CreateUserForm({ roles }: { roles: RoleOption[] }) {
               required
               {...register("email")} 
               placeholder={t("users.ph_email")} 
-              className="bg-white border-[#D6DED2] rounded-xl text-xs h-9 focus:ring-[#8FAF9A] focus:ring-2 focus:border-transparent transition-all"
+              className="bg-white border-[#D6DED2] rounded-xl text-xs h-9 focus:ring-ring focus:ring-2 focus:border-transparent transition-all"
             />
             {errors.email && <p className="text-xs text-red-500 mt-1">{errors.email.message}</p>}
           </div>
@@ -126,7 +129,7 @@ export function CreateUserForm({ roles }: { roles: RoleOption[] }) {
               required
               {...register("password")} 
               placeholder="Min. 8" 
-              className="bg-white border-[#D6DED2] rounded-xl text-xs h-9 focus:ring-[#8FAF9A] focus:ring-2 focus:border-transparent transition-all"
+              className="bg-white border-[#D6DED2] rounded-xl text-xs h-9 focus:ring-ring focus:ring-2 focus:border-transparent transition-all"
             />
             {errors.password && <p className="text-xs text-red-500 mt-1">{errors.password.message}</p>}
           </div>
@@ -138,7 +141,7 @@ export function CreateUserForm({ roles }: { roles: RoleOption[] }) {
               onValueChange={(v) => setValue("roleId", v ?? "")}
               required
             >
-              <SelectTrigger className="w-full text-xs rounded-xl border border-[#D6DED2] bg-white hover:bg-[#F7F8F3]/50 focus:ring-2 focus:ring-[#8FAF9A]/20 h-9 px-3 transition-premium">
+              <SelectTrigger className="w-full text-xs rounded-xl border border-[#D6DED2] bg-white hover:bg-[#F7F8F3]/50 focus:ring-2 focus:ring-ring/20 h-9 px-3 transition-premium">
                 <SelectValue placeholder={t("users.label_role")}>
                   {watch("roleId") ? roles.find(r => r.id === watch("roleId"))?.name.replace(/_/g, " ") : undefined}
                 </SelectValue>
@@ -166,7 +169,7 @@ export function CreateUserForm({ roles }: { roles: RoleOption[] }) {
             <Button 
               type="submit" 
               disabled={isPending} 
-              className="bg-[#4F6F52] hover:bg-[#3D563F] text-white active:scale-95 shadow-[0_4px_14px_rgba(79,111,82,0.25)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 h-9 rounded-xl font-bold text-xs px-4 gap-2"
+              className="bg-[#4F6F52] hover:bg-[#3D563F] text-white active:scale-95 btn-premium h-9 rounded-xl font-bold text-xs px-4 gap-2"
             >
               {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
               {isPending ? t("users.create_submitting") : t("users.create_submit")}

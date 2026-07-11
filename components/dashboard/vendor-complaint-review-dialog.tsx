@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useState, useEffect } from "react";
 import { 
@@ -216,7 +216,7 @@ export function VendorComplaintReviewDialog({
                 value={decision} 
                 onValueChange={(val: any) => setDecision(val)}
               >
-                <SelectTrigger className="w-full! h-10 border-[#D6DED2] bg-white rounded-xl focus:ring-[#4F6F52] focus:border-[#4F6F52] text-sm text-[#243028]">
+                <SelectTrigger className="w-full! h-10 border-[#D6DED2] bg-white rounded-xl focus:ring-ring focus:border-[#4F6F52] text-sm text-[#243028]">
                   <SelectValue placeholder="Pilih keputusan">
                     {decision === "resolved" && "Selesaikan Kendala (Resolved)"}
                     {decision === "approved_extension" && "Setujui Tambahan Waktu (Extension)"}
@@ -260,7 +260,7 @@ export function VendorComplaintReviewDialog({
                 placeholder="Tuliskan ulasan pemeriksaan fisik lapangan, tindak lanjut, atau alasan keputusan secara detail..."
                 value={supervisorNote}
                 onChange={(e) => setSupervisorNote(e.target.value)}
-                className="min-h-[80px] border-[#D6DED2] rounded-xl focus:ring-[#4F6F52] focus:border-[#4F6F52] text-sm"
+                className="min-h-[80px] border-[#D6DED2] rounded-xl focus:ring-ring focus:border-[#4F6F52] text-sm"
               />
             </div>
 

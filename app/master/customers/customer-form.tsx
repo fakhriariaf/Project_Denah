@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { FormLabel, FieldError, FormFieldGroup } from "@/components/ui/form-primitives";
 import { Plus, Users, AlertCircle, Loader2 } from "lucide-react";
 import { parseServerError } from "@/lib/error-parser";
 import { handleActionResult, type ActionResult } from "@/lib/action-utils";
@@ -180,24 +181,24 @@ export function CustomerForm({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger nativeButton={true} render={
         id ? (
-          <Button variant="outline" size="sm" className="h-7 text-xs border-[#D6DED2] rounded-lg hover:bg-[#F7F8F3]/50">{t("cust_form.edit_btn")}</Button>
+          <Button variant="outline" size="sm" className="h-7 text-xs border-input rounded-lg hover:bg-muted/50">{t("cust_form.edit_btn")}</Button>
         ) : (
-          <Button className="bg-[#4F6F52] hover:bg-[#3D563F] text-white active:scale-95 shadow-[0_4px_14px_rgba(79,111,82,0.25)] transition-all duration-300 h-9 rounded-xl font-bold text-xs px-4">
+          <Button className="bg-primary hover:bg-primary/90 text-primary-foreground active:scale-95 shadow-[0_4px_14px_rgba(79,111,82,0.25)] transition-all duration-300 h-9 rounded-xl font-bold text-xs px-4">
             <Plus className="mr-2 h-4 w-4" />
             {t("cust_form.add_btn")}
           </Button>
         )
       } />
-      <DialogContent className="sm:max-w-lg rounded-3xl bg-white/98 backdrop-blur-md border border-[#D6DED2] shadow-[0_8px_30px_rgb(143,175,154,0.15)] p-0 overflow-hidden font-sans">
-        <div className="bg-gradient-to-r from-[#DDE8D8]/70 via-white/80 to-transparent p-6 border-b border-[#D6DED2]">
+      <DialogContent className="sm:max-w-lg rounded-3xl bg-white/98 backdrop-blur-md border border-input shadow-[0_8px_30px_rgb(143,175,154,0.15)] p-0 overflow-hidden font-sans">
+        <div className="bg-gradient-to-r from-[#DDE8D8]/70 via-white/80 to-transparent p-6 border-b border-input">
           <DialogHeader>
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-xl bg-white/80 border border-[#D6DED2] flex items-center justify-center shadow-sm">
-                <Users className="h-5 w-5 text-[#4F6F52]" />
+              <div className="h-10 w-10 rounded-xl bg-white/80 border border-input flex items-center justify-center shadow-sm">
+                <Users className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <DialogTitle className="text-xl font-black text-[#243028] tracking-tight">{id ? t("cust_form.edit_title") : t("cust_form.add_title")}</DialogTitle>
-                <DialogDescription className="text-xs text-[#66736A] mt-1">
+                <DialogTitle className="text-xl font-black text-foreground tracking-tight">{id ? t("cust_form.edit_title") : t("cust_form.add_title")}</DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground mt-1">
                   {id ? t("cust_form.edit_desc") : t("cust_form.add_desc")}
                 </DialogDescription>
               </div>
@@ -213,20 +214,20 @@ export function CustomerForm({
           )}
           
           <div className="space-y-1.5">
-            <Label htmlFor="name" className="text-xs font-semibold text-[#243028]">{t("cust_form.name")} <span className="text-red-500">*</span></Label>
-            <Input id="name" required {...register("name")} placeholder={t("cust_form.name_placeholder")} className="bg-white border-[#D6DED2] rounded-xl text-xs h-9 focus:ring-[#8FAF9A] focus:ring-2 focus:border-transparent transition-all" />
-            {errors.name && <p className="text-xs text-red-500">{errors.name.message as string}</p>}
+            <Label htmlFor="name" className="text-xs font-semibold text-foreground">{t("cust_form.name")} <span className="text-destructive">*</span></Label>
+            <Input id="name" required {...register("name")} placeholder={t("cust_form.name_placeholder")} className="bg-card border-input rounded-xl text-xs h-9 focus-visible:ring-2 focus-visible:ring-ring" />
+            {errors.name && <p className="text-xs text-destructive">{errors.name.message as string}</p>}
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="nik" className="text-xs font-semibold text-[#243028]">{t("cust_form.nik")} <span className="text-[#8FAF9A] font-normal">(Opsional)</span></Label>
+            <Label htmlFor="nik" className="text-xs font-semibold text-foreground">{t("cust_form.nik")} <span className="font-normal text-muted-foreground">(Opsional)</span></Label>
             <div className="relative">
               <Input 
                 id="nik" 
                 {...register("nik")} 
                 maxLength={16}
                 placeholder={t("cust_form.nik_placeholder")} 
-                className="font-mono bg-white border-[#D6DED2] rounded-xl text-xs h-9 focus:ring-[#8FAF9A] focus:ring-2 focus:border-transparent transition-all tabular-nums pr-12"
+                className="font-mono bg-card border-input rounded-xl text-xs h-9 focus-visible:ring-2 focus-visible:ring-ring tabular-nums pr-12"
               />
               <div className="absolute right-3 top-2.5 text-[10px] font-semibold text-muted-foreground">
                 {nikValue.length}/16
@@ -235,53 +236,53 @@ export function CustomerForm({
             {nikValue.length > 0 && (
               <div className="transition-all duration-300 ease-in-out">
                 {!/^\d+$/.test(nikValue) ? (
-                  <p className="text-[10px] text-red-500 font-medium">{t("cust_form.nik_err_number")}</p>
+                  <p className="text-[10px] text-destructive font-medium">{t("cust_form.nik_err_number")}</p>
                 ) : nikValue.length < 16 ? (
                   <p className="text-[10px] text-amber-600 font-medium">{t("cust_form.nik_err_wait")}</p>
                 ) : parsedNik ? (
-                  <div className="mt-2 p-3 bg-[#DDE8D8]/20 border border-[#8FAF9A]/20 rounded-xl space-y-1 text-xs">
+                  <div className="mt-2 p-3 bg-secondary/20 border border-primary/20 rounded-xl space-y-1 text-xs">
                     <div className="flex justify-between items-center text-primary font-bold">
                       <span>{t("cust_form.nik_valid_title")}</span>
-                      <span className="bg-[#4F6F52] text-white text-[9px] px-1.5 py-0.5 rounded-full">{t("cust_form.nik_sys")}</span>
+                      <span className="bg-primary text-primary-foreground text-[9px] px-1.5 py-0.5 rounded-full">{t("cust_form.nik_sys")}</span>
                     </div>
-                    <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[11px] text-[#4F6F52] font-semibold pt-1">
+                    <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[11px] text-primary font-semibold pt-1">
                       <div>{t("cust_form.nik_prov")} <span className="text-foreground font-bold">{parsedNik.province}</span></div>
                       <div>{t("cust_form.nik_gender")} <span className="text-foreground font-bold">{parsedNik.gender}</span></div>
                       <div className="col-span-2">{t("cust_form.nik_dob")} <span className="text-foreground font-bold">{parsedNik.dob}</span></div>
                     </div>
                   </div>
                 ) : (
-                  <p className="text-[10px] text-red-500 font-medium">{t("cust_form.nik_err_format")}</p>
+                  <p className="text-[10px] text-destructive font-medium">{t("cust_form.nik_err_format")}</p>
                 )}
               </div>
             )}
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="phone" className="text-xs font-semibold text-[#243028]">{t("cust_form.phone")} <span className="text-red-500">*</span></Label>
-            <Input id="phone" required {...register("phone")} placeholder={t("cust_form.phone_placeholder")} className="font-mono bg-white border-[#D6DED2] rounded-xl text-xs h-9 focus:ring-[#8FAF9A] focus:ring-2 focus:border-transparent transition-all tabular-nums" />
-            {errors.phone && <p className="text-xs text-red-500">{errors.phone.message as string}</p>}
+            <Label htmlFor="phone" className="text-xs font-semibold text-foreground">{t("cust_form.phone")} <span className="text-destructive">*</span></Label>
+            <Input id="phone" required {...register("phone")} placeholder={t("cust_form.phone_placeholder")} className="font-mono bg-card border-input rounded-xl text-xs h-9 focus-visible:ring-2 focus-visible:ring-ring tabular-nums" />
+            {errors.phone && <p className="text-xs text-destructive">{errors.phone.message as string}</p>}
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="email" className="text-xs font-semibold text-[#243028]">{t("cust_form.email")} <span className="text-[#8FAF9A] font-normal">(Opsional)</span></Label>
-            <Input id="email" type="email" {...register("email")} placeholder={t("cust_form.email_placeholder")} className="bg-white border-[#D6DED2] rounded-xl text-xs h-9 focus:ring-[#8FAF9A] focus:ring-2 focus:border-transparent transition-all" />
-            {errors.email && <p className="text-xs text-red-500">{errors.email.message as string}</p>}
+            <Label htmlFor="email" className="text-xs font-semibold text-foreground">{t("cust_form.email")} <span className="font-normal text-muted-foreground">(Opsional)</span></Label>
+            <Input id="email" type="email" {...register("email")} placeholder={t("cust_form.email_placeholder")} className="bg-card border-input rounded-xl text-xs h-9 focus-visible:ring-2 focus-visible:ring-ring" />
+            {errors.email && <p className="text-xs text-destructive">{errors.email.message as string}</p>}
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="address" className="text-xs font-semibold text-[#243028]">{t("cust_form.address")} <span className="text-[#8FAF9A] font-normal">(Opsional)</span></Label>
-            <Input id="address" {...register("address")} placeholder={t("cust_form.address_placeholder")} className="bg-white border-[#D6DED2] rounded-xl text-xs h-9 focus:ring-[#8FAF9A] focus:ring-2 focus:border-transparent transition-all" />
+            <Label htmlFor="address" className="text-xs font-semibold text-foreground">{t("cust_form.address")} <span className="font-normal text-muted-foreground">(Opsional)</span></Label>
+            <Input id="address" {...register("address")} placeholder={t("cust_form.address_placeholder")} className="bg-card border-input rounded-xl text-xs h-9 focus-visible:ring-2 focus-visible:ring-ring" />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label htmlFor="source" className="text-xs font-semibold text-[#243028]">{t("cust_form.source")} <span className="text-[#8FAF9A] font-normal">(Opsional)</span></Label>
+              <Label htmlFor="source" className="text-xs font-semibold text-foreground">{t("cust_form.source")} <span className="font-normal text-muted-foreground">(Opsional)</span></Label>
               <Select 
                 value={watch("source") ?? ""} 
                 onValueChange={(val) => setValue("source", val as CustomerInput["source"])}
               >
-                <SelectTrigger className="w-full text-xs rounded-xl border border-[#D6DED2] bg-white hover:bg-[#F7F8F3]/50 focus:ring-2 focus:ring-[#8FAF9A]/20 h-9 px-3 transition-premium">
+                <SelectTrigger className="w-full text-xs rounded-xl border border-input bg-card hover:bg-muted/50 focus:ring-2 focus:ring-ring/20 h-9 px-3 transition-premium">
                   <SelectValue placeholder="Pilih...">
                     {(() => {
                       const val = watch("source");
@@ -289,7 +290,7 @@ export function CustomerForm({
                     })()}
                   </SelectValue>
                 </SelectTrigger>
-                <SelectContent className="border-[#D6DED2] rounded-xl bg-white/95 backdrop-blur-md">
+                <SelectContent className="border-input rounded-xl bg-popover backdrop-blur-md">
                   <SelectItem value="walk_in" className="text-xs">{t("cust_form.source_walk_in")}</SelectItem>
                   <SelectItem value="ads" className="text-xs">{t("cust_form.source_ads")}</SelectItem>
                   <SelectItem value="social_media" className="text-xs">{t("cust_form.source_social_media")}</SelectItem>
@@ -301,14 +302,14 @@ export function CustomerForm({
             </div>
             
             <div className="space-y-1.5">
-              <Label htmlFor="status" className="text-xs font-semibold text-[#243028]">{t("cust_form.status")} <span className="text-red-500">*</span></Label>
+              <Label htmlFor="status" className="text-xs font-semibold text-foreground">{t("cust_form.status")} <span className="text-destructive">*</span></Label>
               <Select 
                 value={watch("status") ?? ""} 
                 onValueChange={(val) => setValue("status", val as any)}
                 required
                 disabled={!id}
               >
-                <SelectTrigger className="w-full text-xs rounded-xl border border-[#D6DED2] bg-white hover:bg-[#F7F8F3]/50 focus:ring-2 focus:ring-[#8FAF9A]/20 h-9 px-3 transition-premium">
+                <SelectTrigger className="w-full text-xs rounded-xl border border-input bg-card hover:bg-muted/50 focus:ring-2 focus:ring-ring/20 h-9 px-3 transition-premium">
                   <SelectValue placeholder="Pilih...">
                     {(() => {
                       const val = watch("status");
@@ -316,7 +317,7 @@ export function CustomerForm({
                     })()}
                   </SelectValue>
                 </SelectTrigger>
-                <SelectContent className="border-[#D6DED2] rounded-xl bg-white/95 backdrop-blur-md">
+                <SelectContent className="border-input rounded-xl bg-popover backdrop-blur-md">
                   {!id ? (
                     <SelectItem value="prospect" className="text-xs">Konsumen Baru</SelectItem>
                   ) : (
@@ -346,11 +347,11 @@ export function CustomerForm({
             </div>
           </div>
 
-          <DialogFooter className="pt-4 gap-2 border-t border-[#D6DED2] mt-2">
-            <Button variant="outline" type="button" onClick={() => setOpen(false)} className="rounded-xl border-[#D6DED2] text-xs h-9 hover:bg-[#F7F8F3]/50">
+          <DialogFooter className="pt-4 gap-2 border-t border-input mt-2">
+            <Button variant="outline" type="button" onClick={() => setOpen(false)} className="rounded-xl text-xs h-9">
               {t("action.cancel")}
             </Button>
-            <Button type="submit" disabled={isPending} className="bg-[#4F6F52] hover:bg-[#3D563F] text-white active:scale-95 shadow-[0_4px_14px_rgba(79,111,82,0.25)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 h-9 rounded-xl font-bold text-xs px-4 gap-2">
+            <Button type="submit" disabled={isPending} className="bg-primary hover:bg-primary/90 text-primary-foreground active:scale-95 btn-premium h-9 rounded-xl font-bold text-xs px-4 gap-2">
               {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
               {isPending ? t("cust_form.saving") : t("cust_form.save")}
             </Button>

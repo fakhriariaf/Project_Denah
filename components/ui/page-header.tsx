@@ -30,29 +30,29 @@ export function PageHeader({
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#DDE8D8]/70 via-white/95 to-[#DDE8D8]/40 dark:from-[#18221D]/70 dark:via-[#151E1A]/95 dark:to-[#18221D]/40 border border-[#D6DED2] dark:border-[#1F2E26] p-6 shadow-sage animate-in fade-in duration-500",
+        "relative overflow-hidden rounded-2xl bg-gradient-to-r from-secondary/70 via-card/95 to-secondary/40 border border-border p-6 shadow-sage animate-in fade-in duration-500",
         className
       )}
     >
       {/* Decorative blur circles */}
-      <div className="absolute -top-6 -right-6 h-28 w-28 rounded-full bg-[#8FAF9A]/10 blur-2xl pointer-events-none" />
-      <div className="absolute bottom-0 left-1/4 h-20 w-20 rounded-full bg-[#4F6F52]/5 blur-xl pointer-events-none" />
+      <div className="absolute -top-6 -right-6 h-28 w-28 rounded-full bg-primary/10 blur-2xl pointer-events-none" />
+      <div className="absolute bottom-0 left-1/4 h-20 w-20 rounded-full bg-primary/5 blur-xl pointer-events-none" />
 
       {/* Content */}
       <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           {/* Icon container */}
-          <div className="h-12 w-12 rounded-2xl bg-[#4F6F52] text-white flex items-center justify-center shadow-[0_4px_12px_rgba(79,111,82,0.3)] shrink-0">
+          <div className="h-12 w-12 rounded-2xl bg-primary text-primary-foreground flex items-center justify-center shadow-[0_4px_12px_rgba(79,111,82,0.3)] shrink-0">
             {icon}
           </div>
 
           {/* Title and description */}
           <div>
-            <h1 className="text-2xl font-black text-[#243028] dark:text-[#E3EAE6] tracking-tight font-inter">
+            <h1 className="text-2xl font-black text-foreground tracking-tight font-sans">
               {title}
             </h1>
             {description && (
-              <p className="text-sm text-[#66736A] dark:text-[#8AA293] mt-0.5">{description}</p>
+              <p className="text-sm text-muted-foreground mt-0.5">{description}</p>
             )}
           </div>
         </div>

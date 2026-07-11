@@ -70,3 +70,10 @@ python-ai-engine/__pycache__/
 Thumbs.db
 ehthumbs.db
 
+
+# storybook
+/storybook-static
+
+# Codex local notes
+/.codex/
+

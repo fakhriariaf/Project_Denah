@@ -13,6 +13,7 @@ import { deleteProject, forceDeleteProject } from "@/server/actions/master";
 import { Building2, MapPin, Layers, LayoutGrid, CheckCircle2, AlertCircle, Info, Edit3, Trash2 } from "lucide-react";
 import type { ProjectInput } from "@/server/validators/master";
 import { useI18n } from "@/lib/i18n";
+import { toast } from "sonner";
 
 interface Project {
   id: string;
@@ -93,7 +94,7 @@ export function ProjectsShell({
       </div>
 
       {/* Main Dual Pane Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-start">
         {/* Left Pane (Table): 65% width equivalent */}
         <div className="lg:col-span-2 space-y-4">
           <Card className="border-[#D6DED2]/80 shadow-sage bg-white rounded-2xl overflow-hidden">
@@ -340,12 +341,12 @@ export function ProjectsShell({
                           try {
                             const res = await forceDeleteProject(selectedProject.id);
                             if (res.success) {
-                              alert(res.message);
+                              toast.success(res.message);
                               setSelectedProjectId(null);
                               router.refresh();
                             }
                           } catch (err) {
-                            alert(err instanceof Error ? err.message : "Gagal menghapus proyek.");
+                            toast.error(err instanceof Error ? err.message : "Gagal menghapus proyek.");
                           }
                         }}
                       >

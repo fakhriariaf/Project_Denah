@@ -158,31 +158,31 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {success && (
-        <div className="p-4 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 rounded-xl border border-emerald-500/25 flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-300 shadow-sm">
+        <div className="p-4 bg-emerald-500/10 text-emerald-700 rounded-xl border border-emerald-500/25 flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-300 shadow-sm">
           <CheckCircle2 className="h-5 w-5 text-emerald-600 flex-shrink-0" />
           <div className="text-sm font-semibold">{t("settings.msg_save_ok")}</div>
         </div>
       )}
 
       {error && (
-        <div className="p-4 bg-rose-500/10 text-rose-700 dark:text-rose-300 rounded-xl border border-rose-500/25 flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-300 shadow-sm">
+        <div className="p-4 bg-rose-500/10 text-rose-700 rounded-xl border border-rose-500/25 flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-300 shadow-sm">
           <AlertTriangle className="h-5 w-5 text-rose-600 flex-shrink-0" />
           <div className="text-sm font-semibold">{error}</div>
         </div>
       )}
 
       <Tabs defaultValue="profile" className="w-full">
-        <TabsList className="grid grid-cols-4 w-full max-w-xl mb-6 bg-[#DDE8D8]/50 p-1 border border-[#D6DED2] rounded-xl dark:bg-muted dark:border-border">
-          <TabsTrigger value="profile" className="rounded-lg text-xs font-semibold data-[state=active]:bg-[#4F6F52] data-[state=active]:text-white dark:data-[state=active]:bg-primary dark:data-[state=active]:text-primary-foreground">
+        <TabsList className="grid grid-cols-4 w-full max-w-xl mb-6 bg-[#DDE8D8]/50 p-1 border border-[#D6DED2] rounded-xl">
+          <TabsTrigger value="profile" className="rounded-lg text-xs font-semibold data-[state=active]:bg-[#4F6F52] data-[state=active]:text-white=active]:bg-primary=active]:text-primary-foreground">
             <Building2 className="h-3.5 w-3.5 mr-1.5" /> {t("settings.tab_profile")}
           </TabsTrigger>
-          <TabsTrigger value="rules" className="rounded-lg text-xs font-semibold data-[state=active]:bg-[#4F6F52] data-[state=active]:text-white dark:data-[state=active]:bg-primary dark:data-[state=active]:text-primary-foreground">
+          <TabsTrigger value="rules" className="rounded-lg text-xs font-semibold data-[state=active]:bg-[#4F6F52] data-[state=active]:text-white=active]:bg-primary=active]:text-primary-foreground">
             <Clock className="h-3.5 w-3.5 mr-1.5" /> {t("settings.tab_rules")}
           </TabsTrigger>
-          <TabsTrigger value="system" className="rounded-lg text-xs font-semibold data-[state=active]:bg-[#4F6F52] data-[state=active]:text-white dark:data-[state=active]:bg-primary dark:data-[state=active]:text-primary-foreground">
+          <TabsTrigger value="system" className="rounded-lg text-xs font-semibold data-[state=active]:bg-[#4F6F52] data-[state=active]:text-white=active]:bg-primary=active]:text-primary-foreground">
             <ShieldCheck className="h-3.5 w-3.5 mr-1.5" /> {t("settings.tab_system")}
           </TabsTrigger>
-          <TabsTrigger value="reminders" className="rounded-lg text-xs font-semibold data-[state=active]:bg-[#4F6F52] data-[state=active]:text-white dark:data-[state=active]:bg-primary dark:data-[state=active]:text-primary-foreground">
+          <TabsTrigger value="reminders" className="rounded-lg text-xs font-semibold data-[state=active]:bg-[#4F6F52] data-[state=active]:text-white=active]:bg-primary=active]:text-primary-foreground">
             <Bell className="h-3.5 w-3.5 mr-1.5" /> {t("settings.tab_reminders")}
           </TabsTrigger>
         </TabsList>
@@ -286,12 +286,12 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
               <CardDescription className="text-xs">{t("settings.sys_desc")}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="flex items-center justify-between p-4 rounded-xl border border-rose-500/20 bg-rose-500/8 dark:bg-rose-950/20 max-w-2xl">
+              <div className="flex items-center justify-between p-4 rounded-xl border border-rose-500/20 bg-rose-500/8 max-w-2xl">
                 <div className="space-y-1 pr-4">
                   <Label htmlFor="maintenance" className="text-sm font-bold text-foreground flex items-center gap-1.5">
                     <AlertTriangle className="h-4 w-4 text-rose-600" /> {t("settings.maint_title")}
                   </Label>
-                  <p className="text-[10px] text-rose-600 dark:text-rose-400 font-semibold leading-relaxed">
+                  <p className="text-[10px] text-rose-600 font-semibold leading-relaxed">
                     {t("settings.maint_desc")}
                   </p>
                 </div>
@@ -335,7 +335,7 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
               </div>
 
               {/* DANGER ZONE - HARD DELETE */}
-              <div className="pt-6 mt-6 border-t border-rose-200 dark:border-rose-900/50">
+              <div className="pt-6 mt-6 border-t border-rose-200">
                 <h4 className="text-sm font-bold text-rose-600 mb-4 flex items-center gap-2">
                   <AlertTriangle className="h-4 w-4" /> {t("settings.danger_zone")}
                 </h4>
@@ -393,7 +393,7 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
             </CardHeader>
             <CardContent className="space-y-6">
               {scanResult && (
-                <div className="p-4 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 rounded-xl border border-emerald-500/25 flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-300 shadow-sm">
+                <div className="p-4 bg-emerald-500/10 text-emerald-700 rounded-xl border border-emerald-500/25 flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-300 shadow-sm">
                   <CheckCircle2 className="h-5 w-5 text-emerald-600 flex-shrink-0" />
                   <div className="text-sm font-semibold">{scanResult}</div>
                 </div>
@@ -450,7 +450,7 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
       <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#D6DED2]">
         <Button
           type="submit"
-          className="bg-[#4F6F52] hover:bg-[#3D563F] text-white font-bold text-xs px-5 rounded-xl btn-premium shadow-glow-sage flex items-center gap-1.5 h-10 transition-all duration-300"
+          className="bg-[#4F6F52] hover:bg-[#3D563F] text-white font-bold text-xs px-5 rounded-xl btn-premium flex items-center gap-1.5 h-10 transition-all duration-300"
           disabled={loading}
         >
           {loading ? t("settings.txt_saving") : (

@@ -97,24 +97,24 @@ export function UnitForm({
         triggerButton ? (
           triggerButton
         ) : id ? (
-          <Button variant="outline" size="sm" className="h-7 text-xs border-[#D6DED2] rounded-lg hover:bg-[#F7F8F3]/50">{t("unit_form.edit_btn")}</Button>
+          <Button variant="outline" size="sm" className="h-7 text-xs border-input rounded-lg hover:bg-muted/50">{t("unit_form.edit_btn")}</Button>
         ) : (
-          <Button className="bg-[#4F6F52] hover:bg-[#3D563F] text-white active:scale-95 shadow-[0_4px_14px_rgba(79,111,82,0.25)] transition-all duration-300 h-9 rounded-xl font-bold text-xs px-4">
+          <Button className="bg-primary hover:bg-primary/90 text-primary-foreground active:scale-95 shadow-[0_4px_14px_rgba(79,111,82,0.25)] transition-all duration-300 h-9 rounded-xl font-bold text-xs px-4">
             <Plus className="mr-2 h-4 w-4" />
             {t("unit_form.add_btn")}
           </Button>
         )
       } />
-      <DialogContent className="sm:max-w-lg rounded-3xl bg-white/98 backdrop-blur-md border border-[#D6DED2] shadow-[0_8px_30px_rgb(143,175,154,0.15)] p-0 overflow-hidden font-sans">
-        <div className="bg-gradient-to-r from-[#DDE8D8]/70 via-white/80 to-transparent p-6 border-b border-[#D6DED2]">
+      <DialogContent className="sm:max-w-lg rounded-3xl bg-white/98 backdrop-blur-md border border-input shadow-[0_8px_30px_rgb(143,175,154,0.15)] p-0 overflow-hidden font-sans">
+        <div className="bg-gradient-to-r from-[#DDE8D8]/70 via-white/80 to-transparent p-6 border-b border-input">
           <DialogHeader>
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-xl bg-white/80 border border-[#D6DED2] flex items-center justify-center shadow-sm">
-                <Home className="h-5 w-5 text-[#4F6F52]" />
+              <div className="h-10 w-10 rounded-xl bg-white/80 border border-input flex items-center justify-center shadow-sm">
+                <Home className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <DialogTitle className="text-xl font-black text-[#243028] tracking-tight">{id ? t("unit_form.edit_title") : t("unit_form.add_title")}</DialogTitle>
-                <DialogDescription className="text-xs text-[#66736A] mt-1">
+                <DialogTitle className="text-xl font-black text-foreground tracking-tight">{id ? t("unit_form.edit_title") : t("unit_form.add_title")}</DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground mt-1">
                   {id ? t("unit_form.edit_desc") : t("unit_form.add_desc")}
                 </DialogDescription>
               </div>
@@ -130,76 +130,76 @@ export function UnitForm({
           )}
           
           <div className="space-y-1.5">
-            <Label htmlFor="projectId" className="text-xs font-semibold text-[#243028]">{t("unit_form.project")} <span className="text-red-500">*</span></Label>
+            <Label htmlFor="projectId" className="text-xs font-semibold text-foreground">{t("unit_form.project")} <span className="text-destructive">*</span></Label>
             <Select 
               value={watch("projectId") ?? ""} 
               onValueChange={(val) => setValue("projectId", val ?? "")}
               required
             >
-              <SelectTrigger className="w-full text-xs rounded-xl border border-[#D6DED2] bg-white hover:bg-[#F7F8F3]/50 focus:ring-2 focus:ring-[#8FAF9A]/20 h-9 px-3 transition-premium">
+              <SelectTrigger className="w-full text-xs rounded-xl border border-input bg-card hover:bg-muted/50 focus:ring-2 focus:ring-ring/20 h-9 px-3 transition-premium">
                 <SelectValue placeholder={t("unit_form.project_placeholder")}>
                   {watch("projectId") ? projects.find(p => p.id === watch("projectId"))?.name : undefined}
                 </SelectValue>
               </SelectTrigger>
-              <SelectContent className="border-[#D6DED2] rounded-xl bg-white/95 backdrop-blur-md">
+              <SelectContent className="border-input rounded-xl bg-popover backdrop-blur-md">
                 {projects.map(p => (
                   <SelectItem key={p.id} value={p.id} className="text-xs">{p.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            {errors.projectId && <p className="text-xs text-red-500">{errors.projectId.message as string}</p>}
+            {errors.projectId && <p className="text-xs text-destructive">{errors.projectId.message as string}</p>}
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="code" className="text-xs font-semibold text-[#243028]">{t("unit_form.code")} <span className="text-red-500">*</span></Label>
-            <Input id="code" required {...register("code")} placeholder="A1-001" className="font-mono bg-white border-[#D6DED2] rounded-xl text-xs h-9 focus:ring-[#8FAF9A] focus:ring-2 focus:border-transparent transition-all tabular-nums" />
-            {errors.code && <p className="text-xs text-red-500">{errors.code.message as string}</p>}
+            <Label htmlFor="code" className="text-xs font-semibold text-foreground">{t("unit_form.code")} <span className="text-destructive">*</span></Label>
+            <Input id="code" required {...register("code")} placeholder="A1-001" className="font-mono bg-card border-input rounded-xl text-xs h-9 focus-visible:ring-2 focus-visible:ring-ring tabular-nums" />
+            {errors.code && <p className="text-xs text-destructive">{errors.code.message as string}</p>}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label htmlFor="cluster" className="text-xs font-semibold text-[#243028]">{t("unit_form.cluster")} <span className="text-[#8FAF9A] font-normal">(Opsional)</span></Label>
-              <Input id="cluster" {...register("cluster")} placeholder="Cluster A" className="bg-white border-[#D6DED2] rounded-xl text-xs h-9 focus:ring-[#8FAF9A] focus:ring-2 focus:border-transparent transition-all" />
+              <Label htmlFor="cluster" className="text-xs font-semibold text-foreground">{t("unit_form.cluster")} <span className="font-normal text-muted-foreground">(Opsional)</span></Label>
+              <Input id="cluster" {...register("cluster")} placeholder="Cluster A" className="bg-card border-input rounded-xl text-xs h-9 focus-visible:ring-2 focus-visible:ring-ring" />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="typeName" className="text-xs font-semibold text-[#243028]">{t("unit_form.type")} <span className="text-[#8FAF9A] font-normal">(Opsional)</span></Label>
-              <Input id="typeName" {...register("typeName")} placeholder="Tipe 36" className="bg-white border-[#D6DED2] rounded-xl text-xs h-9 focus:ring-[#8FAF9A] focus:ring-2 focus:border-transparent transition-all" />
+              <Label htmlFor="typeName" className="text-xs font-semibold text-foreground">{t("unit_form.type")} <span className="font-normal text-muted-foreground">(Opsional)</span></Label>
+              <Input id="typeName" {...register("typeName")} placeholder="Tipe 36" className="bg-card border-input rounded-xl text-xs h-9 focus-visible:ring-2 focus-visible:ring-ring" />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label htmlFor="landArea" className="text-xs font-semibold text-[#243028]">{t("unit_form.land_area")} <span className="text-red-500">*</span></Label>
-              <Input id="landArea" required type="number" step="0.01" {...register("landArea", { valueAsNumber: true })} className="font-mono bg-white border-[#D6DED2] rounded-xl text-xs h-9 focus:ring-[#8FAF9A] focus:ring-2 focus:border-transparent transition-all tabular-nums" />
-              {errors.landArea && <p className="text-xs text-red-500">{errors.landArea.message as string}</p>}
+              <Label htmlFor="landArea" className="text-xs font-semibold text-foreground">{t("unit_form.land_area")} <span className="text-destructive">*</span></Label>
+              <Input id="landArea" required type="number" step="0.01" {...register("landArea", { valueAsNumber: true })} className="font-mono bg-card border-input rounded-xl text-xs h-9 focus-visible:ring-2 focus-visible:ring-ring tabular-nums" />
+              {errors.landArea && <p className="text-xs text-destructive">{errors.landArea.message as string}</p>}
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="buildingArea" className="text-xs font-semibold text-[#243028]">{t("unit_form.build_area")} <span className="text-red-500">*</span></Label>
-              <Input id="buildingArea" required type="number" step="0.01" {...register("buildingArea", { valueAsNumber: true })} className="font-mono bg-white border-[#D6DED2] rounded-xl text-xs h-9 focus:ring-[#8FAF9A] focus:ring-2 focus:border-transparent transition-all tabular-nums" />
-              {errors.buildingArea && <p className="text-xs text-red-500">{errors.buildingArea.message as string}</p>}
+              <Label htmlFor="buildingArea" className="text-xs font-semibold text-foreground">{t("unit_form.build_area")} <span className="text-destructive">*</span></Label>
+              <Input id="buildingArea" required type="number" step="0.01" {...register("buildingArea", { valueAsNumber: true })} className="font-mono bg-card border-input rounded-xl text-xs h-9 focus-visible:ring-2 focus-visible:ring-ring tabular-nums" />
+              {errors.buildingArea && <p className="text-xs text-destructive">{errors.buildingArea.message as string}</p>}
             </div>
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="price" className="text-xs font-semibold text-[#243028]">{t("unit_form.price")} <span className="text-red-500">*</span></Label>
-            <Input id="price" required type="number" {...register("price", { valueAsNumber: true })} className="font-mono bg-white border-[#D6DED2] rounded-xl text-xs h-9 focus:ring-[#8FAF9A] focus:ring-2 focus:border-transparent transition-all tabular-nums" />
-            {errors.price && <p className="text-xs text-red-500">{errors.price.message as string}</p>}
+            <Label htmlFor="price" className="text-xs font-semibold text-foreground">{t("unit_form.price")} <span className="text-destructive">*</span></Label>
+            <Input id="price" required type="number" {...register("price", { valueAsNumber: true })} className="font-mono bg-card border-input rounded-xl text-xs h-9 focus-visible:ring-2 focus-visible:ring-ring tabular-nums" />
+            {errors.price && <p className="text-xs text-destructive">{errors.price.message as string}</p>}
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="status" className="text-xs font-semibold text-[#243028]">{t("unit_form.status")} <span className="text-red-500">*</span></Label>
+            <Label htmlFor="status" className="text-xs font-semibold text-foreground">{t("unit_form.status")} <span className="text-destructive">*</span></Label>
             <Select 
               value={watch("status") ?? ""} 
               onValueChange={(val) => setValue("status", val as UnitInput["status"])}
               required
               disabled={isWorkflowStatus}
             >
-              <SelectTrigger className="w-full text-xs rounded-xl border border-[#D6DED2] bg-white hover:bg-[#F7F8F3]/50 focus:ring-2 focus:ring-[#8FAF9A]/20 h-9 px-3 transition-premium disabled:opacity-75 disabled:bg-muted/40">
+              <SelectTrigger className="w-full text-xs rounded-xl border border-input bg-card hover:bg-muted/50 focus:ring-2 focus:ring-ring/20 h-9 px-3 transition-premium disabled:opacity-75 disabled:bg-muted/40">
                 <SelectValue placeholder={t("unit_form.status_placeholder")}>
                   {watch("status") ? (t(`timeline.${watch("status")}`) || watch("status")) : undefined}
                 </SelectValue>
               </SelectTrigger>
-              <SelectContent className="border-[#D6DED2] rounded-xl bg-white/95 backdrop-blur-md">
+              <SelectContent className="border-input rounded-xl bg-popover backdrop-blur-md">
                 <SelectItem value="belum_siap" className="text-xs">{t("timeline.belum_siap")}</SelectItem>
                 <SelectItem value="available" className="text-xs">{t("timeline.available")}</SelectItem>
                 <SelectItem value="booking" className="text-xs">{t("timeline.booking")}</SelectItem>
@@ -220,24 +220,24 @@ export function UnitForm({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="notes" className="text-xs font-semibold text-[#243028]">{t("unit_form.notes")} <span className="text-[#8FAF9A] font-normal">(Opsional)</span></Label>
-            <Input id="notes" {...register("notes")} placeholder="..." className="bg-white border-[#D6DED2] rounded-xl text-xs h-9 focus:ring-[#8FAF9A] focus:ring-2 focus:border-transparent transition-all" />
+            <Label htmlFor="notes" className="text-xs font-semibold text-foreground">{t("unit_form.notes")} <span className="font-normal text-muted-foreground">(Opsional)</span></Label>
+            <Input id="notes" {...register("notes")} placeholder="..." className="bg-card border-input rounded-xl text-xs h-9 focus-visible:ring-2 focus-visible:ring-ring" />
           </div>
 
           {(watch("status") === "available" || watch("status") === "construction") && (
-            <div className="flex flex-col gap-3 bg-[#F7F8F3] border border-[#D6DED2] rounded-xl p-4 animate-in fade-in slide-in-from-top-2">
+            <div className="flex flex-col gap-3 bg-muted/30 border border-input rounded-xl p-4 animate-in fade-in slide-in-from-top-2">
               <div className="flex items-start gap-3">
                 <input
                   type="checkbox"
                   id="isReadyStock"
                   {...register("isReadyStock")}
-                  className="w-4 h-4 mt-0.5 rounded border-[#D6DED2] text-[#8FAF9A] focus:ring-[#8FAF9A]"
+                  className="w-4 h-4 mt-0.5 rounded border-input text-primary/70 focus:ring-ring"
                 />
                 <div className="space-y-0.5">
-                  <Label htmlFor="isReadyStock" className="cursor-pointer text-sm font-bold text-[#243028]">
+                  <Label htmlFor="isReadyStock" className="cursor-pointer text-sm font-bold text-foreground">
                     {t("unit_form.ready_stock")}
                   </Label>
-                  <p className="text-[10px] text-[#66736A] leading-relaxed" dangerouslySetInnerHTML={{ __html: t("unit_form.ready_stock_desc").replace(/<1>/g, '<span class="font-bold text-[#4F6F52]">').replace(/<\/1>/g, '</span>') }} />
+                  <p className="text-[10px] text-muted-foreground leading-relaxed" dangerouslySetInnerHTML={{ __html: t("unit_form.ready_stock_desc").replace(/<1>/g, '<span class="font-bold text-primary">').replace(/<\/1>/g, '</span>') }} />
                 </div>
               </div>
               {watch("status") === "construction" && !watch("isReadyStock") && (
@@ -253,7 +253,7 @@ export function UnitForm({
               {watch("isReadyStock") && (
                 <div className="pl-7 mt-1 animate-in fade-in zoom-in-95 duration-200 space-y-3">
                   <div className="space-y-1.5">
-                    <Label htmlFor="readyStockSource" className="text-xs font-semibold text-[#243028] mb-1.5 block">Sumber Ready Stock <span className="text-red-500">*</span></Label>
+                    <Label htmlFor="readyStockSource" className="text-xs font-semibold text-foreground mb-1.5 block">Sumber Ready Stock <span className="text-destructive">*</span></Label>
                     <Select 
                       value={watch("readyStockSource") ?? "construction_flow"} 
                       onValueChange={(val) => {
@@ -264,14 +264,14 @@ export function UnitForm({
                       }}
                       required
                     >
-                      <SelectTrigger className="w-full text-xs rounded-xl border border-[#D6DED2] bg-white hover:bg-[#F7F8F3]/50 focus:ring-2 focus:ring-[#8FAF9A]/20 h-9 px-3 transition-premium">
+                      <SelectTrigger className="w-full text-xs rounded-xl border border-input bg-card hover:bg-muted/50 focus:ring-2 focus:ring-ring/20 h-9 px-3 transition-premium">
                         <SelectValue placeholder="Pilih Sumber Ready Stock">
                           {watch("readyStockSource") === "construction_flow" && "Dibangun melalui ERP (Konstruksi Baru)"}
                           {watch("readyStockSource") === "legacy_ready_stock" && "Existing Ready Stock (Legacy)"}
                           {watch("readyStockSource") === "manual_ready_stock" && "Manual Ready Stock (Admin)"}
                         </SelectValue>
                       </SelectTrigger>
-                      <SelectContent className="border-[#D6DED2] rounded-xl bg-white/95 backdrop-blur-md">
+                      <SelectContent className="border-input rounded-xl bg-popover backdrop-blur-md">
                         <SelectItem value="construction_flow" className="text-xs">Dibangun melalui ERP (Konstruksi Baru)</SelectItem>
                         <SelectItem value="legacy_ready_stock" className="text-xs">Existing Ready Stock (Legacy)</SelectItem>
                         <SelectItem value="manual_ready_stock" className="text-xs">Manual Ready Stock (Admin)</SelectItem>
@@ -280,18 +280,18 @@ export function UnitForm({
                   </div>
 
                   <div className="space-y-1.5">
-                    <Label htmlFor="readyStockVendorId" className="text-xs font-semibold text-[#243028] mb-1.5 block">{t("unit_form.vendor")} <span className="text-red-500">*</span></Label>
+                    <Label htmlFor="readyStockVendorId" className="text-xs font-semibold text-foreground mb-1.5 block">{t("unit_form.vendor")} <span className="text-destructive">*</span></Label>
                     <Select 
                       value={watch("readyStockVendorId") ?? ""} 
                       onValueChange={(val) => setValue("readyStockVendorId", val ?? "")}
                       required
                     >
-                      <SelectTrigger className="w-full text-xs rounded-xl border border-[#D6DED2] bg-white hover:bg-[#F7F8F3]/50 focus:ring-2 focus:ring-[#8FAF9A]/20 h-9 px-3 transition-premium">
+                      <SelectTrigger className="w-full text-xs rounded-xl border border-input bg-card hover:bg-muted/50 focus:ring-2 focus:ring-ring/20 h-9 px-3 transition-premium">
                         <SelectValue placeholder={t("unit_form.vendor_placeholder")}>
                           {watch("readyStockVendorId") ? vendors.find(v => v.id === watch("readyStockVendorId"))?.name : undefined}
                         </SelectValue>
                       </SelectTrigger>
-                      <SelectContent className="border-[#D6DED2] rounded-xl bg-white/95 backdrop-blur-md">
+                      <SelectContent className="border-input rounded-xl bg-popover backdrop-blur-md">
                         {vendors.length > 0 ? (
                           vendors.map(v => (
                             <SelectItem key={v.id} value={v.id} className="text-xs">{v.name}</SelectItem>
@@ -301,18 +301,18 @@ export function UnitForm({
                         )}
                       </SelectContent>
                     </Select>
-                    {errors.readyStockVendorId && <p className="text-xs text-red-500 mt-1">{errors.readyStockVendorId.message as string}</p>}
+                    {errors.readyStockVendorId && <p className="text-xs text-destructive mt-1">{errors.readyStockVendorId.message as string}</p>}
                   </div>
                 </div>
               )}
             </div>
           )}
 
-          <DialogFooter className="pt-4 gap-2 border-t border-[#D6DED2] mt-2">
-            <Button variant="outline" type="button" onClick={() => setOpen(false)} className="rounded-xl border-[#D6DED2] text-xs h-9 hover:bg-[#F7F8F3]/50">
+          <DialogFooter className="pt-4 gap-2 border-t border-input mt-2">
+            <Button variant="outline" type="button" onClick={() => setOpen(false)} className="rounded-xl border-input text-xs h-9 hover:bg-muted/50">
               {t("action.cancel")}
             </Button>
-            <Button type="submit" disabled={isPending} className="bg-[#4F6F52] hover:bg-[#3D563F] text-white active:scale-95 shadow-[0_4px_14px_rgba(79,111,82,0.25)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 h-9 rounded-xl font-bold text-xs px-4 gap-2">
+            <Button type="submit" disabled={isPending} className="bg-primary hover:bg-primary/90 text-primary-foreground active:scale-95 btn-premium h-9 rounded-xl font-bold text-xs px-4 gap-2">
               {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
               {isPending ? t("unit_form.saving") : t("unit_form.save")}
             </Button>

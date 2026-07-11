@@ -32,7 +32,7 @@ export function MobileBottomNav() {
   }
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden border-t border-border bg-background/80 backdrop-blur-lg">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden border-t border-border bg-background/80 backdrop-blur-lg pb-[env(safe-area-inset-bottom)]">
       <div className="flex items-center justify-around h-16 px-2">
         {NAV_ITEMS.map((item) => {
           const isActive =
@@ -43,9 +43,9 @@ export function MobileBottomNav() {
             <Link
               key={item.href}
               href={item.href}
-              className={`flex flex-col items-center justify-center gap-0.5 px-2 py-1.5 rounded-lg transition-colors min-w-[56px] ${
+              className={`flex flex-col items-center justify-center gap-0.5 px-2 py-1.5 rounded-lg transition-all duration-150 active:scale-95 min-w-[56px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                 isActive
-                  ? "text-[#4F6F52] bg-[#DDE8D8]/60"
+                  ? "text-primary bg-secondary/60"
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >

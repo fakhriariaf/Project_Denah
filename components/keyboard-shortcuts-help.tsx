@@ -27,18 +27,18 @@ export function KeyboardShortcutsHelp() {
 
       {/* Panel */}
       <div
-        className="relative w-full max-w-md bg-white dark:bg-[#151E1A] rounded-2xl shadow-2xl border border-[#D6DED2] dark:border-[#1F2E26] overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+        className="relative w-full max-w-md bg-white#151E1A] rounded-2xl shadow-2xl border border-[#D6DED2]#1F2E26] overflow-hidden animate-in fade-in zoom-in-95 duration-150"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[#D6DED2] dark:border-[#1F2E26]">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[#D6DED2]#1F2E26]">
           <div className="flex items-center gap-2">
             <Keyboard className="h-4 w-4 text-[#4F6F52]" />
-            <h3 className="font-bold text-sm text-[#243028] dark:text-[#E3EAE6]">Pintasan Keyboard</h3>
+            <h3 className="font-bold text-sm text-[#243028]#E3EAE6]">Pintasan Keyboard</h3>
           </div>
           <button
             onClick={() => setOpen(false)}
-            className="p-1.5 rounded-lg hover:bg-[#DDE8D8] dark:hover:bg-[#1C2B22] transition-colors"
+            className="p-1.5 rounded-lg hover:bg-[#DDE8D8]#1C2B22] transition-colors"
           >
             <X className="h-4 w-4 text-[#66736A]" />
           </button>
@@ -49,16 +49,16 @@ export function KeyboardShortcutsHelp() {
           {SHORTCUTS.map((shortcut, i) => (
             <div
               key={i}
-              className="flex items-center justify-between py-2 px-3 rounded-xl bg-[#F7F8F3] dark:bg-[#18221D] border border-[#D6DED2]/40 dark:border-[#1F2E26]"
+              className="flex items-center justify-between py-2 px-3 rounded-xl bg-[#F7F8F3]#18221D] border border-[#D6DED2]/40#1F2E26]"
             >
-              <span className="text-xs text-[#243028] dark:text-[#E3EAE6] font-medium">
+              <span className="text-xs text-[#243028]#E3EAE6] font-medium">
                 {shortcut.description}
               </span>
               <div className="flex items-center gap-1">
                 {shortcut.keys.map((key, j) => (
                   <kbd
                     key={j}
-                    className="px-2 py-1 bg-white dark:bg-[#0D1310] border border-[#D6DED2] dark:border-[#1F2E26] rounded-md text-[10px] font-mono font-semibold text-[#4F6F52] dark:text-[#8FAF9A] shadow-sm min-w-[24px] text-center"
+                    className="px-2 py-1 bg-white#0D1310] border border-[#D6DED2]#1F2E26] rounded-md text-[10px] font-mono font-semibold text-[#4F6F52]#8FAF9A] shadow-sm min-w-[24px] text-center"
                   >
                     {key}
                   </kbd>
@@ -69,9 +69,9 @@ export function KeyboardShortcutsHelp() {
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-3 border-t border-[#D6DED2] dark:border-[#1F2E26] text-center">
+        <div className="px-5 py-3 border-t border-[#D6DED2]#1F2E26] text-center">
           <p className="text-[10px] text-[#A8B0AA]">
-            Tekan <kbd className="px-1 py-0.5 bg-[#F7F8F3] dark:bg-[#18221D] border border-[#D6DED2] dark:border-[#1F2E26] rounded text-[9px] font-mono">Esc</kbd> untuk menutup
+            Tekan <kbd className="px-1 py-0.5 bg-[#F7F8F3]#18221D] border border-[#D6DED2]#1F2E26] rounded text-[9px] font-mono">Esc</kbd> untuk menutup
           </p>
         </div>
       </div>

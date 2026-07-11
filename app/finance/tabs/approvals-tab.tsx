@@ -70,9 +70,9 @@ export function ApprovalsTab({
 
   return (
     <div className="space-y-6">
-      <Card className="bg-white border-[#D6DED2]">
+      <Card className="bg-card border-input">
         <CardHeader>
-          <CardTitle className="text-lg text-[#243028]">{t("finance.approval_title")}</CardTitle>
+          <CardTitle className="text-lg text-foreground">{t("finance.approval_title")}</CardTitle>
           <CardDescription className="text-xs">
             {t("finance.approval_desc")}
           </CardDescription>
@@ -96,12 +96,12 @@ export function ApprovalsTab({
                 <TableRow>
                   <TableCell colSpan={8} className="py-12 text-center">
                     <div className="flex flex-col items-center gap-3">
-                      <div className="h-16 w-16 rounded-full bg-[#DDE8D8]/50 flex items-center justify-center mx-auto">
-                        <Clock className="h-8 w-8 text-[#4F6F52]" />
+                      <div className="h-16 w-16 rounded-full bg-secondary/50 flex items-center justify-center mx-auto">
+                        <Clock className="h-8 w-8 text-primary" />
                       </div>
                       <div>
-                        <p className="font-semibold text-[#243028] text-sm">{t("finance.approval_empty")}</p>
-                        <p className="text-xs text-[#66736A] mt-1">{t("finance.approval_empty_desc")}</p>
+                        <p className="font-semibold text-foreground text-sm">{t("finance.approval_empty")}</p>
+                        <p className="text-xs text-muted-foreground mt-1">{t("finance.approval_empty_desc")}</p>
                       </div>
                     </div>
                   </TableCell>
@@ -109,22 +109,22 @@ export function ApprovalsTab({
               ) : (
                 pendingApprovals.map((exp) => (
                   <TableRow key={exp.id}>
-                    <TableCell className="font-mono text-xs font-semibold text-[#243028]">
+                    <TableCell className="font-mono text-xs font-semibold text-foreground">
                       {exp.transactionNumber}
                     </TableCell>
-                    <TableCell className="font-mono text-xs text-[#66736A]">
+                    <TableCell className="font-mono text-xs text-muted-foreground">
                       {exp.invoiceNumber || "—"}
                     </TableCell>
-                    <TableCell className="text-xs font-semibold text-[#243028]">
+                    <TableCell className="text-xs font-semibold text-foreground">
                       {exp.categoryName}
                     </TableCell>
-                    <TableCell className="text-xs text-[#66736A]">
+                    <TableCell className="text-xs text-muted-foreground">
                       {exp.projectName}
                     </TableCell>
-                    <TableCell className="text-xs text-[#243028]">
+                    <TableCell className="text-xs text-foreground">
                       {exp.description}
                     </TableCell>
-                    <TableCell className="text-right font-mono font-semibold tabular-nums text-xs text-[#243028]">
+                    <TableCell className="text-right font-mono font-semibold tabular-nums text-xs text-foreground">
                       Rp {exp.amount.toLocaleString("id-ID")}
                     </TableCell>
                     <TableCell className="text-center">
@@ -144,7 +144,7 @@ export function ApprovalsTab({
                           setSelectedExpense(exp);
                           setApprovalNotes("");
                         }}
-                        className="bg-[#4F6F52] hover:bg-[#8FAF9A] text-white text-xs h-7 py-0.5 px-2"
+                        className="bg-primary hover:bg-[#8FAF9A] text-white text-xs h-7 py-0.5 px-2"
                       >
                         {t("finance.btn_review")}
                       </Button>
@@ -158,7 +158,7 @@ export function ApprovalsTab({
       </Card>
 
       <Dialog open={!!selectedExpense} onOpenChange={(open) => { if (!open) setSelectedExpense(null); }}>
-        <DialogContent className="bg-white">
+        <DialogContent className="bg-card">
           <DialogHeader>
             <DialogTitle>{t("finance.auth_title")}</DialogTitle>
             <DialogDescription>{t("finance.auth_desc")}</DialogDescription>
@@ -170,33 +170,33 @@ export function ApprovalsTab({
           )}
           {selectedExpense && (
             <div className="space-y-4 font-sans">
-              <div className="p-3 bg-slate-50 border border-[#D6DED2] rounded-md space-y-1">
+              <div className="p-3 bg-slate-50 border border-border rounded-md space-y-1">
                 <p className="text-xs">{t("finance.auth_lbl_trx")} <span className="font-mono font-semibold">{selectedExpense.transactionNumber}</span></p>
                 <p className="text-xs">{t("finance.auth_lbl_need")} <span className="font-semibold">{selectedExpense.description}</span></p>
                 <p className="text-xs">{t("finance.auth_lbl_amount")} <span className="font-mono font-bold text-danger">Rp {selectedExpense.amount.toLocaleString("id-ID")}</span></p>
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-[#243028]">{t("finance.auth_lbl_notes")}</label>
+                <label className="text-xs font-semibold text-foreground">{t("finance.auth_lbl_notes")}</label>
                 <Input
                   placeholder={t("finance.auth_notes_ph")}
                   value={approvalNotes}
                   onChange={(e) => setApprovalNotes(e.target.value)}
-                  className="bg-white border-[#D6DED2]"
+                  className="bg-card border-input"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3 pt-3">
                 <Button
                   onClick={() => onExpenseApprovalSubmit(false)}
-                  className="bg-white text-danger border border-rose-200 hover:bg-rose-50"
+                  className="bg-card text-danger border border-rose-200 hover:bg-rose-50"
                   disabled={isSubmitting}
                 >
                   {t("finance.auth_btn_reject")}
                 </Button>
                 <Button
                   onClick={() => onExpenseApprovalSubmit(true)}
-                  className="bg-[#4F6F52] hover:bg-[#8FAF9A] text-white"
+                  className="bg-primary hover:bg-[#8FAF9A] text-white"
                   disabled={
                     isSubmitting ||
                     selectedExpense.approvalStatus === "insufficient_balance"

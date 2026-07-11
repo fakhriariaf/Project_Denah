@@ -519,7 +519,7 @@ export function VendorDashboardShell({ data, userName }: VendorDashboardShellPro
       </div>
 
       {/* 3. Main Sections */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         
         {/* Section 1: SPK / Pekerjaan Aktif */}
         <div className="lg:col-span-2 space-y-6">
@@ -849,7 +849,7 @@ export function VendorDashboardShell({ data, userName }: VendorDashboardShellPro
                       <div className="space-y-1.5">
                         <Label htmlFor="progSpkId" className="font-bold text-[#243028] text-xs">Pilih SPK Pekerjaan</Label>
                         <Select value={progSpkId} onValueChange={(val) => { setProgSpkId(val || ""); setProgWorkItemId(""); }} disabled={submitting}>
-                          <SelectTrigger id="progSpkId" className="w-full h-11 border-[#D6DED2] focus:ring-2 focus:ring-[#4F6F52]/20 rounded-xl bg-white/80 backdrop-blur-sm text-xs font-semibold">
+                          <SelectTrigger id="progSpkId" className="w-full h-11 border-[#D6DED2] focus:ring-2 focus:ring-ring/20 rounded-xl bg-white/80 backdrop-blur-sm text-xs font-semibold">
                             <SelectValue placeholder="Pilih SPK aktif...">
                               {progSpkId ? (() => {
                                 const selectedSpk = spks.find(s => s.id === progSpkId);
@@ -880,11 +880,11 @@ export function VendorDashboardShell({ data, userName }: VendorDashboardShellPro
                                 Item Pekerjaan
                               </Label>
                               <Select value={progWorkItemId} onValueChange={(val) => setProgWorkItemId(val || "")} disabled={submitting}>
-                                <SelectTrigger id="progWorkItemId" className="w-full h-11 border-[#D6DED2] focus:ring-2 focus:ring-[#4F6F52]/20 rounded-xl bg-white/80 backdrop-blur-sm text-xs font-semibold">
+                                <SelectTrigger id="progWorkItemId" className="w-full h-11 border-[#D6DED2] focus:ring-2 focus:ring-ring/20 rounded-xl bg-white/80 backdrop-blur-sm text-xs font-semibold">
                                   <SelectValue placeholder="Pilih item pekerjaan...">
                                     {progWorkItemId ? (() => {
                                       const selectedItem = progWorkItems.find(item => item.id === progWorkItemId);
-                                      return selectedItem ? `${selectedItem.name} — Bobot ${selectedItem.weight}% (Progres: ${selectedItem.currentProgress}%)` : progWorkItemId;
+                                      return selectedItem ? `${selectedItem.name} â€” Bobot ${selectedItem.weight}% (Progres: ${selectedItem.currentProgress}%)` : progWorkItemId;
                                     })() : undefined}
                                   </SelectValue>
                                 </SelectTrigger>
@@ -917,8 +917,8 @@ export function VendorDashboardShell({ data, userName }: VendorDashboardShellPro
                                           : "bg-[#DDE8D8] text-[#4F6F52] border border-[#8FAF9A]/25"
                                       }`}>
                                         {isOverLimit 
-                                          ? `⚠️ Melebihi Batas! (${currentProgressPct}% + ${progPctAdded}% = ${currentProgressPct + progPctAdded}%)` 
-                                          : `${currentProgressPct}% → ${newTotalProgress}%`}
+                                          ? `âš ï¸ Melebihi Batas! (${currentProgressPct}% + ${progPctAdded}% = ${currentProgressPct + progPctAdded}%)` 
+                                          : `${currentProgressPct}% â†’ ${newTotalProgress}%`}
                                       </span>
                                     </div>
                                     
@@ -1031,7 +1031,7 @@ export function VendorDashboardShell({ data, userName }: VendorDashboardShellPro
                                           id="progDate"
                                           type="date"
                                           required
-                                          className="border-[#D6DED2] focus-visible:ring-2 focus-visible:ring-[#4F6F52]/20 h-10 text-xs rounded-xl bg-white/80 font-medium"
+                                          className="border-[#D6DED2] focus-visible:ring-2 focus-visible:ring-ring/20 h-10 text-xs rounded-xl bg-white/80 font-medium"
                                           value={progDate}
                                           onChange={(e) => setProgDate(e.target.value)}
                                           disabled={submitting}
@@ -1104,7 +1104,7 @@ export function VendorDashboardShell({ data, userName }: VendorDashboardShellPro
                                         <Textarea
                                           id="progNotes"
                                           placeholder="Contoh: Pemasangan keramik lantai utama selesai dengan rapi..."
-                                          className="border-[#D6DED2] focus-visible:ring-2 focus-visible:ring-[#4F6F52]/20 text-xs rounded-xl min-h-[80px] bg-white/80"
+                                          className="border-[#D6DED2] focus-visible:ring-2 focus-visible:ring-ring/20 text-xs rounded-xl min-h-[80px] bg-white/80"
                                           value={progNotes}
                                           onChange={(e) => setProgNotes(e.target.value)}
                                           disabled={submitting}
@@ -1132,7 +1132,7 @@ export function VendorDashboardShell({ data, userName }: VendorDashboardShellPro
                         <Button
                           type="submit"
                           disabled={submitting || !progSpkId || !progWorkItemId || loadingSpkDetails || !!(progWorkItemId && progWorkItems.find(c => c.id === progWorkItemId)?.currentProgress === 100)}
-                          className="bg-[#4F6F52] hover:bg-[#3D563F] text-white active:scale-95 shadow-[0_4px_14px_rgba(79,111,82,0.25)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 h-10 rounded-xl font-bold text-xs px-4 gap-2 cursor-pointer"
+                          className="bg-[#4F6F52] hover:bg-[#3D563F] text-white active:scale-95 btn-premium h-10 rounded-xl font-bold text-xs px-4 gap-2 cursor-pointer"
                         >
                           {submitting ? (
                             <>
@@ -1353,7 +1353,7 @@ export function VendorDashboardShell({ data, userName }: VendorDashboardShellPro
               <Button
                 type="submit"
                 disabled={submitting || !compSpkIndex || !compDescription}
-                className="bg-[#A94A4A] hover:bg-[#8A3B3B] text-white active:scale-95 shadow-[0_4px_14px_rgba(169,74,74,0.25)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 h-9 rounded-xl font-bold text-xs px-4 gap-2 cursor-pointer"
+                className="bg-[#A94A4A] hover:bg-[#8A3B3B] text-white active:scale-95 shadow-[0_4px_14px_rgba(169,74,74,0.25)] btn-premium h-9 rounded-xl font-bold text-xs px-4 gap-2 cursor-pointer"
               >
                 {submitting ? (
                   <>
@@ -1441,7 +1441,7 @@ export function VendorDashboardShell({ data, userName }: VendorDashboardShellPro
               <Button
                 type="submit"
                 disabled={submitting || !bastSpkId || !bastFile}
-                className="bg-[#4F6F52] hover:bg-[#3D563F] text-white active:scale-95 shadow-[0_4px_14px_rgba(79,111,82,0.25)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 h-9 rounded-xl font-bold text-xs px-5 gap-2 cursor-pointer"
+                className="bg-[#4F6F52] hover:bg-[#3D563F] text-white active:scale-95 btn-premium h-9 rounded-xl font-bold text-xs px-5 gap-2 cursor-pointer"
               >
                 {submitting ? (
                   <>

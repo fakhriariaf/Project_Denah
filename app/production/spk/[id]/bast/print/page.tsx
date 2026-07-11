@@ -128,7 +128,7 @@ export default async function PrintBastPage({ params }: Props) {
   const formattedBastNumber = `BAST/PROD/${actualDate.toISOString().slice(0,10).replace(/-/g, "")}/${spk.spkNumber.split("-").pop()}`;
 
   return (
-    <div className="min-h-screen bg-[#F7F8F3]/60 print:bg-white pb-12 font-sans text-[#243028]">
+    <div className="min-h-screen bg-muted/30/60 print:bg-card pb-12 font-sans text-foreground">
       <style dangerouslySetInnerHTML={{ __html: `
         @media print {
           aside, header, nav, .no-print, button,
@@ -157,55 +157,55 @@ export default async function PrintBastPage({ params }: Props) {
 
       <PrintButton label="Cetak Dokumen BAST" />
 
-      <div className="print-area max-w-4xl mx-auto mt-6 bg-white border border-[#D6DED2] rounded-3xl shadow-sage p-8 md:p-12">
+      <div className="print-area max-w-4xl mx-auto mt-6 bg-card border border-border rounded-3xl shadow-sage p-8 md:p-12">
         <div className="space-y-8 bg-transparent">
           
           {/* KOP SURAT */}
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center pb-6 border-b-2 border-[#4F6F52]/30 print-border-dark gap-6">
             <div className="space-y-1 md:flex-1">
-              <h1 className="text-xl font-extrabold text-[#4F6F52] tracking-wide print-text-dark">{companyName}</h1>
-              <div className="text-xs text-[#66736A] space-y-0.5 print-text-dark">
+              <h1 className="text-xl font-extrabold text-primary tracking-wide print-text-dark">{companyName}</h1>
+              <div className="text-xs text-muted-foreground space-y-0.5 print-text-dark">
                 <p className="flex items-center gap-1.5">
-                  <MapPin className="h-3.5 w-3.5 text-[#8FAF9A]" />
+                  <MapPin className="h-3.5 w-3.5 text-primary/70" />
                   {companyAddress}
                 </p>
                 <p className="flex items-center gap-1.5">
-                  <Phone className="h-3.5 w-3.5 text-[#8FAF9A]" />
+                  <Phone className="h-3.5 w-3.5 text-primary/70" />
                   Telp: {companyPhone}
                 </p>
                 <p className="flex items-center gap-1.5">
-                  <Mail className="h-3.5 w-3.5 text-[#8FAF9A]" />
+                  <Mail className="h-3.5 w-3.5 text-primary/70" />
                   Email: {companyEmail}
                 </p>
               </div>
             </div>
             
-            <div className="bg-[#DDE8D8]/50 border border-[#8FAF9A]/30 rounded-2xl px-4 py-2 text-right shrink-0">
-              <span className="text-[10px] font-bold text-[#4F6F52] uppercase tracking-wider block">BERITA ACARA SERAH TERIMA</span>
-              <span className="font-mono text-sm font-bold text-[#243028] print-text-dark">{formattedBastNumber}</span>
+            <div className="bg-secondary/50 border border-primary/30 rounded-2xl px-4 py-2 text-right shrink-0">
+              <span className="text-[10px] font-bold text-primary uppercase tracking-wider block">BERITA ACARA SERAH TERIMA</span>
+              <span className="font-mono text-sm font-bold text-foreground print-text-dark">{formattedBastNumber}</span>
             </div>
           </div>
 
           {/* JUDUL DOKUMEN */}
           <div className="text-center space-y-1">
-            <h2 className="text-2xl font-black text-[#243028] uppercase tracking-wider print-text-dark">
+            <h2 className="text-2xl font-black text-foreground uppercase tracking-wider print-text-dark">
               BERITA ACARA SERAH TERIMA PEMBANGUNAN UNIT (BAST)
             </h2>
-            <p className="text-sm text-[#66736A] font-semibold print-text-dark">
-              Nomor BAST: <span className="font-mono font-bold text-[#243028]">{formattedBastNumber}</span>
+            <p className="text-sm text-muted-foreground font-semibold print-text-dark">
+              Nomor BAST: <span className="font-mono font-bold text-foreground">{formattedBastNumber}</span>
             </p>
           </div>
 
           {/* HARI & TANGGAL LEGAL */}
-          <div className="text-sm leading-relaxed text-[#243028] print-text-dark text-justify space-y-3">
+          <div className="text-sm leading-relaxed text-foreground print-text-dark text-justify space-y-3">
             <p>
               Pada hari ini <strong className="text-primary font-bold">{dayName}</strong> tanggal <strong className="text-primary font-bold">{dateNum}</strong> bulan <strong className="text-primary font-bold">{monthName}</strong> tahun <strong className="text-primary font-bold">{yearNum}</strong> ({actualDate.toLocaleDateString("id-ID")}), bertempat di kantor pusat developer, kami yang bertandatangan di bawah ini:
             </p>
             
-            <div className="pl-4 space-y-2 border-l-2 border-[#8FAF9A]/40 print-border-dark">
+            <div className="pl-4 space-y-2 border-l-2 border-primary/40 print-border-dark">
               <p className="flex items-start gap-2">
                 <span className="font-bold min-w-[70px]">1. Nama:</span>
-                <span><strong>{supervisorName}</strong>, mewakili <strong className="text-[#4F6F52]">{companyName}</strong> yang beralamat di {companyAddress}, selanjutnya disebut sebagai <strong>PIHAK PERTAMA (PENGAWAS)</strong>.</span>
+                <span><strong>{supervisorName}</strong>, mewakili <strong className="text-primary">{companyName}</strong> yang beralamat di {companyAddress}, selanjutnya disebut sebagai <strong>PIHAK PERTAMA (PENGAWAS)</strong>.</span>
               </p>
               <p className="flex items-start gap-2">
                 <span className="font-bold min-w-[70px]">2. Vendor:</span>
@@ -219,44 +219,44 @@ export default async function PrintBastPage({ params }: Props) {
           </div>
 
           {/* UNIT DETAILS TABLE */}
-          <div className="border border-[#D6DED2] print-border-dark rounded-2xl overflow-hidden bg-[#F7F8F3]/30">
+          <div className="border border-border print-border-dark rounded-2xl overflow-hidden bg-muted/30/30">
             <table className="w-full text-sm text-left border-collapse">
               <tbody className="divide-y divide-[#D6DED2]/60">
                 <tr>
-                  <td className="w-[35%] bg-[#F7F8F3]/70 font-bold p-3 text-[#66736A] print-text-dark border-r border-[#D6DED2]/60 print-border-dark">Referensi SPK</td>
-                  <td className="p-3 text-[#243028] print-text-dark font-mono font-bold tabular-nums">{spk.spkNumber}</td>
+                  <td className="w-[35%] bg-muted/30/70 font-bold p-3 text-muted-foreground print-text-dark border-r border-border/60 print-border-dark">Referensi SPK</td>
+                  <td className="p-3 text-foreground print-text-dark font-mono font-bold tabular-nums">{spk.spkNumber}</td>
                 </tr>
                 <tr>
-                  <td className="bg-[#F7F8F3]/70 font-bold p-3 text-[#66736A] print-text-dark border-r border-[#D6DED2]/60 print-border-dark">Nama Paket Pekerjaan</td>
-                  <td className="p-3 text-[#243028] print-text-dark font-semibold">{spk.title}</td>
+                  <td className="bg-muted/30/70 font-bold p-3 text-muted-foreground print-text-dark border-r border-border/60 print-border-dark">Nama Paket Pekerjaan</td>
+                  <td className="p-3 text-foreground print-text-dark font-semibold">{spk.title}</td>
                 </tr>
                 <tr>
-                  <td className="bg-[#F7F8F3]/70 font-bold p-3 text-[#66736A] print-text-dark border-r border-[#D6DED2]/60 print-border-dark">Proyek & Kode Kavling</td>
-                  <td className="p-3 text-[#243028] print-text-dark font-bold">
+                  <td className="bg-muted/30/70 font-bold p-3 text-muted-foreground print-text-dark border-r border-border/60 print-border-dark">Proyek & Kode Kavling</td>
+                  <td className="p-3 text-foreground print-text-dark font-bold">
                     {spk.projectName || "—"} &mdash; Blok {spk.unitCode || "—"}
                   </td>
                 </tr>
                 <tr>
-                  <td className="bg-[#F7F8F3]/70 font-bold p-3 text-[#66736A] print-text-dark border-r border-[#D6DED2]/60 print-border-dark">Cluster / Tipe Unit</td>
-                  <td className="p-3 text-[#243028] print-text-dark">
+                  <td className="bg-muted/30/70 font-bold p-3 text-muted-foreground print-text-dark border-r border-border/60 print-border-dark">Cluster / Tipe Unit</td>
+                  <td className="p-3 text-foreground print-text-dark">
                     Cluster {spk.unitCluster || "—"} / Tipe {spk.unitType || "—"}
                   </td>
                 </tr>
                 <tr>
-                  <td className="bg-[#F7F8F3]/70 font-bold p-3 text-[#66736A] print-text-dark border-r border-[#D6DED2]/60 print-border-dark">Nilai Kontrak (RAB)</td>
-                  <td className="p-3 text-[#4F6F52] print-text-dark font-mono font-bold tabular-nums">
+                  <td className="bg-muted/30/70 font-bold p-3 text-muted-foreground print-text-dark border-r border-border/60 print-border-dark">Nilai Kontrak (RAB)</td>
+                  <td className="p-3 text-primary print-text-dark font-mono font-bold tabular-nums">
                     {formatRupiah(spk.rabAmount ?? 0)}
                   </td>
                 </tr>
                 <tr>
-                  <td className="bg-[#F7F8F3]/70 font-bold p-3 text-[#66736A] print-text-dark border-r border-[#D6DED2]/60 print-border-dark">Periode Kerja SPK</td>
-                  <td className="p-3 text-[#243028] print-text-dark font-mono">
+                  <td className="bg-muted/30/70 font-bold p-3 text-muted-foreground print-text-dark border-r border-border/60 print-border-dark">Periode Kerja SPK</td>
+                  <td className="p-3 text-foreground print-text-dark font-mono">
                     {formatDate(spk.startDate)} s/d {formatDate(spk.targetEndDate)}
                   </td>
                 </tr>
                 <tr>
-                  <td className="bg-[#DDE8D8]/50 font-bold p-3 text-[#4F6F52] print-text-dark border-r border-[#D6DED2]/60 print-border-dark">Tanggal Selesai Riil</td>
-                  <td className="p-3 text-[#4F6F52] print-text-dark font-mono font-bold">
+                  <td className="bg-secondary/50 font-bold p-3 text-primary print-text-dark border-r border-border/60 print-border-dark">Tanggal Selesai Riil</td>
+                  <td className="p-3 text-primary print-text-dark font-mono font-bold">
                     {spk.actualEndDate ? formatDate(spk.actualEndDate) : formatDate(new Date())}
                   </td>
                 </tr>
@@ -266,13 +266,13 @@ export default async function PrintBastPage({ params }: Props) {
 
           {/* BOBOT ITEM PEKERJAAN 100% */}
           {weights.length > 0 && (
-            <div className="border border-[#D6DED2] print-border-dark rounded-2xl overflow-hidden">
-              <div className="px-5 py-3 border-b border-[#D6DED2] bg-[#F7F8F3]/70">
-                <h3 className="text-xs font-bold text-[#4F6F52] uppercase tracking-wider">Komponen Pekerjaan Diselesaikan (100% Selesai)</h3>
+            <div className="border border-border print-border-dark rounded-2xl overflow-hidden">
+              <div className="px-5 py-3 border-b border-border bg-muted/30/70">
+                <h3 className="text-xs font-bold text-primary uppercase tracking-wider">Komponen Pekerjaan Diselesaikan (100% Selesai)</h3>
               </div>
               <table className="w-full text-xs text-left border-collapse">
                 <thead>
-                  <tr className="border-b border-[#D6DED2] text-[#66736A] font-bold bg-[#F7F8F3]/30">
+                  <tr className="border-b border-border text-muted-foreground font-bold bg-muted/30/30">
                     <th className="py-2 px-5">Kode Komponen</th>
                     <th className="py-2 px-5">Item Komponen Pekerjaan</th>
                     <th className="py-2 px-5 text-center">Bobot Progres</th>
@@ -282,15 +282,15 @@ export default async function PrintBastPage({ params }: Props) {
                 <tbody className="divide-y divide-[#D6DED2]/60">
                   {weights.map((w, i) => (
                     <tr key={i} className="hover:bg-[#8FAF9A]/5">
-                      <td className="py-2 px-5 font-mono font-bold text-[#4F6F52]">{w.workItemCode}</td>
-                      <td className="py-2 px-5 text-[#243028] font-medium">{w.workItemName}</td>
-                      <td className="py-2 px-5 text-center font-mono font-bold text-[#243028]">{w.weightPct}%</td>
+                      <td className="py-2 px-5 font-mono font-bold text-primary">{w.workItemCode}</td>
+                      <td className="py-2 px-5 text-foreground font-medium">{w.workItemName}</td>
+                      <td className="py-2 px-5 text-center font-mono font-bold text-foreground">{w.weightPct}%</td>
                       <td className="py-2 px-5 text-right font-bold text-emerald-600">100% Selesai</td>
                     </tr>
                   ))}
-                  <tr className="bg-[#DDE8D8]/20 font-bold">
-                    <td colSpan={2} className="py-2.5 px-5 text-[#4F6F52] uppercase text-[10px]">Total Progres SLA Fisik Lapangan</td>
-                    <td className="py-2.5 px-5 text-center font-mono text-[#4F6F52]">100%</td>
+                  <tr className="bg-secondary/20 font-bold">
+                    <td colSpan={2} className="py-2.5 px-5 text-primary uppercase text-[10px]">Total Progres SLA Fisik Lapangan</td>
+                    <td className="py-2.5 px-5 text-center font-mono text-primary">100%</td>
                     <td className="py-2.5 px-5 text-right text-emerald-700">DIVERIFIKASI</td>
                   </tr>
                 </tbody>
@@ -299,9 +299,9 @@ export default async function PrintBastPage({ params }: Props) {
           )}
 
           {/* PERNYATAAN KESEPAKATAN LEGAL */}
-          <div className="border border-[#D6DED2] rounded-2xl p-5 bg-[#F7F8F3]/20 text-xs text-[#66736A] space-y-3 print-text-dark">
-            <h4 className="font-bold text-[#243028] text-xs uppercase tracking-wider mb-1 print-text-dark flex items-center gap-1.5">
-              <ShieldCheck className="h-4 w-4 text-[#8FAF9A]" /> KLAUSUL SERAH TERIMA & JAMINAN PEMELIHARAAN (SLA)
+          <div className="border border-border rounded-2xl p-5 bg-muted/30/20 text-xs text-muted-foreground space-y-3 print-text-dark">
+            <h4 className="font-bold text-foreground text-xs uppercase tracking-wider mb-1 print-text-dark flex items-center gap-1.5">
+              <ShieldCheck className="h-4 w-4 text-primary/70" /> KLAUSUL SERAH TERIMA & JAMINAN PEMELIHARAAN (SLA)
             </h4>
             <div className="pl-5 leading-relaxed text-sm text-justify space-y-2">
               <p>
@@ -316,7 +316,7 @@ export default async function PrintBastPage({ params }: Props) {
             </div>
           </div>
 
-          <p className="text-sm leading-relaxed text-[#66736A] print-text-dark">
+          <p className="text-sm leading-relaxed text-muted-foreground print-text-dark">
             Demikian Berita Acara Serah Terima ini dibuat dalam rangkap 2 (dua) bermaterai cukup dan mempunyai kekuatan hukum yang sama bagi kedua belah pihak untuk dipergunakan sebagaimana mestinya.
           </p>
 
@@ -324,23 +324,23 @@ export default async function PrintBastPage({ params }: Props) {
           <div className="grid grid-cols-2 gap-12 text-center text-sm mt-20">
             <div className="space-y-20">
               <div className="space-y-1">
-                <span className="text-[#66736A] block">PIHAK KEDUA (KONTRAKTOR)</span>
-                <span className="font-bold text-[#243028] print-text-dark block">{spk.vendorName || "—"}</span>
+                <span className="text-muted-foreground block">PIHAK KEDUA (KONTRAKTOR)</span>
+                <span className="font-bold text-foreground print-text-dark block">{spk.vendorName || "—"}</span>
               </div>
               <div className="space-y-1">
                 <div className="w-48 border-b border-dashed border-[#66736A] mx-auto print-border-dark" />
-                <span className="text-xs text-[#66736A] print-text-dark block">Kontraktor Pelaksana (PIC)</span>
+                <span className="text-xs text-muted-foreground print-text-dark block">Kontraktor Pelaksana (PIC)</span>
               </div>
             </div>
             
             <div className="space-y-20">
               <div className="space-y-1">
-                <span className="text-[#66736A] block">PIHAK PERTAMA (PENGAWAS)</span>
-                <span className="font-bold text-[#243028] print-text-dark block">{supervisorName}</span>
+                <span className="text-muted-foreground block">PIHAK PERTAMA (PENGAWAS)</span>
+                <span className="font-bold text-foreground print-text-dark block">{supervisorName}</span>
               </div>
               <div className="space-y-1">
                 <div className="w-48 border-b border-dashed border-[#66736A] mx-auto print-border-dark" />
-                <span className="text-xs text-[#66736A] print-text-dark block">Pengawas Lapangan</span>
+                <span className="text-xs text-muted-foreground print-text-dark block">Pengawas Lapangan</span>
               </div>
             </div>
           </div>
@@ -348,19 +348,19 @@ export default async function PrintBastPage({ params }: Props) {
           {/* ACKNOWLEDGED BY DIREKTUR */}
           <div className="text-center text-sm mt-12 space-y-16">
             <div className="space-y-1">
-              <span className="text-[#66736A] block">Mengetahui & Menyetujui,</span>
-              <span className="font-bold text-[#243028] print-text-dark block">Direktur Utama Proyek</span>
+              <span className="text-muted-foreground block">Mengetahui & Menyetujui,</span>
+              <span className="font-bold text-foreground print-text-dark block">Direktur Utama Proyek</span>
             </div>
             <div className="space-y-1">
               <div className="w-56 border-b border-dashed border-[#66736A] mx-auto print-border-dark" />
-              <span className="text-xs text-[#66736A] print-text-dark block">Direksi Pembangunan Proyek</span>
+              <span className="text-xs text-muted-foreground print-text-dark block">Direksi Pembangunan Proyek</span>
             </div>
           </div>
 
         </div>
 
         {/* SYSTEM STAMP */}
-        <div className="no-print mt-12 pt-6 border-t border-[#D6DED2]/40 flex justify-between items-center text-xs text-[#66736A] font-semibold">
+        <div className="no-print mt-12 pt-6 border-t border-border/40 flex justify-between items-center text-xs text-muted-foreground font-semibold">
           <span>Sistem Validasi BAST Terintegrasi &bull; No. SPK: <span className="font-mono">{spk.spkNumber}</span></span>
           <span className="bg-emerald-50 text-emerald-700 border border-emerald-300 uppercase font-bold text-[9px] px-2 py-0.5 rounded shadow-none">VERIFIED 100% DONE</span>
         </div>

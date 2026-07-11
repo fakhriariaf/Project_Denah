@@ -32,15 +32,15 @@ export function ReportsTab({
   const { t } = useI18n();
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       <div className="lg:col-span-2 space-y-6">
-        <Card className="bg-white border-[#D6DED2]">
+        <Card className="bg-card border-input">
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
-              <CardTitle className="text-lg text-[#243028]">{t("finance.report_title")}</CardTitle>
+              <CardTitle className="text-lg text-foreground">{t("finance.report_title")}</CardTitle>
               <CardDescription className="text-xs">{t("finance.report_desc")}</CardDescription>
             </div>
-            <Button className="bg-[#4F6F52] hover:bg-[#8FAF9A] text-white flex items-center gap-1.5 text-xs">
+            <Button className="bg-primary hover:bg-[#8FAF9A] text-white flex items-center gap-1.5 text-xs">
               <Download className="h-4 w-4" /> {t("finance.report_btn_export")}
             </Button>
           </CardHeader>
@@ -55,27 +55,27 @@ export function ReportsTab({
       </div>
 
       <div className="space-y-6">
-        <Card className="bg-white border-[#D6DED2]">
+        <Card className="bg-card border-input">
           <CardHeader>
-            <CardTitle className="text-base text-[#243028]">{t("finance.cashflow_title")}</CardTitle>
+            <CardTitle className="text-base text-foreground">{t("finance.cashflow_title")}</CardTitle>
             <CardDescription className="text-xs">{t("finance.cashflow_desc")}</CardDescription>
           </CardHeader>
           <CardContent className="p-4 pt-0 space-y-3 font-sans">
-            <div className="flex justify-between items-center text-xs border-b border-[#D6DED2] pb-2">
-              <span className="text-[#66736A]">{t("finance.cashflow_income")}</span>
-              <span className="font-mono font-bold text-[#4F6F52] tabular-nums">
+            <div className="flex justify-between items-center text-xs border-b border-border pb-2">
+              <span className="text-muted-foreground">{t("finance.cashflow_income")}</span>
+              <span className="font-mono font-bold text-primary tabular-nums">
                 Rp {totalIncomeVal.toLocaleString("id-ID")}
               </span>
             </div>
-            <div className="flex justify-between items-center text-xs border-b border-[#D6DED2] pb-2">
-              <span className="text-[#66736A]">{t("finance.cashflow_expense")}</span>
+            <div className="flex justify-between items-center text-xs border-b border-border pb-2">
+              <span className="text-muted-foreground">{t("finance.cashflow_expense")}</span>
               <span className="font-mono font-bold text-danger tabular-nums">
                 Rp {totalExpenseVal.toLocaleString("id-ID")}
               </span>
             </div>
             <div className="flex justify-between items-center text-xs font-semibold pt-1">
-              <span className="text-[#243028]">{t("finance.cashflow_net")}</span>
-              <span className="font-mono font-bold text-lg text-[#4F6F52] tabular-nums">
+              <span className="text-foreground">{t("finance.cashflow_net")}</span>
+              <span className="font-mono font-bold text-lg text-primary tabular-nums">
                 Rp {netBalanceVal.toLocaleString("id-ID")}
               </span>
             </div>

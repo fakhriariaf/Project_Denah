@@ -58,16 +58,7 @@ export function UserIdentityDropdown() {
   }, []);
 
   const toggleTheme = () => {
-    const isDark = document.documentElement.classList.contains("dark");
-    if (isDark) {
-      document.documentElement.classList.remove("dark");
-      localStorage.theme = "light";
-      setTheme("light");
-    } else {
-      document.documentElement.classList.add("dark");
-      localStorage.theme = "dark";
-      setTheme("dark");
-    }
+    // Dark mode disabled — app is locked to light mode
   };
 
   const handleLogout = async () => {
@@ -136,7 +127,7 @@ export function UserIdentityDropdown() {
 
       {/* ── DROPDOWN PANEL ── */}
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-64 z-50 rounded-2xl border border-border bg-card/98 backdrop-blur-md shadow-sage-lg overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+        <div className="absolute right-0 mt-2 w-64 z-50 rounded-2xl border border-border bg-card backdrop-blur-md shadow-sage-lg overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
           
           {/* User Identity Header */}
           <div className="px-4 py-3.5 bg-gradient-to-r from-secondary/60 to-transparent border-b border-border">
@@ -176,35 +167,7 @@ export function UserIdentityDropdown() {
             </Link>
 
             {/* Theme Toggle */}
-            <button
-              type="button"
-              onClick={toggleTheme}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-foreground font-semibold hover:bg-secondary/40 hover:text-secondary-foreground transition-all duration-150 group"
-            >
-              <div className="h-7 w-7 rounded-lg bg-secondary/60 flex items-center justify-center shrink-0 group-hover:bg-secondary transition-colors">
-                {theme === "dark" ? (
-                  <Sun className="h-3.5 w-3.5 text-amber-500" />
-                ) : (
-                  <Moon className="h-3.5 w-3.5 text-secondary-foreground" />
-                )}
-              </div>
-              <div className="flex-1 min-w-0 text-left">
-                <p className="text-xs font-semibold">
-                  {theme === "dark" ? "Mode Terang" : "Mode Gelap"}
-                </p>
-                <p className="text-[10px] text-primary font-normal">
-                  Tampilan saat ini: {theme === "dark" ? "Gelap 🌙" : "Terang ☀️"}
-                </p>
-              </div>
-              {/* Toggle pill indicator */}
-              <div className={`w-8 h-4.5 rounded-full border flex items-center px-0.5 transition-all duration-300 shrink-0 ${
-                theme === "dark"
-                  ? "bg-primary border-primary justify-end"
-                  : "bg-border border-border justify-start"
-              }`}>
-                <div className="w-3.5 h-3.5 rounded-full bg-white shadow-sm" />
-              </div>
-            </button>
+            {/* Theme toggle removed — app locked to light mode */}
 
             {/* Divider */}
             <div className="my-1 border-t border-border/60" />

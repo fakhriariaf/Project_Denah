@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -23,6 +23,7 @@ import {
   markAllAsRead,
   getNotificationsPaginated,
 } from "@/server/actions/notification";
+import { EmptyState } from "@/components/ui/empty-state";
 import type { NotificationItem } from "@/server/actions/notification";
 
 interface NotificationsClientProps {
@@ -274,7 +275,7 @@ export function NotificationsClient({
               <select
                 value={type}
                 onChange={(e) => handleTypeChange(e.target.value)}
-                className="h-9 rounded-lg border border-[#D6DED2] bg-white px-3 text-xs font-medium text-[#243028] focus:ring-2 focus:ring-[#4F6F52]/20 focus:border-[#4F6F52] outline-none"
+                className="h-9 rounded-lg border border-[#D6DED2] bg-white px-3 text-xs font-medium text-[#243028] focus:ring-2 focus:ring-ring/20 focus:border-[#4F6F52] outline-none"
               >
                 {NOTIFICATION_TYPES.map((t) => (
                   <option key={t.value} value={t.value}>
@@ -291,7 +292,7 @@ export function NotificationsClient({
                 type="date"
                 value={startDate}
                 onChange={(e) => handleDateChange("startDate", e.target.value)}
-                className="h-9 rounded-lg border border-[#D6DED2] bg-white px-3 text-xs font-medium text-[#243028] focus:ring-2 focus:ring-[#4F6F52]/20 focus:border-[#4F6F52] outline-none"
+                className="h-9 rounded-lg border border-[#D6DED2] bg-white px-3 text-xs font-medium text-[#243028] focus:ring-2 focus:ring-ring/20 focus:border-[#4F6F52] outline-none"
               />
             </div>
             <div className="flex flex-col gap-1.5">
@@ -300,7 +301,7 @@ export function NotificationsClient({
                 type="date"
                 value={endDate}
                 onChange={(e) => handleDateChange("endDate", e.target.value)}
-                className="h-9 rounded-lg border border-[#D6DED2] bg-white px-3 text-xs font-medium text-[#243028] focus:ring-2 focus:ring-[#4F6F52]/20 focus:border-[#4F6F52] outline-none"
+                className="h-9 rounded-lg border border-[#D6DED2] bg-white px-3 text-xs font-medium text-[#243028] focus:ring-2 focus:ring-ring/20 focus:border-[#4F6F52] outline-none"
               />
             </div>
 
@@ -326,15 +327,13 @@ export function NotificationsClient({
       <Card className="border-[#D6DED2]">
         <CardContent className="p-0">
           {data.length === 0 ? (
-            <div className="py-16 flex flex-col items-center justify-center text-[#66736A] gap-3">
-              <Bell className="w-12 h-12 opacity-30 text-[#8FAF9A]" />
-              <span className="text-sm font-semibold">Tidak ada notifikasi</span>
-              <span className="text-xs text-[#66736A]/70">
-                {type !== "all" || startDate || endDate
-                  ? "Coba ubah filter untuk melihat notifikasi lainnya"
-                  : "Belum ada notifikasi yang masuk"}
-              </span>
-            </div>
+            <EmptyState
+              title="Tidak ada notifikasi"
+              description={type !== "all" || startDate || endDate
+                ? "Coba ubah filter untuk melihat notifikasi lainnya"
+                : "Belum ada notifikasi yang masuk"}
+              icon={<Bell className="h-6 w-6" />}
+            />
           ) : (
             <div className="divide-y divide-[#D6DED2]">
               {data.map((item) => (

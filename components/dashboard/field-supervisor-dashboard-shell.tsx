@@ -35,7 +35,6 @@ import {
   DialogTitle 
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { 
@@ -351,7 +350,7 @@ export function FieldSupervisorDashboardShell({ data, userName }: FieldSuperviso
             </div>
           </CardHeader>
           <CardContent className="p-4 pt-0">
-            <div className="text-2xl font-black text-[#243028] font-mono tracking-tight">{metrics.activeSpks}</div>
+            <div className="text-2xl font-black text-[#243028] font-mono tracking-tight tabular-nums">{metrics.activeSpks}</div>
           </CardContent>
         </Card>
 
@@ -365,7 +364,7 @@ export function FieldSupervisorDashboardShell({ data, userName }: FieldSuperviso
             </div>
           </CardHeader>
           <CardContent className="p-4 pt-0">
-            <div className="text-2xl font-black text-[#243028] font-mono tracking-tight">{metrics.unitsBuilding}</div>
+            <div className="text-2xl font-black text-[#243028] font-mono tracking-tight tabular-nums">{metrics.unitsBuilding}</div>
           </CardContent>
         </Card>
 
@@ -379,7 +378,7 @@ export function FieldSupervisorDashboardShell({ data, userName }: FieldSuperviso
             </div>
           </CardHeader>
           <CardContent className="p-4 pt-0">
-            <div className="text-2xl font-black text-emerald-600 font-mono tracking-tight">
+            <div className="text-2xl font-black text-emerald-600 font-mono tracking-tight tabular-nums">
               {metrics.recentProgress} <span className="text-[10px] text-[#66736A] font-normal tracking-normal">(3 hari)</span>
             </div>
           </CardContent>
@@ -395,7 +394,7 @@ export function FieldSupervisorDashboardShell({ data, userName }: FieldSuperviso
             </div>
           </CardHeader>
           <CardContent className="p-4 pt-0">
-            <div className="text-2xl font-black text-rose-600 font-mono tracking-tight">{metrics.overdueSpks}</div>
+            <div className="text-2xl font-black text-rose-600 font-mono tracking-tight tabular-nums">{metrics.overdueSpks}</div>
           </CardContent>
         </Card>
 
@@ -409,7 +408,7 @@ export function FieldSupervisorDashboardShell({ data, userName }: FieldSuperviso
             </div>
           </CardHeader>
           <CardContent className="p-4 pt-0">
-            <div className="text-2xl font-black text-[#243028] font-mono tracking-tight">{metrics.pendingBast}</div>
+            <div className="text-2xl font-black text-[#243028] font-mono tracking-tight tabular-nums">{metrics.pendingBast}</div>
           </CardContent>
         </Card>
       </div>
@@ -457,7 +456,7 @@ export function FieldSupervisorDashboardShell({ data, userName }: FieldSuperviso
       </div>
 
       {/* 4. Main Sections Layout - Row 1: Pekerjaan Berjalan & Kendala */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
         
         {/* Left Side: Pekerjaan Konstruksi Berjalan (lg:col-span-2) */}
         <div className="lg:col-span-2 flex">
@@ -655,7 +654,7 @@ export function FieldSupervisorDashboardShell({ data, userName }: FieldSuperviso
       </div>
 
       {/* Row 2: Progress Terbaru & BAST Vendor */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
         
         {/* Left Side: Progress Terbaru (lg:col-span-2) */}
         <div className="lg:col-span-2 flex">
@@ -681,7 +680,7 @@ export function FieldSupervisorDashboardShell({ data, userName }: FieldSuperviso
                         placeholder="Cari perumahan, kavling, atau item..."
                         value={logSearchQuery}
                         onChange={(e) => setLogSearchQuery(e.target.value)}
-                        className="pl-9 h-9 text-xs border-[#D6DED2] focus-visible:ring-[#4F6F52] bg-white rounded-xl"
+                        className="pl-9 h-9 text-xs border-[#D6DED2] focus-visible:ring-ring bg-white rounded-xl"
                       />
                     </div>
                     <div className="flex gap-2 w-full sm:w-auto justify-end">

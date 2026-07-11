@@ -16,6 +16,7 @@ import {
 import { KeyRound, Loader2, AlertCircle, Eye, EyeOff } from "lucide-react";
 import { resetUserPassword } from "@/server/actions/users";
 import { parseServerError } from "@/lib/error-parser";
+import { toast } from "sonner";
 
 interface ResetPasswordDialogProps {
   userId: string;
@@ -35,11 +36,13 @@ export function ResetPasswordDialog({ userId, userName }: ResetPasswordDialogPro
       setError(null);
       try {
         await resetUserPassword(userId, password);
-        alert(`Password untuk ${userName} berhasil diubah!`);
+        toast.success(`Password untuk ${userName} berhasil diubah!`);
         setOpen(false);
         setPassword("");
       } catch (err) {
-        setError(parseServerError(err));
+        const msg = parseServerError(err);
+        setError(msg);
+        toast.error(msg);
       }
     });
   };
@@ -97,7 +100,7 @@ export function ResetPasswordDialog({ userId, userName }: ResetPasswordDialogPro
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Minimal 8 karakter"
-                className="bg-white border-[#D6DED2] rounded-xl text-xs h-9 pr-10 focus:ring-[#8FAF9A] focus:ring-2 focus:border-transparent transition-all"
+                className="bg-white border-[#D6DED2] rounded-xl text-xs h-9 pr-10 focus:ring-ring focus:ring-2 focus:border-transparent transition-all"
               />
               <button
                 type="button"
@@ -121,7 +124,7 @@ export function ResetPasswordDialog({ userId, userName }: ResetPasswordDialogPro
             <Button
               type="submit"
               disabled={isPending || password.length < 8}
-              className="bg-[#4F6F52] hover:bg-[#3D563F] text-white active:scale-95 shadow-[0_4px_14px_rgba(79,111,82,0.25)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 h-9 rounded-xl font-bold text-xs px-4 gap-2 cursor-pointer"
+              className="bg-[#4F6F52] hover:bg-[#3D563F] text-white active:scale-95 btn-premium h-9 rounded-xl font-bold text-xs px-4 gap-2 cursor-pointer"
             >
               {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
               {isPending ? "Menyimpan..." : "Simpan Password"}

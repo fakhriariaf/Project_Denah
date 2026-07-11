@@ -164,7 +164,7 @@ export default async function InvoiceDetailPage({
           <span className="flex items-center gap-2">
             {getStatusBadge(invoice.status)}
             {invoice.customerName && (
-              <span className="text-[#66736A]">— {invoice.customerName}</span>
+              <span className="text-muted-foreground">— {invoice.customerName}</span>
             )}
           </span>
         }
@@ -177,7 +177,7 @@ export default async function InvoiceDetailPage({
               </Button>
             </Link>
             <Link href={`/finance/invoices/${id}/print`} target="_blank">
-              <Button size="sm" className="gap-1 bg-[#4F6F52] hover:bg-[#3d5940] text-white">
+              <Button size="sm" className="gap-1 bg-primary hover:bg-[#3d5940] text-white">
                 <Printer className="h-4 w-4" />
                 Cetak Invoice
               </Button>
@@ -186,12 +186,12 @@ export default async function InvoiceDetailPage({
         }
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {/* Invoice Info Card */}
-        <Card className="lg:col-span-2 border-[#D6DED2]">
+        <Card className="lg:col-span-2 border-border">
           <CardHeader>
-            <CardTitle className="text-lg text-[#243028]">Detail Invoice</CardTitle>
-            <CardDescription className="text-[#66736A]">
+            <CardTitle className="text-lg text-foreground">Detail Invoice</CardTitle>
+            <CardDescription className="text-muted-foreground">
               Informasi lengkap tagihan
             </CardDescription>
           </CardHeader>
@@ -199,102 +199,102 @@ export default async function InvoiceDetailPage({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-3">
                 <div className="flex items-start gap-3">
-                  <Hash className="h-4 w-4 text-[#8FAF9A] mt-0.5 shrink-0" />
+                  <Hash className="h-4 w-4 text-primary/70 mt-0.5 shrink-0" />
                   <div>
-                    <p className="text-xs text-[#66736A] font-medium">Nomor Invoice</p>
-                    <p className="text-sm font-semibold text-[#243028] font-mono">{invoice.invoiceNumber}</p>
+                    <p className="text-xs text-muted-foreground font-medium">Nomor Invoice</p>
+                    <p className="text-sm font-semibold text-foreground font-mono">{invoice.invoiceNumber}</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3">
-                  <Receipt className="h-4 w-4 text-[#8FAF9A] mt-0.5 shrink-0" />
+                  <Receipt className="h-4 w-4 text-primary/70 mt-0.5 shrink-0" />
                   <div>
-                    <p className="text-xs text-[#66736A] font-medium">Jenis Tagihan</p>
-                    <p className="text-sm font-semibold text-[#243028]">{TYPE_LABELS[invoice.type] || invoice.type}</p>
+                    <p className="text-xs text-muted-foreground font-medium">Jenis Tagihan</p>
+                    <p className="text-sm font-semibold text-foreground">{TYPE_LABELS[invoice.type] || invoice.type}</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3">
-                  <CreditCard className="h-4 w-4 text-[#8FAF9A] mt-0.5 shrink-0" />
+                  <CreditCard className="h-4 w-4 text-primary/70 mt-0.5 shrink-0" />
                   <div>
-                    <p className="text-xs text-[#66736A] font-medium">Jumlah Tagihan</p>
-                    <p className="text-sm font-bold text-[#243028]">{formatRupiah(invoice.amount)}</p>
+                    <p className="text-xs text-muted-foreground font-medium">Jumlah Tagihan</p>
+                    <p className="text-sm font-bold text-foreground">{formatRupiah(invoice.amount)}</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3">
-                  <Calendar className="h-4 w-4 text-[#8FAF9A] mt-0.5 shrink-0" />
+                  <Calendar className="h-4 w-4 text-primary/70 mt-0.5 shrink-0" />
                   <div>
-                    <p className="text-xs text-[#66736A] font-medium">Jatuh Tempo</p>
-                    <p className="text-sm text-[#243028]">{formatDate(invoice.dueDate)}</p>
+                    <p className="text-xs text-muted-foreground font-medium">Jatuh Tempo</p>
+                    <p className="text-sm text-foreground">{formatDate(invoice.dueDate)}</p>
                   </div>
                 </div>
               </div>
               <div className="space-y-3">
                 <div className="flex items-start gap-3">
-                  <Building2 className="h-4 w-4 text-[#8FAF9A] mt-0.5 shrink-0" />
+                  <Building2 className="h-4 w-4 text-primary/70 mt-0.5 shrink-0" />
                   <div>
-                    <p className="text-xs text-[#66736A] font-medium">Proyek</p>
-                    <p className="text-sm font-semibold text-[#243028]">{invoice.projectName}</p>
+                    <p className="text-xs text-muted-foreground font-medium">Proyek</p>
+                    <p className="text-sm font-semibold text-foreground">{invoice.projectName}</p>
                   </div>
                 </div>
                 {invoice.unitCode && (
                   <div className="flex items-start gap-3">
-                    <Building2 className="h-4 w-4 text-[#8FAF9A] mt-0.5 shrink-0" />
+                    <Building2 className="h-4 w-4 text-primary/70 mt-0.5 shrink-0" />
                     <div>
-                      <p className="text-xs text-[#66736A] font-medium">Unit / Kavling</p>
-                      <p className="text-sm font-semibold font-mono text-[#243028]">{invoice.unitCode}</p>
+                      <p className="text-xs text-muted-foreground font-medium">Unit / Kavling</p>
+                      <p className="text-sm font-semibold font-mono text-foreground">{invoice.unitCode}</p>
                     </div>
                   </div>
                 )}
                 <div className="flex items-start gap-3">
-                  <User className="h-4 w-4 text-[#8FAF9A] mt-0.5 shrink-0" />
+                  <User className="h-4 w-4 text-primary/70 mt-0.5 shrink-0" />
                   <div>
-                    <p className="text-xs text-[#66736A] font-medium">Pelanggan</p>
-                    <p className="text-sm font-semibold text-[#243028]">{invoice.customerName || "—"}</p>
+                    <p className="text-xs text-muted-foreground font-medium">Pelanggan</p>
+                    <p className="text-sm font-semibold text-foreground">{invoice.customerName || "—"}</p>
                   </div>
                 </div>
                 {invoice.bookingNumber && (
                   <div className="flex items-start gap-3">
-                    <FileText className="h-4 w-4 text-[#8FAF9A] mt-0.5 shrink-0" />
+                    <FileText className="h-4 w-4 text-primary/70 mt-0.5 shrink-0" />
                     <div>
-                      <p className="text-xs text-[#66736A] font-medium">No. Booking</p>
-                      <p className="text-sm font-mono text-[#243028]">{invoice.bookingNumber}</p>
+                      <p className="text-xs text-muted-foreground font-medium">No. Booking</p>
+                      <p className="text-sm font-mono text-foreground">{invoice.bookingNumber}</p>
                     </div>
                   </div>
                 )}
               </div>
             </div>
             {invoice.notes && (
-              <div className="mt-4 pt-4 border-t border-[#D6DED2]">
-                <p className="text-xs text-[#66736A] font-medium mb-1">Catatan</p>
-                <p className="text-sm text-[#243028]">{invoice.notes}</p>
+              <div className="mt-4 pt-4 border-t border-border">
+                <p className="text-xs text-muted-foreground font-medium mb-1">Catatan</p>
+                <p className="text-sm text-foreground">{invoice.notes}</p>
               </div>
             )}
           </CardContent>
         </Card>
 
         {/* Summary Card */}
-        <Card className="border-[#D6DED2]">
+        <Card className="border-border">
           <CardHeader>
-            <CardTitle className="text-lg text-[#243028]">Ringkasan</CardTitle>
-            <CardDescription className="text-[#66736A]">
+            <CardTitle className="text-lg text-foreground">Ringkasan</CardTitle>
+            <CardDescription className="text-muted-foreground">
               Status pembayaran
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex justify-between items-center">
-              <span className="text-sm text-[#66736A]">Total Tagihan</span>
-              <span className="text-sm font-bold font-mono text-[#243028]">
+              <span className="text-sm text-muted-foreground">Total Tagihan</span>
+              <span className="text-sm font-bold font-mono text-foreground">
                 {formatRupiah(invoice.amount)}
               </span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-sm text-[#66736A]">Sudah Dibayar</span>
+              <span className="text-sm text-muted-foreground">Sudah Dibayar</span>
               <span className="text-sm font-bold font-mono text-green-700">
                 {formatRupiah(totalPaid)}
               </span>
             </div>
-            <div className="border-t border-[#D6DED2] pt-3">
+            <div className="border-t border-border pt-3">
               <div className="flex justify-between items-center">
-                <span className="text-sm font-semibold text-[#243028]">Sisa Tagihan</span>
+                <span className="text-sm font-semibold text-foreground">Sisa Tagihan</span>
                 <span
                   className={`text-base font-black font-mono ${
                     remainingBalance > 0 ? "text-red-700" : "text-green-700"
@@ -306,7 +306,7 @@ export default async function InvoiceDetailPage({
             </div>
             {/* Progress bar */}
             <div className="space-y-1">
-              <div className="flex justify-between text-xs text-[#66736A]">
+              <div className="flex justify-between text-xs text-muted-foreground">
                 <span>Progress Pembayaran</span>
                 <span>
                   {invoice.amount > 0
@@ -315,9 +315,9 @@ export default async function InvoiceDetailPage({
                   %
                 </span>
               </div>
-              <div className="h-2 rounded-full bg-[#DDE8D8] overflow-hidden">
+              <div className="h-2 rounded-full bg-secondary overflow-hidden">
                 <div
-                  className="h-full rounded-full bg-[#4F6F52] transition-all"
+                  className="h-full rounded-full bg-primary transition-all"
                   style={{
                     width: `${
                       invoice.amount > 0
@@ -333,16 +333,16 @@ export default async function InvoiceDetailPage({
       </div>
 
       {/* Payment History Table */}
-      <Card className="border-[#D6DED2]">
+      <Card className="border-border">
         <CardHeader>
-          <CardTitle className="text-lg text-[#243028]">Riwayat Pembayaran</CardTitle>
-          <CardDescription className="text-[#66736A]">
+          <CardTitle className="text-lg text-foreground">Riwayat Pembayaran</CardTitle>
+          <CardDescription className="text-muted-foreground">
             Seluruh pembayaran yang terkait dengan invoice ini
           </CardDescription>
         </CardHeader>
         <CardContent>
           {paymentsList.length === 0 ? (
-            <div className="text-center py-8 text-[#66736A]">
+            <div className="text-center py-8 text-muted-foreground">
               <CreditCard className="h-8 w-8 mx-auto mb-2 opacity-40" />
               <p className="text-sm">Belum ada pembayaran tercatat.</p>
             </div>
@@ -351,27 +351,27 @@ export default async function InvoiceDetailPage({
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="text-[#66736A]">No. Pembayaran</TableHead>
-                    <TableHead className="text-[#66736A]">Jumlah</TableHead>
-                    <TableHead className="text-[#66736A]">Tanggal</TableHead>
-                    <TableHead className="text-[#66736A]">Metode</TableHead>
-                    <TableHead className="text-[#66736A]">Bukti</TableHead>
-                    <TableHead className="text-[#66736A]">Status</TableHead>
+                    <TableHead className="text-muted-foreground">No. Pembayaran</TableHead>
+                    <TableHead className="text-muted-foreground">Jumlah</TableHead>
+                    <TableHead className="text-muted-foreground">Tanggal</TableHead>
+                    <TableHead className="text-muted-foreground">Metode</TableHead>
+                    <TableHead className="text-muted-foreground">Bukti</TableHead>
+                    <TableHead className="text-muted-foreground">Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {paymentsList.map((payment) => (
                     <TableRow key={payment.id}>
-                      <TableCell className="font-mono font-medium text-[#243028]">
+                      <TableCell className="font-mono font-medium text-foreground">
                         {payment.paymentNumber}
                       </TableCell>
-                      <TableCell className="font-mono font-semibold text-[#243028]">
+                      <TableCell className="font-mono font-semibold text-foreground">
                         {formatRupiah(payment.amount)}
                       </TableCell>
-                      <TableCell className="text-[#66736A]">
+                      <TableCell className="text-muted-foreground">
                         {formatDate(payment.paymentDate)}
                       </TableCell>
-                      <TableCell className="text-[#66736A]">
+                      <TableCell className="text-muted-foreground">
                         {METHOD_LABELS[payment.paymentMethod] || payment.paymentMethod}
                       </TableCell>
                       <TableCell>
@@ -380,12 +380,12 @@ export default async function InvoiceDetailPage({
                             href={payment.proofFileUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-[#4F6F52] hover:underline text-sm font-medium"
+                            className="text-primary hover:underline text-sm font-medium"
                           >
                             Lihat Bukti
                           </a>
                         ) : (
-                          <span className="text-[#66736A] text-sm">—</span>
+                          <span className="text-muted-foreground text-sm">—</span>
                         )}
                       </TableCell>
                       <TableCell>{getPaymentStatusBadge(payment.status)}</TableCell>

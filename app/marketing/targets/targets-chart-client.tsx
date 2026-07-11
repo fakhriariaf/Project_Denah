@@ -27,7 +27,7 @@ interface TargetsChartInnerProps {
 function TargetsChartInner({ data, year }: TargetsChartInnerProps) {
   if (data.length === 0) {
     return (
-      <div className="flex items-center justify-center h-[260px] text-sm text-[#8FAF9A]">
+      <div className="flex items-center justify-center h-[260px] text-sm text-primary/70">
         Belum ada data target untuk tahun {year}.
       </div>
     );

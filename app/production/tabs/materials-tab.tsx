@@ -54,14 +54,14 @@ export function MaterialsTab({
         </div>
         <Button
           onClick={onNewMaterial}
-          className="bg-primary hover:bg-[#4F6F52] text-primary-foreground font-semibold text-xs"
+          className="bg-primary hover:bg-primary text-primary-foreground font-semibold text-xs"
         >
           <Plus className="mr-1.5 h-3.5 w-3.5" />
           {t("production.btn_new_material")}
         </Button>
       </div>
 
-      <div className="rounded-md border border-[#8FAF9A]/20 overflow-hidden">
+      <div className="rounded-md border border-primary/20 overflow-hidden">
         <Table>
           <TableHeader className="bg-[#8FAF9A]/10">
             <TableRow>
@@ -80,12 +80,12 @@ export function MaterialsTab({
               <TableRow>
                 <TableCell colSpan={8} className="py-12 text-center">
                   <div className="flex flex-col items-center gap-3">
-                    <div className="h-16 w-16 rounded-full bg-[#DDE8D8]/50 flex items-center justify-center mx-auto">
-                      <Plus className="h-8 w-8 text-[#4F6F52]" />
+                    <div className="h-16 w-16 rounded-full bg-secondary/50 flex items-center justify-center mx-auto">
+                      <Plus className="h-8 w-8 text-primary" />
                     </div>
                     <div>
-                      <p className="font-semibold text-[#243028] text-sm">{t("production.material_empty")}</p>
-                      <p className="text-xs text-[#66736A] mt-1">{t("production.material_empty_desc")}</p>
+                      <p className="font-semibold text-foreground text-sm">{t("production.material_empty")}</p>
+                      <p className="text-xs text-muted-foreground mt-1">{t("production.material_empty_desc")}</p>
                     </div>
                   </div>
                 </TableCell>
@@ -107,7 +107,7 @@ export function MaterialsTab({
                     <Badge
                       className={`shadow-none font-semibold text-xs ${
                         m.status === "approved" || m.status === "purchased"
-                          ? "bg-[#DDE8D8] text-[#4F6F52] border border-[#8FAF9A]/30"
+                          ? "bg-secondary text-primary border border-primary/30"
                           : m.status === "finance_pending"
                           ? "bg-amber-50 text-amber-700 border border-amber-200"
                           : m.status === "rejected"
@@ -129,7 +129,7 @@ export function MaterialsTab({
                       <Button
                         size="sm"
                         onClick={() => onSubmitToFinance(m.id)}
-                        className="bg-primary hover:bg-[#4F6F52] text-primary-foreground font-semibold text-xs h-8"
+                        className="bg-primary hover:bg-primary text-primary-foreground font-semibold text-xs h-8"
                       >
                         {t("production.btn_submit_to_finance")}
                       </Button>

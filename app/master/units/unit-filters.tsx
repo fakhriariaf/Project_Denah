@@ -64,16 +64,16 @@ export function UnitFilters({ projects, statusMap }: UnitFiltersProps) {
   };
 
   return (
-    <div className="bg-white/70 backdrop-blur-md border border-[#D6DED2] rounded-2xl p-4 shadow-sage animate-in fade-in duration-300">
+    <div className="bg-background/70 backdrop-blur-md border border-border rounded-2xl p-4 shadow-sage animate-in fade-in duration-300">
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <div className="flex flex-col md:flex-row items-center gap-3">
           <div className="relative w-full md:flex-1">
-            <Search className="absolute left-3.5 top-3 h-4 w-4 text-[#8FAF9A]" />
+            <Search className="absolute left-3.5 top-3 h-4 w-4 text-primary/70" />
             <input
               value={searchVal}
               onChange={(e) => setSearchVal(e.target.value)}
               placeholder={t("unit_filters.search_placeholder")}
-              className="w-full pl-10 pr-4 h-10 rounded-xl border border-[#D6DED2] bg-[#F7F8F3]/60 text-sm text-[#243028] placeholder:text-[#A8B0AA] focus:outline-none focus:ring-2 focus:ring-[#8FAF9A]/50 focus:border-[#8FAF9A] transition-all duration-200 font-sans"
+              className="w-full pl-10 pr-4 h-10 rounded-xl border border-border bg-muted/30/60 text-sm text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-primary/40 transition-all duration-200 font-sans"
             />
           </div>
 
@@ -82,14 +82,14 @@ export function UnitFilters({ projects, statusMap }: UnitFiltersProps) {
               value={selectedProjectId}
               onValueChange={(val) => setSelectedProjectId(val || "all")}
             >
-              <SelectTrigger className="w-full h-10 rounded-xl border-[#D6DED2] bg-white/80 focus:ring-[#8FAF9A]/50 focus:border-[#8FAF9A] text-[#243028] text-sm font-medium">
+              <SelectTrigger className="w-full h-10 rounded-xl border-border bg-background/80 focus:ring-ring/50 focus:border-primary/40 text-foreground text-sm font-medium">
                 <SelectValue placeholder={t("unit_filters.all_projects")}>
                   {selectedProjectId === "all"
                     ? t("unit_filters.all_projects")
                     : projects.find(p => p.id === selectedProjectId)?.name}
                 </SelectValue>
               </SelectTrigger>
-              <SelectContent className="bg-white border-[#D6DED2] rounded-xl shadow-sage">
+              <SelectContent className="bg-card border-border rounded-xl shadow-sage">
                 <SelectItem value="all">{t("unit_filters.all_projects")}</SelectItem>
                 {projects.map((p) => (
                   <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
@@ -100,7 +100,7 @@ export function UnitFilters({ projects, statusMap }: UnitFiltersProps) {
 
           <Button
             type="submit"
-            className="w-full md:w-auto h-10 px-5 bg-[#4F6F52] hover:bg-[#3F5941] text-white rounded-xl shadow-glow-sage hover:scale-[1.02] active:scale-[0.98] transition-all font-semibold text-sm"
+            className="w-full md:w-auto h-10 px-5 bg-primary hover:bg-[#3F5941] text-white rounded-xl btn-premium transition-all font-semibold text-sm"
           >
             {t("unit_filters.search_btn")}
           </Button>
@@ -110,23 +110,23 @@ export function UnitFilters({ projects, statusMap }: UnitFiltersProps) {
               type="button"
               onClick={() => { setSearchVal(""); setSelectedProjectId("all"); router.push("?"); }}
               variant="outline"
-              className="w-full md:w-auto h-10 px-4 text-xs font-semibold rounded-xl border-[#D6DED2] text-[#66736A] hover:bg-[#F7F8F3] transition-colors"
+              className="w-full md:w-auto h-10 px-4 text-xs font-semibold rounded-xl border-border text-muted-foreground hover:bg-muted/30 transition-colors"
             >
               {t("action.reset")}
             </Button>
           )}
         </div>
 
-        {/* Status Pills Filter — colored dot indicators sesuai e2e_simulation_table */}
-        <div className="flex flex-wrap gap-2 pt-3 border-t border-[#D6DED2]/40">
+        {/* Status Pills Filter â€” colored dot indicators sesuai e2e_simulation_table */}
+        <div className="flex flex-wrap gap-2 pt-3 border-t border-border/40">
           {/* "Semua" pill */}
           <button
             type="button"
             onClick={() => handleStatusClick("")}
             className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all duration-200 whitespace-nowrap flex items-center gap-1.5
               ${!status
-                ? "bg-[#4F6F52] text-white border-[#4F6F52] shadow-[0_2px_8px_rgba(79,111,82,0.3)]"
-                : "bg-white text-[#66736A] border-[#D6DED2] hover:border-[#8FAF9A] hover:text-[#4F6F52] hover:bg-[#DDE8D8]/30"
+                ? "bg-primary text-white border-[#4F6F52] shadow-[0_2px_8px_rgba(79,111,82,0.3)]"
+                : "bg-card text-muted-foreground border-border hover:border-primary/40 hover:text-primary hover:bg-secondary/30"
               }`}
           >
             {t("unit_filters.all_status")}
@@ -135,7 +135,7 @@ export function UnitFilters({ projects, statusMap }: UnitFiltersProps) {
           {Object.entries(statusMap).map(([s, entry]) => {
             const isActive = status === s;
             const dotColor = entry.dotColor ?? "#AAAAAA";
-            // Parse fill color from Tailwind class e.g. bg-[#DDE8D8]
+            // Parse fill color from Tailwind class e.g. bg-secondary
             const fillMatch = entry.badgeClass?.match(/bg-\[([^\]]+)\]/);
             const fillColor = fillMatch?.[1] ?? "#F7F8F3";
             const textMatch = entry.badgeClass?.match(/text-\[([^\]]+)\]/);

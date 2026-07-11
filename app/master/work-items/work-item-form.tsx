@@ -8,13 +8,14 @@ import { z } from "zod";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { FormLabel, FieldError, FieldHelp, FormFieldGroup } from "@/components/ui/form-primitives";
 import { createWorkItem, updateWorkItem } from "@/server/actions/production";
 import { PlusCircle, Edit2, Wrench, AlertCircle, Loader2 } from "lucide-react";
 import { parseServerError } from "@/lib/error-parser";
 import { useI18n } from "@/lib/i18n";
+import { toast } from "sonner";
 
 const schema = z.object({
   code: z.string().min(2, "Kode wajib diisi").regex(/^[A-Z0-9-]+$/, "Hanya huruf kapital, angka, dan tanda -"),
@@ -65,16 +66,18 @@ export function WorkItemForm({ id, initialData, items }: Props) {
     try {
       if (id) {
         await updateWorkItem(id, values);
-        alert("Pekerjaan konstruksi (SPK work item) berhasil diperbarui!");
+        toast.success("Pekerjaan konstruksi (SPK work item) berhasil diperbarui!");
       } else {
         await createWorkItem(values);
-        alert("Pekerjaan konstruksi (SPK work item) berhasil disimpan!");
+        toast.success("Pekerjaan konstruksi (SPK work item) berhasil disimpan!");
       }
       setOpen(false);
       form.reset();
       router.refresh();
     } catch (err: unknown) {
-      setErrorMsg(parseServerError(err));
+      const msg = parseServerError(err);
+      setErrorMsg(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -118,57 +121,59 @@ export function WorkItemForm({ id, initialData, items }: Props) {
             )}
 
             <div className="grid grid-cols-3 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-xs font-semibold text-[#243028]">{t("work_item_form.code")} <span className="text-red-500">*</span></Label>
+              <FormFieldGroup>
+                <FormLabel required>{t("work_item_form.code")}</FormLabel>
                 <Input
                   required
                   {...form.register("code")}
                   placeholder={t("work_item_form.code_placeholder")}
-                  className="bg-white border-[#D6DED2] rounded-xl text-xs h-9 focus:ring-[#8FAF9A] font-mono uppercase placeholder:text-[#A8B0AA]"
+                  aria-invalid={!!form.formState.errors.code}
+                  className="bg-card border-input rounded-xl text-xs h-9 focus-visible:ring-2 focus-visible:ring-ring font-mono uppercase placeholder:text-muted-foreground aria-[invalid=true]:border-destructive"
                   onChange={e => form.setValue("code", e.target.value.toUpperCase())}
                 />
-                {form.formState.errors.code && <p className="text-xs text-rose-500">{t("work_item_form.error_code")}</p>}
-              </div>
-              <div className="col-span-2 space-y-1.5">
-                <Label className="text-xs font-semibold text-[#243028]">{t("work_item_form.name")} <span className="text-red-500">*</span></Label>
-                <Input required {...form.register("name")} placeholder={t("work_item_form.name_placeholder")} className="bg-white border-[#D6DED2] rounded-xl text-xs h-9 focus:ring-[#8FAF9A] placeholder:text-[#A8B0AA]" />
-                {form.formState.errors.name && <p className="text-xs text-rose-500">{t("work_item_form.error_name")}</p>}
-              </div>
+                <FieldError>{form.formState.errors.code && t("work_item_form.error_code")}</FieldError>
+              </FormFieldGroup>
+              <FormFieldGroup className="col-span-2">
+                <FormLabel required>{t("work_item_form.name")}</FormLabel>
+                <Input required {...form.register("name")} placeholder={t("work_item_form.name_placeholder")} aria-invalid={!!form.formState.errors.name} className="bg-card border-input rounded-xl text-xs h-9 focus-visible:ring-2 focus-visible:ring-ring placeholder:text-muted-foreground aria-[invalid=true]:border-destructive" />
+                <FieldError>{form.formState.errors.name && t("work_item_form.error_name")}</FieldError>
+              </FormFieldGroup>
             </div>
 
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold text-[#243028]">{t("work_item_form.desc")} <span className="text-[#8FAF9A] font-normal">({t("form.optional")})</span></Label>
-              <Textarea {...form.register("description")} placeholder={t("work_item_form.desc_placeholder")} className="bg-white border-[#D6DED2] rounded-xl text-xs focus:ring-[#8FAF9A] placeholder:text-[#A8B0AA] min-h-[70px] resize-none" />
-            </div>
+            <FormFieldGroup>
+              <FormLabel>{t("work_item_form.desc")} <span className="text-muted-foreground font-normal">({t("form.optional")})</span></FormLabel>
+              <Textarea {...form.register("description")} placeholder={t("work_item_form.desc_placeholder")} className="bg-card border-input rounded-xl text-xs focus-visible:ring-2 focus-visible:ring-ring placeholder:text-muted-foreground min-h-[70px] resize-none" />
+            </FormFieldGroup>
 
             <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-xs font-semibold text-[#243028]">{t("work_item_form.weight")} <span className="text-red-500">*</span></Label>
+              <FormFieldGroup>
+                <FormLabel required>{t("work_item_form.weight")}</FormLabel>
                 <div className="relative">
-                  <Input required type="number" min={1} max={100} {...form.register("defaultWeightPct")} className="bg-white border-[#D6DED2] rounded-xl text-xs h-9 focus:ring-[#8FAF9A] font-mono pr-8" />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[#8FAF9A] font-bold">%</span>
+                  <Input required type="number" min={1} max={100} {...form.register("defaultWeightPct")} aria-invalid={!!form.formState.errors.defaultWeightPct} className="bg-card border-input rounded-xl text-xs h-9 focus-visible:ring-2 focus-visible:ring-ring font-mono pr-8 aria-[invalid=true]:border-destructive" />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-primary font-bold">%</span>
                 </div>
-                {form.formState.errors.defaultWeightPct && <p className="text-xs text-rose-500">{t("work_item_form.error_weight")}</p>}
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs font-semibold text-[#243028]">{t("work_item_form.status")} <span className="text-red-500">*</span></Label>
+                <FieldHelp>{t("work_item_form.add_desc", { remaining: remaining.toString() })}</FieldHelp>
+                <FieldError>{form.formState.errors.defaultWeightPct && t("work_item_form.error_weight")}</FieldError>
+              </FormFieldGroup>
+              <FormFieldGroup>
+                <FormLabel required>{t("work_item_form.status")}</FormLabel>
                 <Select required value={statusVal} onValueChange={(v: string | null) => form.setValue("status", v ?? "active")}>
-                  <SelectTrigger className="w-full text-xs rounded-xl border border-[#D6DED2] bg-white hover:bg-[#F7F8F3]/50 focus:ring-2 focus:ring-[#8FAF9A]/20 h-9 px-3 transition-premium">
+                  <SelectTrigger className="w-full text-xs rounded-xl border border-input bg-card hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring h-9 px-3 transition-premium">
                     <SelectValue>
                       {statusVal ? t(`work_item.status_${statusVal}` as any) : undefined}
                     </SelectValue>
                   </SelectTrigger>
-                  <SelectContent className="border-[#D6DED2] rounded-xl bg-white/95 backdrop-blur-md">
+                  <SelectContent className="border-input rounded-xl bg-popover backdrop-blur-md">
                     <SelectItem value="active" className="text-xs">{t("work_item.status_active")}</SelectItem>
                     <SelectItem value="inactive" className="text-xs">{t("work_item.status_inactive")}</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
+              </FormFieldGroup>
             </div>
 
             <DialogFooter className="pt-4 gap-2 border-t border-[#D6DED2] mt-2">
               <Button type="button" variant="outline" onClick={() => setOpen(false)} className="rounded-xl border-[#D6DED2] text-xs h-9 hover:bg-[#F7F8F3]/50">{t("action.cancel")}</Button>
-              <Button type="submit" disabled={loading} className="bg-[#4F6F52] hover:bg-[#3D563F] text-white active:scale-95 shadow-[0_4px_14px_rgba(79,111,82,0.25)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 h-9 rounded-xl font-bold text-xs px-4 gap-2">
+              <Button type="submit" disabled={loading} className="bg-[#4F6F52] hover:bg-[#3D563F] text-white active:scale-95 btn-premium h-9 rounded-xl font-bold text-xs px-4 gap-2">
                 {loading && <Loader2 className="h-4 w-4 animate-spin" />}
                 {id ? t("work_item_form.save_edit") : t("work_item_form.save_add")}
               </Button>

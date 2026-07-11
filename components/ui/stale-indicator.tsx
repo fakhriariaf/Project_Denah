@@ -32,8 +32,8 @@ export function StaleIndicator({
     <div
       className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors ${
         isStale
-          ? "bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800"
-          : "bg-[#F7F8F3] dark:bg-[#18221D] text-[#66736A] dark:text-[#8AA293] border border-[#D6DED2]/60 dark:border-[#1F2E26]"
+          ? "bg-amber-50 text-amber-700 border border-amber-200"
+          : "bg-[#F7F8F3]#18221D] text-[#66736A]#8AA293] border border-[#D6DED2]/60#1F2E26]"
       } ${className}`}
     >
       <Clock className="h-3 w-3" />
@@ -43,8 +43,8 @@ export function StaleIndicator({
         <button
           onClick={onRefresh}
           disabled={isRefreshing}
-          className={`ml-1 p-0.5 rounded hover:bg-black/5 dark:hover:bg-white/5 transition-colors disabled:opacity-50 ${
-            isStale ? "text-amber-600 dark:text-amber-400" : "text-[#8FAF9A]"
+          className={`ml-1 p-0.5 rounded hover:bg-black/5 transition-colors disabled:opacity-50 ${
+            isStale ? "text-amber-600" : "text-[#8FAF9A]"
           }`}
           title="Refresh data"
           aria-label="Refresh data"
