@@ -125,7 +125,7 @@ export default async function BookingsPage({
           <span className="flex items-center gap-2">
             <Translate namespace="booking" translationKey="subtitle" />
             {isBiasaRole && (
-              <span className="inline-flex items-center gap-1 text-xs text-[#4F6F52] bg-[#DDE8D8] px-2 py-0.5 rounded-full font-semibold">
+              <span className="inline-flex items-center gap-1 text-xs text-primary bg-secondary px-2 py-0.5 rounded-full font-semibold">
                 <ShieldAlert className="h-3 w-3" />
                 <Translate namespace="booking" translationKey="showing_mine" />
               </span>
@@ -147,7 +147,7 @@ export default async function BookingsPage({
       />
 
       {/* ── KPI METRIC CARDS ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         <StatCard
           title={<Translate namespace="booking" translationKey="total_revenue" />}
           value={formatRupiah(totalRevenue)}
@@ -175,7 +175,7 @@ export default async function BookingsPage({
       </div>
 
       {/* ── FILTER & SEARCH ── */}
-      <div className="bg-white/70 backdrop-blur-md border border-[#D6DED2] rounded-2xl p-4 shadow-sage">
+      <div className="bg-white/70 backdrop-blur-md border border-border rounded-2xl p-4 shadow-sage">
         <form method="GET" className="flex flex-col gap-3">
           <div className="flex flex-col md:flex-row items-center gap-3">
               <SearchInput
@@ -185,22 +185,22 @@ export default async function BookingsPage({
               />
             <Button
               type="submit"
-              className="w-full md:w-auto h-10 px-5 bg-[#4F6F52] hover:bg-[#3F5941] text-white rounded-xl font-semibold text-sm shadow-[0_2px_8px_rgba(79,111,82,0.25)]"
+              className="w-full md:w-auto h-10 px-5 bg-primary hover:bg-[#3F5941] text-white rounded-xl font-semibold text-sm shadow-[0_2px_8px_rgba(79,111,82,0.25)]"
             >
               <Translate namespace="action" translationKey="search" />
             </Button>
           </div>
 
           {/* Filter Pills */}
-          <div className="flex flex-wrap gap-2 pt-2 border-t border-[#D6DED2]/40">
+          <div className="flex flex-wrap gap-2 pt-2 border-t border-border/40">
             {/* "Booking Saya" filter - only for non-Biasa */}
             {!isBiasaRole && (
               <a
                 href={`?${new URLSearchParams({ ...(q ? { q } : {}), ...(statusFilter ? { status: statusFilter } : {}), ...(mineFilter ? {} : { mine: "1" }) }).toString()}`}
                 className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all duration-200 whitespace-nowrap flex items-center gap-1
                   ${mineFilter
-                    ? "bg-[#4F6F52] text-white border-[#4F6F52] shadow-[0_2px_8px_rgba(79,111,82,0.3)]"
-                    : "bg-white text-[#66736A] border-[#D6DED2] hover:border-[#8FAF9A] hover:text-[#4F6F52] hover:bg-[#DDE8D8]/30"
+                    ? "bg-primary text-white border-[#4F6F52] shadow-[0_2px_8px_rgba(79,111,82,0.3)]"
+                    : "bg-card text-muted-foreground border-border hover:border-primary/50 hover:text-primary hover:bg-secondary/30"
                   }`}
               >
                 <ShieldAlert className="h-3 w-3" />
@@ -214,8 +214,8 @@ export default async function BookingsPage({
                 href={`?${new URLSearchParams({ ...(q ? { q } : {}), ...(opt.value ? { status: opt.value } : {}), ...(mineFilter ? { mine: "1" } : {}) }).toString()}`}
                 className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all duration-200 whitespace-nowrap
                   ${statusFilter === opt.value || (opt.value === "" && !statusFilter)
-                    ? "bg-[#4F6F52] text-white border-[#4F6F52] shadow-[0_2px_8px_rgba(79,111,82,0.3)]"
-                    : "bg-white text-[#66736A] border-[#D6DED2] hover:border-[#8FAF9A] hover:text-[#4F6F52] hover:bg-[#DDE8D8]/30"
+                    ? "bg-primary text-white border-[#4F6F52] shadow-[0_2px_8px_rgba(79,111,82,0.3)]"
+                    : "bg-card text-muted-foreground border-border hover:border-primary/50 hover:text-primary hover:bg-secondary/30"
                   }`}
               >
                 <Translate namespace="booking" translationKey={opt.label as any} />

@@ -3,8 +3,8 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { NotificationDropdown } from "@/components/dashboard/notification-dropdown"
 import { UserIdentityDropdown } from "@/components/dashboard/user-identity-dropdown"
 import { CommandPalette } from "@/components/global-search/command-palette"
-import { ThemeToggle } from "@/components/theme-toggle"
 import { KeyboardShortcutsHelp } from "@/components/keyboard-shortcuts-help"
+import { AutoBreadcrumb } from "@/components/auto-breadcrumb"
 import { requireAuth, getSessionRole } from "@/server/permissions"
 import { redirect } from "next/navigation"
 import { Translate } from "@/components/translate"
@@ -31,17 +31,17 @@ export default async function MasterLayout({
         <header className="flex h-14 lg:h-[60px] items-center justify-between border-b bg-muted/40 px-6 gap-4">
           <div className="flex items-center gap-4 flex-1">
             <SidebarTrigger />
-            <h1 className="font-semibold text-lg font-inter"><Translate namespace="dash" translationKey="menu_master" /></h1>
+            <h1 className="font-semibold text-lg font-sans"><Translate namespace="dash" translationKey="menu_master" /></h1>
           </div>
           <div className="flex items-center gap-2">
-            <ThemeToggle />
             <NotificationDropdown />
             <UserIdentityDropdown />
           </div>
         </header>
         <CommandPalette />
         <KeyboardShortcutsHelp />
-        <div className="flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6 bg-background">
+        <div id="main-content" className="flex flex-1 flex-col gap-4 p-4 md:gap-5 md:p-5 lg:gap-6 lg:p-6 bg-background">
+          <AutoBreadcrumb className="px-1" />
           {children}
         </div>
       </main>

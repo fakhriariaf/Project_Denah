@@ -33,14 +33,14 @@ export function StatCard({
   return (
     <div
       className={cn(
-        "relative flex flex-col gap-2 rounded-xl border border-[#D6DED2] dark:border-[#1F2E26] bg-white dark:bg-[#151E1A] p-4 shadow-sm",
+        "relative flex flex-col gap-2 rounded-xl border border-border bg-card p-4 shadow-sm",
         className
       )}
       style={{ borderLeftWidth: "4px", borderLeftColor: colorScheme }}
     >
       {/* Header: icon + title */}
       <div className="flex items-center gap-2 text-muted-foreground">
-        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#DDE8D8]/60 dark:bg-[#1C2B22] text-[#4F6F52] dark:text-[#8FAF9A]">
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-secondary/60 text-primary">
           {icon}
         </span>
         <span className="text-sm font-medium">{title}</span>
@@ -48,16 +48,16 @@ export function StatCard({
 
       {/* Value + Trend */}
       <div className="flex items-end justify-between">
-        <span className="text-2xl font-bold tracking-tight text-[#243028] dark:text-[#E3EAE6]">
+        <span className="text-2xl font-bold tracking-tight text-foreground tabular-nums">
           {value}
         </span>
 
         {trend && (
           <span
             className={cn(
-              "inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-semibold",
+              "inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums",
               trend.direction === "up"
-                ? "bg-green-50 text-green-700"
+                ? "bg-emerald-50 text-emerald-700"
                 : "bg-red-50 text-red-600"
             )}
           >

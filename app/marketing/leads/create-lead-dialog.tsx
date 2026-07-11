@@ -22,6 +22,7 @@ import { Plus, UserSearch, AlertCircle, Loader2 } from "lucide-react";
 import { z } from "zod";
 import { parseServerError } from "@/lib/error-parser";
 import { useI18n } from "@/lib/i18n";
+import { toast } from "sonner";
 
 type FormValues = z.infer<typeof leadSchema>;
 
@@ -99,7 +100,7 @@ export default function CreateLeadDialog({ projects, units, customers, marketing
     try {
       const res = await createLead(data);
       if (res.success) {
-        alert("Lead/prospek baru berhasil disimpan!");
+        toast.success("Lead/prospek baru berhasil disimpan!");
         setOpen(false);
         reset();
         router.refresh();
@@ -114,22 +115,22 @@ export default function CreateLeadDialog({ projects, units, customers, marketing
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger nativeButton={true} render={
-        <Button className="bg-[#4F6F52] hover:bg-[#3F5941] text-white flex items-center gap-2">
+        <Button className="bg-primary hover:bg-[#3F5941] text-white flex items-center gap-2">
           <Plus className="h-4 w-4" /> {t("lead_form.add_btn")}
         </Button>
       } />
-      <DialogContent className="sm:max-w-lg rounded-3xl bg-white/98 backdrop-blur-md border border-[#D6DED2] shadow-[0_8px_30px_rgb(143,175,154,0.15)] p-0 overflow-hidden font-sans">
-        <div className="bg-gradient-to-r from-[#DDE8D8]/70 via-white/80 to-transparent p-6 border-b border-[#D6DED2]">
+      <DialogContent className="sm:max-w-lg rounded-3xl bg-white/98 backdrop-blur-md border border-border shadow-[0_8px_30px_rgb(143,175,154,0.15)] p-0 overflow-hidden font-sans">
+        <div className="bg-gradient-to-r from-[#DDE8D8]/70 via-white/80 to-transparent p-6 border-b border-border">
           <DialogHeader>
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-xl bg-white/80 border border-[#D6DED2] flex items-center justify-center shadow-sm">
-                <UserSearch className="h-5 w-5 text-[#4F6F52]" />
+              <div className="h-10 w-10 rounded-xl bg-white/80 border border-border flex items-center justify-center shadow-sm">
+                <UserSearch className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <DialogTitle className="text-xl font-black text-[#243028] tracking-tight">
+                <DialogTitle className="text-xl font-black text-foreground tracking-tight">
                   {t("lead_form.add_title")}
                 </DialogTitle>
-                <DialogDescription className="text-xs text-[#66736A] mt-1">
+                <DialogDescription className="text-xs text-muted-foreground mt-1">
                   Tambahkan data prospek baru ke dalam sistem pemasaran
                 </DialogDescription>
               </div>
@@ -147,18 +148,18 @@ export default function CreateLeadDialog({ projects, units, customers, marketing
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-3">
             {/* Row 1, Col 1: Nama Lengkap */}
             <div className="space-y-1">
-              <Label htmlFor="name" className="text-xs font-semibold text-[#243028] font-inter">{t("lead_form.name")} <span className="text-red-500">*</span></Label>
-              <Input id="name" required {...register("name")} placeholder={t("lead_form.name_placeholder")} className="bg-[#F7F8F3]/60 border-[#D6DED2] focus:border-[#8FAF9A]" />
+              <Label htmlFor="name" className="text-xs font-semibold text-foreground font-sans">{t("lead_form.name")} <span className="text-destructive">*</span></Label>
+              <Input id="name" required {...register("name")} placeholder={t("lead_form.name_placeholder")} className="bg-muted/30/60 border-border focus:border-primary/50" />
               {errors.name && <p className="text-xs text-rose-500 font-semibold">{((errors.name as any).message as string).startsWith("val.") ? t((errors.name as any).message as any) : (errors.name as any).message}</p>}
             </div>
 
             {/* Row 1, Col 2: Status Awal */}
             <div className="space-y-1">
-              <Label htmlFor="status" className="text-xs font-semibold text-[#243028] font-inter">{t("lead_form.status")}</Label>
+              <Label htmlFor="status" className="text-xs font-semibold text-foreground font-sans">{t("lead_form.status")}</Label>
               <select
                 id="status"
                 {...register("status")}
-                className="flex h-10 w-full rounded-lg border border-[#D6DED2] bg-[#F7F8F3]/60 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8FAF9A]/40"
+                className="flex h-10 w-full rounded-lg border border-border bg-muted/30/60 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
               >
                 <option value="new">{t("lead.status_new")}</option>
                 <option value="contacted">{t("lead.status_contacted")}</option>
@@ -168,14 +169,14 @@ export default function CreateLeadDialog({ projects, units, customers, marketing
 
             {/* Row 2, Col 1: Nomor HP / WhatsApp */}
             <div className="space-y-1">
-              <Label htmlFor="phone" className="text-xs font-semibold text-[#243028] font-inter">{t("lead_form.phone")} <span className="text-red-500">*</span></Label>
-              <Input id="phone" required {...register("phone")} placeholder={t("lead_form.phone_placeholder")} className="bg-[#F7F8F3]/60 border-[#D6DED2] focus:border-[#8FAF9A] font-mono" />
+              <Label htmlFor="phone" className="text-xs font-semibold text-foreground font-sans">{t("lead_form.phone")} <span className="text-destructive">*</span></Label>
+              <Input id="phone" required {...register("phone")} placeholder={t("lead_form.phone_placeholder")} className="bg-muted/30/60 border-border focus:border-primary/50 font-mono" />
               {errors.phone && <p className="text-xs text-rose-500 font-semibold">{((errors.phone as any).message as string).startsWith("val.") ? t((errors.phone as any).message as any) : (errors.phone as any).message}</p>}
             </div>
 
             {/* Row 2, Col 2: Perumahan Yang Diminati */}
             <div className="space-y-1">
-              <Label htmlFor="interestedProjectId" className="text-xs font-semibold text-[#243028] font-inter">{t("lead_form.project")}</Label>
+              <Label htmlFor="interestedProjectId" className="text-xs font-semibold text-foreground font-sans">{t("lead_form.project")}</Label>
               <select
                 id="interestedProjectId"
                 {...register("interestedProjectId", {
@@ -185,7 +186,7 @@ export default function CreateLeadDialog({ projects, units, customers, marketing
                     (document.getElementById("interestedUnitId") as HTMLSelectElement)?.value === "" || true;
                   }
                 })}
-                className="flex h-10 w-full rounded-lg border border-[#D6DED2] bg-[#F7F8F3]/60 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8FAF9A]/40"
+                className="flex h-10 w-full rounded-lg border border-border bg-muted/30/60 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
               >
                 <option value="">{t("lead_form.project_placeholder")}</option>
                 {projects.map((p) => (
@@ -197,11 +198,11 @@ export default function CreateLeadDialog({ projects, units, customers, marketing
             {/* Row 3 full-width: Unit yang Diminati (filtered by project) */}
             {selectedProjectId && (
               <div className="col-span-2 space-y-1">
-                <Label htmlFor="interestedUnitId" className="text-xs font-semibold text-[#243028] font-inter">Unit / Kavling yang Diminati <span className="text-[#8FAF9A] font-normal">(Opsional)</span></Label>
+                <Label htmlFor="interestedUnitId" className="text-xs font-semibold text-foreground font-sans">Unit / Kavling yang Diminati <span className="text-primary/70 font-normal">(Opsional)</span></Label>
                 <select
                   id="interestedUnitId"
                   {...register("interestedUnitId")}
-                  className="flex h-10 w-full rounded-lg border border-[#D6DED2] bg-[#F7F8F3]/60 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8FAF9A]/40 font-mono"
+                  className="flex h-10 w-full rounded-lg border border-border bg-muted/30/60 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 font-mono"
                 >
                   <option value="">-- Pilih unit/kavling yang diminati --</option>
                   {units.filter((u) => u.projectId === selectedProjectId && u.status === "available").map((u) => (
@@ -212,11 +213,11 @@ export default function CreateLeadDialog({ projects, units, customers, marketing
             )}
 
             {/* Row 3+, Col 1: Sumber Lead */}            <div className="space-y-1">
-              <Label htmlFor="source" className="text-xs font-semibold text-[#243028] font-inter">{t("lead_form.source")}</Label>
+              <Label htmlFor="source" className="text-xs font-semibold text-foreground font-sans">{t("lead_form.source")}</Label>
               <select
                 id="source"
                 {...register("source")}
-                className="flex h-10 w-full rounded-lg border border-[#D6DED2] bg-[#F7F8F3]/60 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8FAF9A]/40"
+                className="flex h-10 w-full rounded-lg border border-border bg-muted/30/60 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
               >
                 <option value="walk_in">{t("lead.source_walk_in")}</option>
                 <option value="ads">{t("lead.source_ads")}</option>
@@ -229,11 +230,11 @@ export default function CreateLeadDialog({ projects, units, customers, marketing
 
             {/* Row 3, Col 2: Assign ke Marketing PIC */}
             <div className="space-y-1">
-              <Label htmlFor="assignedMarketingId" className="text-xs font-semibold text-[#243028] font-inter">{t("lead_form.pic")}</Label>
+              <Label htmlFor="assignedMarketingId" className="text-xs font-semibold text-foreground font-sans">{t("lead_form.pic")}</Label>
               <select
                 id="assignedMarketingId"
                 {...register("assignedMarketingId")}
-                className="flex h-10 w-full rounded-lg border border-[#D6DED2] bg-[#F7F8F3]/60 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8FAF9A]/40"
+                className="flex h-10 w-full rounded-lg border border-border bg-muted/30/60 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
               >
                 {isBiasa && (
                   <option value={currentUser.id}>{t("lead_form.pic_self", { name: currentUser.name })}</option>
@@ -261,20 +262,20 @@ export default function CreateLeadDialog({ projects, units, customers, marketing
           </div>
 
           <div className="space-y-1">
-            <Label htmlFor="notes" className="text-xs font-semibold text-[#243028] font-inter">{t("lead_form.notes")}</Label>
+            <Label htmlFor="notes" className="text-xs font-semibold text-foreground font-sans">{t("lead_form.notes")}</Label>
             <textarea
               id="notes"
               {...register("notes")}
               placeholder={t("lead_form.notes_placeholder")}
-              className="flex min-h-[60px] w-full rounded-lg border border-[#D6DED2] bg-[#F7F8F3]/60 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8FAF9A]/40"
+              className="flex min-h-[60px] w-full rounded-lg border border-border bg-muted/30/60 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
             />
           </div>
 
-          <DialogFooter className="pt-4 gap-2 border-t border-[#D6DED2] mt-2">
-            <Button type="button" variant="outline" onClick={() => setOpen(false)} className="rounded-xl border-[#D6DED2] text-xs h-9 hover:bg-[#F7F8F3]/50">
+          <DialogFooter className="pt-4 gap-2 border-t border-border mt-2">
+            <Button type="button" variant="outline" onClick={() => setOpen(false)} className="rounded-xl border-border text-xs h-9 hover:bg-muted/30/50">
               {t("action.cancel")}
             </Button>
-            <Button type="submit" disabled={loading} className="bg-[#4F6F52] hover:bg-[#3D563F] text-white active:scale-95 shadow-[0_4px_14px_rgba(79,111,82,0.25)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 h-9 rounded-xl font-bold text-xs px-4 gap-2">
+            <Button type="submit" disabled={loading} className="bg-primary hover:bg-primary/90 text-white active:scale-95 btn-premium h-9 rounded-xl font-bold text-xs px-4 gap-2">
               {loading && <Loader2 className="h-4 w-4 animate-spin" />}
               {loading ? t("lead_form.saving") : t("lead_form.save_add")}
             </Button>

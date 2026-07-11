@@ -32,7 +32,7 @@ export function BookingIconLink({ href, type, className }: BookingIconLinkProps)
         href={href}
         className={
           className ??
-          "h-8 w-8 rounded-lg border border-[#D6DED2] bg-white text-[#66736A] hover:text-[#4F6F52] hover:bg-[#DDE8D8]/30 flex items-center justify-center transition-all shadow-sm"
+          "h-8 w-8 rounded-lg border border-border bg-card text-muted-foreground hover:text-primary hover:bg-secondary/30 flex items-center justify-center transition-all shadow-sm"
         }
         title={title}
       >
@@ -47,7 +47,7 @@ export function BookingIconLink({ href, type, className }: BookingIconLinkProps)
         href={href}
         className={
           className ??
-          "h-8 px-2.5 rounded-lg border border-[#D6DED2] bg-white text-[#4F6F52] hover:bg-[#DDE8D8]/30 hover:border-[#8FAF9A] flex items-center gap-1.5 transition-all shadow-sm text-xs font-semibold"
+          "h-8 px-2.5 rounded-lg border border-border bg-card text-primary hover:bg-secondary/30 hover:border-primary/50 flex items-center gap-1.5 transition-all shadow-sm text-xs font-semibold"
         }
         title={title}
       >
@@ -63,7 +63,7 @@ export function BookingIconLink({ href, type, className }: BookingIconLinkProps)
       href={href}
       className={
         className ??
-        "h-8 w-8 rounded-lg border border-[#D6DED2] bg-white text-[#66736A] hover:text-[#4F6F52] hover:bg-[#DDE8D8]/30 flex items-center justify-center transition-all shadow-sm shrink-0"
+        "h-8 w-8 rounded-lg border border-border bg-card text-muted-foreground hover:text-primary hover:bg-secondary/30 flex items-center justify-center transition-all shadow-sm shrink-0"
       }
       title={title}
     >

@@ -128,7 +128,7 @@ export function DeleteConfirm({
           <Button
             onClick={handleConfirm}
             disabled={isPending}
-            className="flex-1 bg-rose-600 hover:bg-rose-700 text-white rounded-xl h-11 font-semibold shadow-[0_4px_14px_rgba(215,122,122,0.35)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 disabled:opacity-60 disabled:scale-100"
+            className="flex-1 bg-rose-600 hover:bg-rose-700 text-white rounded-xl h-11 font-semibold shadow-[0_4px_14px_rgba(215,122,122,0.35)] btn-premium disabled:opacity-60 disabled:scale-100"
           >
             {isPending ? (
               <span className="flex items-center gap-2">

@@ -12,9 +12,11 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { FormLabel, FieldError, FormFieldGroup } from "@/components/ui/form-primitives";
 import { Plus, Building2, Loader2, AlertCircle } from "lucide-react";
 import { parseServerError } from "@/lib/error-parser";
 import { useI18n } from "@/lib/i18n";
+import { toast } from "sonner";
 
 const PROJECT_STATUS_LABELS: Record<string, string> = {
   active: "Aktif",
@@ -56,10 +58,10 @@ export function ProjectForm({
       try {
         if (id) {
           await updateProject(id, data);
-          alert(t("proj_form.save_success_update"));
+          toast.success(t("proj_form.save_success_update"));
         } else {
           await createProject(data);
-          alert(t("proj_form.save_success_create"));
+          toast.success(t("proj_form.save_success_create"));
         }
         setOpen(false);
         if (!id) reset();
@@ -74,24 +76,24 @@ export function ProjectForm({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger nativeButton={true} render={
         id ? (
-          <Button variant="outline" size="sm" className="h-7 text-xs border-[#D6DED2] rounded-lg hover:bg-[#F7F8F3]/50">{t("proj_form.edit_btn")}</Button>
+          <Button variant="outline" size="sm" className="h-7 text-xs border-border rounded-lg hover:bg-muted/50">{t("proj_form.edit_btn")}</Button>
         ) : (
-          <Button className="bg-[#4F6F52] hover:bg-[#3D563F] text-white active:scale-95 shadow-[0_4px_14px_rgba(79,111,82,0.25)] transition-all duration-300 h-9 rounded-xl font-bold text-xs px-4">
+          <Button className="bg-primary hover:bg-primary/90 text-primary-foreground active:scale-95 shadow-[0_4px_14px_rgba(79,111,82,0.25)] transition-all duration-300 h-9 rounded-xl font-bold text-xs px-4">
             <Plus className="mr-2 h-4 w-4" />
             {t("proj_form.add_btn")}
           </Button>
         )
       } />
-      <DialogContent className="sm:max-w-lg rounded-3xl bg-white/98 backdrop-blur-md border border-[#D6DED2] shadow-[0_8px_30px_rgb(143,175,154,0.15)] p-0 overflow-hidden font-sans">
-        <div className="bg-gradient-to-r from-[#DDE8D8]/70 via-white/80 to-transparent p-6 border-b border-[#D6DED2]">
+      <DialogContent className="sm:max-w-lg rounded-3xl bg-white/98 backdrop-blur-md border border-border shadow-[0_8px_30px_rgb(143,175,154,0.15)] p-0 overflow-hidden font-sans">
+        <div className="bg-gradient-to-r from-[#DDE8D8]/70 via-white/80 to-transparent p-6 border-b border-border">
           <DialogHeader>
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-xl bg-white/80 border border-[#D6DED2] flex items-center justify-center shadow-sm">
-                <Building2 className="h-5 w-5 text-[#4F6F52]" />
+              <div className="h-10 w-10 rounded-xl bg-white/80 border border-border flex items-center justify-center shadow-sm">
+                <Building2 className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <DialogTitle className="text-xl font-black text-[#243028] tracking-tight">{id ? t("proj_form.edit_title") : t("proj_form.add_title")}</DialogTitle>
-                <DialogDescription className="text-xs text-[#66736A] mt-1">
+                <DialogTitle className="text-xl font-black text-foreground tracking-tight">{id ? t("proj_form.edit_title") : t("proj_form.add_title")}</DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground mt-1">
                   {id ? t("proj_form.edit_desc") : t("proj_form.add_desc")}
                 </DialogDescription>
               </div>
@@ -106,35 +108,35 @@ export function ProjectForm({
           )}
           
           <div className="space-y-1.5">
-            <Label htmlFor="code" className="text-xs font-semibold text-[#243028]">{t("proj_form.code")} <span className="text-red-500">*</span></Label>
-            <Input id="code" required {...register("code")} placeholder="PRJ-001" className="font-mono bg-white border-[#D6DED2] rounded-xl text-xs h-9 focus:ring-[#8FAF9A] focus:ring-2 focus:border-transparent transition-all tabular-nums" />
-            {errors.code && <p className="text-xs text-red-500">{errors.code.message}</p>}
+            <Label htmlFor="code" className="text-xs font-semibold text-foreground">{t("proj_form.code")} <span className="text-destructive">*</span></Label>
+            <Input id="code" required {...register("code")} placeholder="PRJ-001" className="font-mono bg-card border-input rounded-xl text-xs h-9 focus-visible:ring-2 focus-visible:ring-ring tabular-nums" />
+            <FieldError>{errors.code?.message}</FieldError>
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="name" className="text-xs font-semibold text-[#243028]">{t("proj_form.name")} <span className="text-red-500">*</span></Label>
-            <Input id="name" required {...register("name")} placeholder="Perumahan Indah Asri" className="bg-white border-[#D6DED2] rounded-xl text-xs h-9 focus:ring-[#8FAF9A] focus:ring-2 focus:border-transparent transition-all" />
-            {errors.name && <p className="text-xs text-red-500">{errors.name.message}</p>}
+            <Label htmlFor="name" className="text-xs font-semibold text-foreground">{t("proj_form.name")} <span className="text-destructive">*</span></Label>
+            <Input id="name" required {...register("name")} placeholder="Perumahan Indah Asri" className="bg-card border-input rounded-xl text-xs h-9 focus-visible:ring-2 focus-visible:ring-ring" />
+            <FieldError>{errors.name?.message}</FieldError>
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="location" className="text-xs font-semibold text-[#243028]">{t("proj_form.location")}</Label>
-            <Input id="location" {...register("location")} placeholder={t("proj_form.loc_placeholder")} className="bg-white border-[#D6DED2] rounded-xl text-xs h-9 focus:ring-[#8FAF9A] focus:ring-2 focus:border-transparent transition-all" />
+            <Label htmlFor="location" className="text-xs font-semibold text-foreground">{t("proj_form.location")}</Label>
+            <Input id="location" {...register("location")} placeholder={t("proj_form.loc_placeholder")} className="bg-card border-input rounded-xl text-xs h-9 focus-visible:ring-2 focus-visible:ring-ring" />
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="description" className="text-xs font-semibold text-[#243028]">{t("proj_form.description")}</Label>
-            <Textarea id="description" {...register("description")} placeholder={t("proj_form.desc_placeholder")} className="bg-white border-[#D6DED2] rounded-xl text-xs min-h-[80px] focus:ring-[#8FAF9A] focus:ring-2 focus:border-transparent transition-all resize-none" />
+            <Label htmlFor="description" className="text-xs font-semibold text-foreground">{t("proj_form.description")}</Label>
+            <Textarea id="description" {...register("description")} placeholder={t("proj_form.desc_placeholder")} className="bg-card border-input rounded-xl text-xs min-h-[80px] focus-visible:ring-2 focus-visible:ring-ring resize-none" />
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="status" className="text-xs font-semibold text-[#243028]">{t("proj_form.status")}</Label>
+            <Label htmlFor="status" className="text-xs font-semibold text-foreground">{t("proj_form.status")}</Label>
             <Select 
               value={watch("status") ?? ""} 
               onValueChange={(val) => setValue("status", val as "active" | "inactive" | "completed")}
               required
             >
-              <SelectTrigger className="w-full text-xs rounded-xl border border-[#D6DED2] bg-white hover:bg-[#F7F8F3]/50 focus:ring-2 focus:ring-[#8FAF9A]/20 h-9 px-3 transition-premium">
+              <SelectTrigger className="w-full text-xs rounded-xl border border-input bg-card hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring h-9 px-3 transition-premium">
                 <SelectValue placeholder={t("proj_form.status_placeholder")}>
                   {(() => {
                     const val = watch("status");
@@ -142,7 +144,7 @@ export function ProjectForm({
                   })()}
                 </SelectValue>
               </SelectTrigger>
-              <SelectContent className="border-[#D6DED2] rounded-xl bg-white/95 backdrop-blur-md">
+              <SelectContent className="border-input rounded-xl bg-popover backdrop-blur-md">
                 <SelectItem value="active" className="text-xs">{t("proj.status_active")}</SelectItem>
                 <SelectItem value="inactive" className="text-xs">{t("proj.status_inactive")}</SelectItem>
                 <SelectItem value="completed" className="text-xs">{t("proj.status_completed")}</SelectItem>
@@ -151,12 +153,12 @@ export function ProjectForm({
           </div>
 
           <div className="flex flex-col gap-3 pt-2">
-            <div className="flex items-center justify-between p-3 bg-[#F7F8F3] rounded-2xl border border-[#D6DED2]/60">
+            <div className="flex items-center justify-between p-3 bg-muted/30 rounded-2xl border border-border/60">
               <div className="space-y-0.5">
-                <Label htmlFor="publicEnabled" className="text-xs font-bold text-[#243028] cursor-pointer">
+                <Label htmlFor="publicEnabled" className="text-xs font-bold text-foreground cursor-pointer">
                   Tampilkan Publik
                 </Label>
-                <p className="text-[10px] text-[#66736A] font-medium leading-tight">
+                <p className="text-[10px] text-muted-foreground font-medium leading-tight">
                   Izinkan calon konsumen melihat siteplan proyek ini tanpa login.
                 </p>
               </div>
@@ -171,16 +173,16 @@ export function ProjectForm({
                     }
                   }
                 })}
-                className="w-5 h-5 rounded-lg border-[#D6DED2] text-[#4F6F52] focus:ring-[#8FAF9A] rounded cursor-pointer accent-[#4F6F52]"
+                className="w-5 h-5 rounded-lg border-border text-primary focus:ring-ring rounded cursor-pointer accent-primary"
               />
             </div>
 
-            <div className={`flex items-center justify-between p-3 bg-[#F7F8F3] rounded-2xl border border-[#D6DED2]/60 transition-opacity ${!watch("publicEnabled") ? "opacity-40 pointer-events-none" : ""}`}>
+            <div className={`flex items-center justify-between p-3 bg-muted/30 rounded-2xl border border-border/60 transition-opacity ${!watch("publicEnabled") ? "opacity-40 pointer-events-none" : ""}`}>
               <div className="space-y-0.5">
-                <Label htmlFor="isFeaturedPublic" className="text-xs font-bold text-[#243028] cursor-pointer">
+                <Label htmlFor="isFeaturedPublic" className="text-xs font-bold text-foreground cursor-pointer">
                   Unggulan Publik (Featured)
                 </Label>
-                <p className="text-[10px] text-[#66736A] font-medium leading-tight">
+                <p className="text-[10px] text-muted-foreground font-medium leading-tight">
                   Tampilkan proyek ini sebagai default saat membuka halaman public view. Wajib aktifkan "Tampilkan Publik" terlebih dahulu.
                 </p>
               </div>
@@ -189,16 +191,16 @@ export function ProjectForm({
                 type="checkbox"
                 disabled={!watch("publicEnabled")}
                 {...register("isFeaturedPublic")}
-                className="w-5 h-5 rounded-lg border-[#D6DED2] text-[#4F6F52] focus:ring-[#8FAF9A] rounded cursor-pointer accent-[#4F6F52]"
+                className="w-5 h-5 rounded-lg border-border text-primary focus:ring-ring rounded cursor-pointer accent-primary"
               />
             </div>
           </div>
 
-          <DialogFooter className="pt-4 gap-2 border-t border-[#D6DED2] mt-2">
-            <Button variant="outline" type="button" onClick={() => setOpen(false)} className="rounded-xl border-[#D6DED2] text-xs h-9 hover:bg-[#F7F8F3]/50">
+          <DialogFooter className="pt-4 gap-2 border-t border-border mt-2">
+            <Button variant="outline" type="button" onClick={() => setOpen(false)} className="rounded-xl text-xs h-9">
               {t("action.cancel")}
             </Button>
-            <Button type="submit" disabled={isPending} className="bg-[#4F6F52] hover:bg-[#3D563F] text-white active:scale-95 shadow-[0_4px_14px_rgba(79,111,82,0.25)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 h-9 rounded-xl font-bold text-xs px-4 gap-2">
+            <Button type="submit" disabled={isPending} className="bg-primary hover:bg-primary/90 text-primary-foreground active:scale-95 btn-premium h-9 rounded-xl font-bold text-xs px-4 gap-2">
               {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
               {isPending ? t("proj_form.saving") : t("proj_form.save")}
             </Button>

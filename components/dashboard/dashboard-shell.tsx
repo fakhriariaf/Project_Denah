@@ -161,7 +161,7 @@ export default function DashboardShell({
             <div className="absolute top-0 left-0 w-full h-1 bg-[#4F6F52]" />
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
               <CardTitle className="text-[10px] font-bold text-[#66736A] uppercase tracking-wider">{t("dash.net_cash")}</CardTitle>
-              <div className="p-3 bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400 rounded-2xl group-hover:scale-110 group-hover:bg-emerald-500 group-hover:text-white transition-all duration-300">
+              <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl group-hover:scale-110 group-hover:bg-emerald-500 group-hover:text-white transition-all duration-300">
                 <CircleDollarSign className="h-4 w-4 shrink-0" />
               </div>
             </CardHeader>
@@ -180,7 +180,7 @@ export default function DashboardShell({
             <div className="absolute top-0 left-0 w-full h-1 bg-[#4F6F52]" />
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
               <CardTitle className="text-[10px] font-bold text-[#66736A] uppercase tracking-wider">{t("dash.available_units")}</CardTitle>
-              <div className="p-3 bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400 rounded-2xl group-hover:scale-110 group-hover:bg-emerald-500 group-hover:text-white transition-all duration-300">
+              <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl group-hover:scale-110 group-hover:bg-emerald-500 group-hover:text-white transition-all duration-300">
                 <Home className="h-4 w-4 shrink-0" />
               </div>
             </CardHeader>
@@ -200,7 +200,7 @@ export default function DashboardShell({
           <div className="absolute top-0 left-0 w-full h-1 bg-amber-500" />
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
             <CardTitle className="text-[10px] font-bold text-[#66736A] uppercase tracking-wider">{t("dash.booked_units")}</CardTitle>
-            <div className="p-3 bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400 rounded-2xl group-hover:scale-110 group-hover:bg-amber-500 group-hover:text-white transition-all duration-300">
+            <div className="p-3 bg-amber-50 text-amber-600 rounded-2xl group-hover:scale-110 group-hover:bg-amber-500 group-hover:text-white transition-all duration-300">
               <Home className="h-4 w-4 shrink-0" />
             </div>
           </CardHeader>
@@ -219,7 +219,7 @@ export default function DashboardShell({
           <div className="absolute top-0 left-0 w-full h-1 bg-purple-500" />
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
             <CardTitle className="text-[10px] font-bold text-[#66736A] uppercase tracking-wider">{t("dash.construction_units")}</CardTitle>
-            <div className="p-3 bg-purple-50 text-purple-600 dark:bg-purple-950/40 dark:text-purple-400 rounded-2xl group-hover:scale-110 group-hover:bg-purple-500 group-hover:text-white transition-all duration-300">
+            <div className="p-3 bg-purple-50 text-purple-600 rounded-2xl group-hover:scale-110 group-hover:bg-purple-500 group-hover:text-white transition-all duration-300">
               <Wrench className="h-4 w-4 shrink-0" />
             </div>
           </CardHeader>

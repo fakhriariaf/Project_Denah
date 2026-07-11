@@ -154,12 +154,12 @@ export default async function ComplaintDetailPage({ params }: ComplaintDetailPag
   };
 
   return (
-    <div className="min-h-screen bg-[#F7F8F3] p-4 md:p-8">
+    <div className="min-h-screen bg-muted/30 p-4 md:p-8">
       <div className="max-w-5xl mx-auto space-y-6">
         {/* Back Link */}
         <Link
           href="/production?tab=complaints"
-          className="inline-flex items-center gap-2 text-sm text-[#4F6F52] hover:text-[#3d5a40] font-medium transition-colors"
+          className="inline-flex items-center gap-2 text-sm text-primary hover:text-[#3d5a40] font-medium transition-colors"
         >
           <ArrowLeft className="h-4 w-4" />
           Kembali ke Daftar Komplain
@@ -168,7 +168,7 @@ export default async function ComplaintDetailPage({ params }: ComplaintDetailPag
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-1">
-            <h1 className="text-2xl font-bold text-[#243028] font-[family-name:var(--font-outfit)]">
+            <h1 className="text-2xl font-bold text-foreground font-sans">
               {complaintData.complaintNumber}
             </h1>
             {complaintData.title && (
@@ -181,7 +181,7 @@ export default async function ComplaintDetailPage({ params }: ComplaintDetailPag
             </Badge>
             <Badge
               variant="outline"
-              className="text-xs border-[#8FAF9A] text-primary bg-[#8FAF9A]/5 font-semibold shadow-none"
+              className="text-xs border-primary/50 text-primary bg-[#8FAF9A]/5 font-semibold shadow-none"
             >
               {categoryLabels[complaintData.category] || complaintData.category}
             </Badge>
@@ -189,10 +189,10 @@ export default async function ComplaintDetailPage({ params }: ComplaintDetailPag
         </div>
 
         {/* Timeline Section */}
-        <Card className="border-[#8FAF9A]/20">
+        <Card className="border-primary/20">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base font-bold text-[#243028] flex items-center gap-2">
-              <Clock className="h-4 w-4 text-[#4F6F52]" />
+            <CardTitle className="text-base font-bold text-foreground flex items-center gap-2">
+              <Clock className="h-4 w-4 text-primary" />
               Timeline
             </CardTitle>
           </CardHeader>
@@ -203,11 +203,11 @@ export default async function ComplaintDetailPage({ params }: ComplaintDetailPag
 
               {/* Created */}
               <div className="relative">
-                <div className="absolute -left-6 top-0.5 h-5 w-5 rounded-full bg-[#4F6F52] flex items-center justify-center">
+                <div className="absolute -left-6 top-0.5 h-5 w-5 rounded-full bg-primary flex items-center justify-center">
                   <CircleDot className="h-3 w-3 text-white" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-[#243028]">Komplain Dibuka</p>
+                  <p className="text-sm font-semibold text-foreground">Komplain Dibuka</p>
                   <p className="text-xs text-muted-foreground">{formatDate(complaintData.createdAt)}</p>
                 </div>
               </div>
@@ -218,7 +218,7 @@ export default async function ComplaintDetailPage({ params }: ComplaintDetailPag
                   <Tag className="h-3 w-3 text-white" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-[#243028]">Kategori Ditetapkan</p>
+                  <p className="text-sm font-semibold text-foreground">Kategori Ditetapkan</p>
                   <p className="text-xs text-muted-foreground">
                     {categoryLabels[complaintData.category] || complaintData.category}
                   </p>
@@ -232,7 +232,7 @@ export default async function ComplaintDetailPage({ params }: ComplaintDetailPag
                     <Truck className="h-3 w-3 text-white" />
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-[#243028]">Vendor Ditugaskan</p>
+                    <p className="text-sm font-semibold text-foreground">Vendor Ditugaskan</p>
                     <p className="text-xs text-muted-foreground">{vendorName}</p>
                   </div>
                 </div>
@@ -245,10 +245,10 @@ export default async function ComplaintDetailPage({ params }: ComplaintDetailPag
                     <CheckCircle className="h-3 w-3 text-white" />
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-[#243028]">Komplain Diselesaikan</p>
+                    <p className="text-sm font-semibold text-foreground">Komplain Diselesaikan</p>
                     <p className="text-xs text-muted-foreground">{formatDate(complaintData.resolvedAt)}</p>
                     {complaintData.repairAction && (
-                      <p className="text-xs text-[#4F6F52] mt-1">{complaintData.repairAction}</p>
+                      <p className="text-xs text-primary mt-1">{complaintData.repairAction}</p>
                     )}
                   </div>
                 </div>
@@ -260,50 +260,50 @@ export default async function ComplaintDetailPage({ params }: ComplaintDetailPag
         {/* Detail Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Customer Info */}
-          <Card className="border-[#8FAF9A]/20">
+          <Card className="border-primary/20">
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-bold text-[#243028] flex items-center gap-2">
-                <User className="h-4 w-4 text-[#4F6F52]" />
+              <CardTitle className="text-sm font-bold text-foreground flex items-center gap-2">
+                <User className="h-4 w-4 text-primary" />
                 Informasi Pelanggan
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
               <div>
                 <p className="text-xs text-muted-foreground">Nama</p>
-                <p className="text-sm font-medium text-[#243028]">{complaintData.customerName || "-"}</p>
+                <p className="text-sm font-medium text-foreground">{complaintData.customerName || "-"}</p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Telepon</p>
-                <p className="text-sm font-medium text-[#243028]">{complaintData.customerPhone || "-"}</p>
+                <p className="text-sm font-medium text-foreground">{complaintData.customerPhone || "-"}</p>
               </div>
             </CardContent>
           </Card>
 
           {/* Unit Info */}
-          <Card className="border-[#8FAF9A]/20">
+          <Card className="border-primary/20">
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-bold text-[#243028] flex items-center gap-2">
-                <Home className="h-4 w-4 text-[#4F6F52]" />
+              <CardTitle className="text-sm font-bold text-foreground flex items-center gap-2">
+                <Home className="h-4 w-4 text-primary" />
                 Informasi Unit
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
               <div>
                 <p className="text-xs text-muted-foreground">Kode Unit</p>
-                <p className="text-sm font-medium text-[#243028]">{complaintData.unitCode || "-"}</p>
+                <p className="text-sm font-medium text-foreground">{complaintData.unitCode || "-"}</p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Proyek</p>
-                <p className="text-sm font-medium text-[#243028]">{complaintData.projectName || "-"}</p>
+                <p className="text-sm font-medium text-foreground">{complaintData.projectName || "-"}</p>
               </div>
             </CardContent>
           </Card>
 
           {/* Complaint Details */}
-          <Card className="border-[#8FAF9A]/20">
+          <Card className="border-primary/20">
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-bold text-[#243028] flex items-center gap-2">
-                <FileText className="h-4 w-4 text-[#4F6F52]" />
+              <CardTitle className="text-sm font-bold text-foreground flex items-center gap-2">
+                <FileText className="h-4 w-4 text-primary" />
                 Detail Komplain
               </CardTitle>
             </CardHeader>
@@ -311,16 +311,16 @@ export default async function ComplaintDetailPage({ params }: ComplaintDetailPag
               {complaintData.title && (
                 <div>
                   <p className="text-xs text-muted-foreground">Judul</p>
-                  <p className="text-sm font-medium text-[#243028]">{complaintData.title}</p>
+                  <p className="text-sm font-medium text-foreground">{complaintData.title}</p>
                 </div>
               )}
               <div>
                 <p className="text-xs text-muted-foreground">Deskripsi</p>
-                <p className="text-sm font-medium text-[#243028] whitespace-pre-wrap">{complaintData.description}</p>
+                <p className="text-sm font-medium text-foreground whitespace-pre-wrap">{complaintData.description}</p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Kategori</p>
-                <p className="text-sm font-medium text-[#243028]">
+                <p className="text-sm font-medium text-foreground">
                   {categoryLabels[complaintData.category] || complaintData.category}
                 </p>
               </div>
@@ -328,40 +328,40 @@ export default async function ComplaintDetailPage({ params }: ComplaintDetailPag
           </Card>
 
           {/* Resolution Details */}
-          <Card className="border-[#8FAF9A]/20">
+          <Card className="border-primary/20">
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-bold text-[#243028] flex items-center gap-2">
-                <CheckCircle className="h-4 w-4 text-[#4F6F52]" />
+              <CardTitle className="text-sm font-bold text-foreground flex items-center gap-2">
+                <CheckCircle className="h-4 w-4 text-primary" />
                 Detail Resolusi
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
               <div>
                 <p className="text-xs text-muted-foreground">Status</p>
-                <p className="text-sm font-medium text-[#243028]">{statusLabel}</p>
+                <p className="text-sm font-medium text-foreground">{statusLabel}</p>
               </div>
               {complaintData.resolvedAt && (
                 <div>
                   <p className="text-xs text-muted-foreground">Tanggal Selesai</p>
-                  <p className="text-sm font-medium text-[#243028]">{formatDate(complaintData.resolvedAt)}</p>
+                  <p className="text-sm font-medium text-foreground">{formatDate(complaintData.resolvedAt)}</p>
                 </div>
               )}
               {complaintData.repairAction && (
                 <div>
                   <p className="text-xs text-muted-foreground">Tindakan Perbaikan</p>
-                  <p className="text-sm font-medium text-[#243028] whitespace-pre-wrap">{complaintData.repairAction}</p>
+                  <p className="text-sm font-medium text-foreground whitespace-pre-wrap">{complaintData.repairAction}</p>
                 </div>
               )}
               {complaintData.developerNote && (
                 <div>
                   <p className="text-xs text-muted-foreground">Catatan Developer</p>
-                  <p className="text-sm font-medium text-[#243028] whitespace-pre-wrap">{complaintData.developerNote}</p>
+                  <p className="text-sm font-medium text-foreground whitespace-pre-wrap">{complaintData.developerNote}</p>
                 </div>
               )}
               {assignedUserName && (
                 <div>
                   <p className="text-xs text-muted-foreground">Ditangani Oleh</p>
-                  <p className="text-sm font-medium text-[#243028]">{assignedUserName}</p>
+                  <p className="text-sm font-medium text-foreground">{assignedUserName}</p>
                 </div>
               )}
               {!complaintData.resolvedAt && !complaintData.repairAction && !complaintData.developerNote && !assignedUserName && (
@@ -373,10 +373,10 @@ export default async function ComplaintDetailPage({ params }: ComplaintDetailPag
 
         {/* Attachments Section */}
         {complaintAttachments.length > 0 && (
-          <Card className="border-[#8FAF9A]/20">
+          <Card className="border-primary/20">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base font-bold text-[#243028] flex items-center gap-2">
-                <Paperclip className="h-4 w-4 text-[#4F6F52]" />
+              <CardTitle className="text-base font-bold text-foreground flex items-center gap-2">
+                <Paperclip className="h-4 w-4 text-primary" />
                 Lampiran ({complaintAttachments.length})
               </CardTitle>
             </CardHeader>
@@ -388,13 +388,13 @@ export default async function ComplaintDetailPage({ params }: ComplaintDetailPag
                     href={attachment.fileUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-3 p-3 rounded-lg border border-[#8FAF9A]/20 hover:border-[#8FAF9A]/50 hover:bg-[#DDE8D8]/30 transition-all group"
+                    className="flex items-center gap-3 p-3 rounded-lg border border-primary/20 hover:border-primary/50/50 hover:bg-secondary/30 transition-all group"
                   >
-                    <div className="h-9 w-9 rounded-md bg-[#DDE8D8]/50 flex items-center justify-center flex-shrink-0">
-                      <Download className="h-4 w-4 text-[#4F6F52] group-hover:scale-110 transition-transform" />
+                    <div className="h-9 w-9 rounded-md bg-secondary/50 flex items-center justify-center flex-shrink-0">
+                      <Download className="h-4 w-4 text-primary group-hover:scale-110 transition-transform" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-xs font-medium text-[#243028] truncate">{attachment.fileName}</p>
+                      <p className="text-xs font-medium text-foreground truncate">{attachment.fileName}</p>
                       {attachment.mimeType && (
                         <p className="text-[10px] text-muted-foreground">{attachment.mimeType}</p>
                       )}

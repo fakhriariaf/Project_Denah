@@ -12,6 +12,92 @@ import { Translate } from "@/components/translate";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
+/** Mapping action code → human-readable Indonesian label */
+const ACTION_LABELS: Record<string, string> = {
+  create: "Buat Baru",
+  update: "Perbarui",
+  delete: "Hapus",
+  approve: "Setujui",
+  reject: "Tolak",
+  login: "Masuk",
+  logout: "Keluar",
+  cancel: "Batalkan",
+  bulk_delete: "Hapus Massal",
+  update_access: "Ubah Hak Akses",
+  kpr_realization: "Realisasi KPR",
+  upgrade_to_akad: "Upgrade ke Akad",
+  blocked_transition: "Transisi Diblokir",
+  cancelBooking_blocked_paid_invoice: "Batal Booking Diblokir (Invoice Lunas)",
+  cancelBooking_blocked_verified_payment: "Batal Booking Diblokir (Pembayaran Terverifikasi)",
+  completeConstruction_blocked_manual_ready_stock: "Selesai Bangun Diblokir (Ready Stock Manual)",
+  completeConstruction_blocked_missing_bast: "Selesai Bangun Diblokir (BAST Belum Ada)",
+  updateKprProcess_blocked_transition: "Update KPR Diblokir",
+  updateKprStatusDirect_blocked_transition: "Update Status KPR Diblokir",
+  updateUnit_blocked_edit_trans_unit: "Edit Unit Diblokir (Ada Transaksi)",
+  updateUnit_blocked_trans_status: "Ubah Status Diblokir (Ada Transaksi)",
+};
+
+/** Get human-readable action label */
+function getActionLabel(action: string): string {
+  return ACTION_LABELS[action] || humanizeKey(action);
+}
+
+/** Mapping module code → Indonesian label */
+const MODULE_LABELS: Record<string, string> = {
+  auth: "Autentikasi",
+  master: "Master Data",
+  marketing: "Pemasaran",
+  finance: "Keuangan",
+  production: "Produksi",
+  system: "Sistem",
+  access: "Hak Akses",
+  profile: "Profil",
+  employment: "Kepegawaian",
+  vendor_profile: "Profil Vendor",
+};
+
+/** Get human-readable module label */
+function getModuleLabel(module: string): string {
+  return MODULE_LABELS[module] || humanizeKey(module);
+}
+
+/** Mapping entity type code → Indonesian label */
+const ENTITY_TYPE_LABELS: Record<string, string> = {
+  bank_partner: "Bank Rekanan",
+  finance_account: "Rekening Keuangan",
+  finance_category: "Kategori Keuangan",
+  work_item: "Item Pekerjaan",
+  project: "Proyek",
+  unit: "Unit / Kavling",
+  customer: "Konsumen",
+  vendor: "Vendor",
+  lead: "Prospek",
+  booking: "Booking",
+  invoice: "Invoice",
+  payment: "Pembayaran",
+  spk: "SPK",
+  spmb: "SPMB",
+  complaint: "Komplain",
+  user: "Pengguna",
+  role: "Peran",
+  notification: "Notifikasi",
+  budget: "Anggaran",
+  siteplan: "Siteplan",
+  app_settings: "Pengaturan Sistem",
+  progress_log: "Log Progres",
+  attachment: "Lampiran",
+  material_request: "Permintaan Material",
+  material_estimation: "Estimasi Material",
+  waiting_list: "Daftar Tunggu",
+  target: "Target Penjualan",
+  permission: "Izin Akses",
+};
+
+/** Get human-readable entity type label */
+function getEntityTypeLabel(entityType: string): string {
+  return ENTITY_TYPE_LABELS[entityType] || humanizeKey(entityType);
+}
+
 /** snake_case / camelCase → Title Case */
 function humanizeKey(key: string): string {
   return key
@@ -120,22 +206,22 @@ function DetailDrawer({ log, onClose }: { log: AuditLogItem; onClose: () => void
 
       {/* Drawer */}
       <div
-        className="relative w-full max-w-lg bg-white dark:bg-[#151E1A] shadow-2xl border-l border-[#D6DED2] dark:border-[#1F2E26] overflow-y-auto animate-in slide-in-from-right duration-200"
+        className="relative w-full max-w-lg bg-card shadow-2xl border-l border-border overflow-y-auto animate-in slide-in-from-right duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="sticky top-0 z-10 bg-white dark:bg-[#151E1A] border-b border-[#D6DED2] dark:border-[#1F2E26] px-6 py-4 flex items-center justify-between">
+        <div className="sticky top-0 z-10 bg-gradient-to-r from-secondary/70 via-card/90 to-card border-b border-border px-6 py-4 flex items-center justify-between">
           <div>
-            <h3 className="font-bold text-sm text-[#243028] dark:text-[#E3EAE6]">Detail Audit Log</h3>
+            <h3 className="font-bold text-sm text-foreground">Detail Audit Log</h3>
             <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
               {log.id}
             </p>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg hover:bg-[#DDE8D8] transition-colors"
+            className="p-1.5 rounded-lg hover:bg-secondary transition-colors"
           >
-            <X className="h-4 w-4 text-[#66736A]" />
+            <X className="h-4 w-4 text-muted-foreground" />
           </button>
         </div>
 
@@ -148,17 +234,17 @@ function DetailDrawer({ log, onClose }: { log: AuditLogItem; onClose: () => void
                 ? new Date(log.createdAt).toLocaleString("id-ID", { dateStyle: "long", timeStyle: "medium" })
                 : "-"
             } />
-            <InfoCard label="User" value={log.userName || "System"} sub={log.userEmail || "system@internal"} />
-            <InfoCard label="Module" value={log.module} />
-            <InfoCard label="IP Address" value={log.ipAddress || "-"} />
+            <InfoCard label="Pengguna" value={log.userName || "Sistem"} sub={log.userEmail || "system@internal"} />
+            <InfoCard label="Modul" value={getModuleLabel(log.module)} />
+            <InfoCard label="Alamat IP" value={log.ipAddress || "-"} />
             <InfoCard label="Endpoint" value={log.endpoint || "-"} mono />
-            <InfoCard label="Entity Type" value={log.entityType || "-"} />
-            <InfoCard label="Entity ID" value={log.entityId || "-"} mono />
-            <InfoCard label="Level" value={
-              log.level === "error" ? "🔴 Error" : log.level === "info" ? "🔵 Info" : "🟢 Log"
+            <InfoCard label="Tipe Entitas" value={getEntityTypeLabel(log.entityType || "-")} />
+            <InfoCard label="ID Entitas" value={log.entityId || "-"} mono />
+            <InfoCard label="Tingkat" value={
+              log.level === "error" ? "🔴 Kesalahan" : log.level === "info" ? "🔵 Informasi" : "🟢 Normal"
             } />
             <InfoCard label="Status" value={
-              `${log.responseCode || 200} — ${log.status || "success"}`
+              `${log.responseCode || 200} — ${log.status === "success" ? "Berhasil" : log.status === "failed" ? "Gagal" : log.status || "Berhasil"}`
             } />
             <InfoCard label="Durasi" value={
               log.durationMs ? `${log.durationMs}ms` : "—"
@@ -169,7 +255,7 @@ function DetailDrawer({ log, onClose }: { log: AuditLogItem; onClose: () => void
           <div>
             <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Aksi</p>
             <Badge className={`${actionStyle.bg} ${actionStyle.text} ${actionStyle.border} border text-xs font-semibold px-2.5 py-1`}>
-              {log.action}
+              {getActionLabel(log.action)}
             </Badge>
           </div>
 
@@ -200,9 +286,9 @@ function DetailDrawer({ log, onClose }: { log: AuditLogItem; onClose: () => void
               <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Detail Data</p>
               <div className="space-y-2">
                 {flatEntries.map((entry, i) => (
-                  <div key={i} className="bg-[#F7F8F3] rounded-xl border border-[#D6DED2]/60 px-3 py-2.5">
-                    <p className="text-[10px] font-semibold text-[#66736A] uppercase tracking-wider">{humanizeKey(entry.key)}</p>
-                    <p className="text-xs text-[#243028] mt-0.5 font-mono break-all whitespace-pre-wrap">
+                  <div key={i} className="bg-secondary/30 rounded-xl border border-primary/10 px-3.5 py-3">
+                    <p className="text-[10px] font-bold text-primary/70 uppercase tracking-wider">{humanizeKey(entry.key)}</p>
+                    <p className="text-xs text-foreground mt-1 font-mono font-medium break-all whitespace-pre-wrap">
                       {entry.value}
                     </p>
                   </div>
@@ -214,8 +300,8 @@ function DetailDrawer({ log, onClose }: { log: AuditLogItem; onClose: () => void
           {/* Raw JSON fallback */}
           {!isDiff && flatEntries.length === 0 && details && (
             <div>
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Raw Data</p>
-              <pre className="bg-[#F7F8F3] rounded-xl border border-[#D6DED2]/60 p-3 text-[11px] text-[#243028] font-mono overflow-x-auto whitespace-pre-wrap">
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Data Mentah</p>
+              <pre className="bg-secondary/30 rounded-xl border border-primary/10 p-3.5 text-[11px] text-foreground font-mono overflow-x-auto whitespace-pre-wrap">
                 {typeof details === "string" ? details : JSON.stringify(details, null, 2)}
               </pre>
             </div>
@@ -228,10 +314,10 @@ function DetailDrawer({ log, onClose }: { log: AuditLogItem; onClose: () => void
 
 function InfoCard({ label, value, sub, mono }: { label: string; value: string; sub?: string; mono?: boolean }) {
   return (
-    <div className="bg-[#F7F8F3] rounded-xl border border-[#D6DED2]/60 px-3 py-2.5 overflow-hidden">
-      <p className="text-[10px] font-semibold text-[#66736A] uppercase tracking-wider">{label}</p>
-      <p className={`text-xs text-[#243028] mt-0.5 font-medium break-all ${mono ? "font-mono text-[11px]" : ""}`}>{value}</p>
-      {sub && <p className="text-[10px] text-muted-foreground font-mono break-all">{sub}</p>}
+    <div className="bg-secondary/30 rounded-xl border border-primary/10 px-3.5 py-3 overflow-hidden hover:border-primary/25 transition-colors duration-200">
+      <p className="text-[10px] font-bold text-primary/70 uppercase tracking-wider">{label}</p>
+      <p className={`text-xs text-foreground mt-1 font-semibold break-all leading-relaxed ${mono ? "font-mono text-[11px]" : ""}`}>{value}</p>
+      {sub && <p className="text-[10px] text-muted-foreground font-mono break-all mt-0.5">{sub}</p>}
     </div>
   );
 }
@@ -417,14 +503,14 @@ export function AuditTableClient({
                     {/* Module */}
                     <TableCell>
                       <Badge variant="outline" className="bg-[#8FAF9A]/5 border-[#8FAF9A]/20 text-primary text-[10px] uppercase font-semibold font-mono tracking-wider">
-                        {log.module}
+                        {getModuleLabel(log.module)}
                       </Badge>
                     </TableCell>
 
                     {/* Level */}
                     <TableCell>
                       <Badge className={getLevelBadgeStyle(log.level)}>
-                        {log.level === "error" ? "🔴 ERR" : log.level === "info" ? "🔵 INFO" : "🟢 LOG"}
+                        {log.level === "error" ? "🔴 ERR" : log.level === "info" ? "🔵 INFO" : "🟢 OK"}
                       </Badge>
                     </TableCell>
 
@@ -440,7 +526,7 @@ export function AuditTableClient({
                     {/* Action — color-coded */}
                     <TableCell>
                       <Badge className={`${actionStyle.bg} ${actionStyle.text} ${actionStyle.border} border text-[10px] font-semibold`}>
-                        {log.action}
+                        {getActionLabel(log.action)}
                       </Badge>
                     </TableCell>
 

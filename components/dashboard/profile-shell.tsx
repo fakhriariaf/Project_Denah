@@ -499,7 +499,7 @@ export function ProfileShell({
                     rows={2}
                     onChange={e => setAddress(e.target.value)}
                     disabled={!permissions.canUpdateBasic || basicLoading}
-                    className="flex w-full rounded-lg border border-input bg-transparent px-2.5 py-1.5 text-sm transition-colors outline-none focus:border-ring focus:ring-3 focus:ring-ring/50 disabled:bg-input/50 disabled:opacity-50 min-h-[60px] dark:bg-slate-900/30"
+                    className="flex w-full rounded-lg border border-input bg-transparent px-2.5 py-1.5 text-sm transition-colors outline-none focus:border-ring focus:ring-3 focus:ring-ring/50 disabled:bg-input/50 disabled:opacity-50 min-h-[60px]"
                   />
                 </div>
 
@@ -808,7 +808,7 @@ export function ProfileShell({
                     rows={2}
                     onChange={e => setVendorAddress(e.target.value)}
                     disabled={!permissions.canUpdateVendor || vendorLoading}
-                    className="flex w-full rounded-lg border border-input bg-transparent px-2.5 py-1.5 text-sm transition-colors outline-none focus:border-ring focus:ring-3 focus:ring-ring/50 disabled:bg-input/50 disabled:opacity-50 min-h-[60px] dark:bg-slate-900/30"
+                    className="flex w-full rounded-lg border border-input bg-transparent px-2.5 py-1.5 text-sm transition-colors outline-none focus:border-ring focus:ring-3 focus:ring-ring/50 disabled:bg-input/50 disabled:opacity-50 min-h-[60px]"
                   />
                 </div>
 
@@ -855,7 +855,7 @@ export function ProfileShell({
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50 dark:bg-slate-900/10 p-5 rounded-xl border">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50 p-5 rounded-xl border">
                   <div className="space-y-1.5">
                     <Label htmlFor="accountEmail" className="text-slate-500 text-xs">{t("profile_shell.field_email_fixed")}</Label>
                     <div className="h-8 w-full border border-slate-200 rounded-lg px-2.5 flex items-center text-sm font-semibold bg-slate-100 text-slate-500 font-sans cursor-not-allowed">
@@ -964,7 +964,7 @@ export function ProfileShell({
                   {t("profile_shell.logs_empty")}
                 </div>
               ) : (
-                <div className="relative border-l border-slate-200 dark:border-slate-800 ml-4 pl-6 space-y-6">
+                <div className="relative border-l border-slate-200 ml-4 pl-6 space-y-6">
                   {auditLogs.map((log) => (
                     <div key={log.id} className="relative">
                       {/* Timeline dot */}
@@ -982,7 +982,7 @@ export function ProfileShell({
                           </Badge>
                         </div>
                         {log.details && (
-                          <pre className="text-[11px] font-mono bg-slate-50 dark:bg-slate-900/35 border p-2 rounded-lg text-slate-500 overflow-x-auto max-w-full">
+                          <pre className="text-[11px] font-mono bg-slate-50 border p-2 rounded-lg text-slate-500 overflow-x-auto max-w-full">
                             {JSON.stringify(log.details, null, 2)}
                           </pre>
                         )}
@@ -1042,13 +1042,13 @@ export function ProfileShell({
                   )}
 
                   {allProjects && allProjects.length > 0 ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-slate-50 dark:bg-slate-900/10 p-5 rounded-xl border">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-slate-50 p-5 rounded-xl border">
                       {allProjects.map((p) => {
                         const isChecked = selectedProjects.includes(p.id);
                         return (
                           <label 
                             key={p.id} 
-                            className="flex items-center gap-3 p-3 bg-white dark:bg-slate-900 border rounded-xl hover:bg-slate-50 cursor-pointer shadow-sm transition-all"
+                            className="flex items-center gap-3 p-3 bg-white border rounded-xl hover:bg-slate-50 cursor-pointer shadow-sm transition-all"
                           >
                             <input 
                               type="checkbox"
@@ -1063,7 +1063,7 @@ export function ProfileShell({
                               className="h-4.5 w-4.5 rounded text-primary focus:ring-primary border-slate-300 transition-colors"
                             />
                             <div className="flex-1 min-w-0">
-                              <p className="text-xs font-bold text-slate-700 dark:text-slate-200 truncate">{p.name}</p>
+                              <p className="text-xs font-bold text-slate-700 truncate">{p.name}</p>
                               <p className="text-[10px] text-slate-400 font-semibold font-mono tracking-wider mt-0.5">ID: {p.id.substring(0, 8).toUpperCase()}</p>
                             </div>
                           </label>

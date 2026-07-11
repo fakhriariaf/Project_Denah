@@ -78,7 +78,7 @@ export function ResetPasswordForm({ userId, userName }: ResetPasswordFormProps) 
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="Minimal 8 karakter"
-            className="bg-white border-[#D6DED2] rounded-xl text-xs h-9 pr-10 focus:ring-[#8FAF9A] focus:ring-2 focus:border-transparent transition-all"
+            className="bg-white border-[#D6DED2] rounded-xl text-xs h-9 pr-10 focus:ring-ring focus:ring-2 focus:border-transparent transition-all"
           />
           <button
             type="button"
@@ -101,7 +101,7 @@ export function ResetPasswordForm({ userId, userName }: ResetPasswordFormProps) 
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             placeholder="Ulangi password baru"
-            className="bg-white border-[#D6DED2] rounded-xl text-xs h-9 pr-10 focus:ring-[#8FAF9A] focus:ring-2 focus:border-transparent transition-all"
+            className="bg-white border-[#D6DED2] rounded-xl text-xs h-9 pr-10 focus:ring-ring focus:ring-2 focus:border-transparent transition-all"
           />
           <button
             type="button"
@@ -116,7 +116,7 @@ export function ResetPasswordForm({ userId, userName }: ResetPasswordFormProps) 
       <Button
         type="submit"
         disabled={isPending || password.length < 8 || confirmPassword.length < 8}
-        className="bg-[#4F6F52] hover:bg-[#3D563F] text-white active:scale-95 shadow-[0_4px_14px_rgba(79,111,82,0.25)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 h-9 rounded-xl font-bold text-xs px-4 gap-2 cursor-pointer w-full md:w-auto"
+        className="bg-[#4F6F52] hover:bg-[#3D563F] text-white active:scale-95 btn-premium h-9 rounded-xl font-bold text-xs px-4 gap-2 cursor-pointer w-full md:w-auto"
       >
         {isPending ? (
           <>

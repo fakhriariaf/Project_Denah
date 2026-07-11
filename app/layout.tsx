@@ -1,14 +1,15 @@
 import type { Metadata } from "next";
-import { Inter, Roboto_Mono } from "next/font/google";
+import { Roboto, Roboto_Mono } from "next/font/google";
 import "./globals.css";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "sonner";
 import NextTopLoader from "nextjs-toploader";
 import { MobileBottomNav } from "@/components/mobile-bottom-nav";
 
-const inter = Inter({
+const roboto = Roboto({
   variable: "--font-sans",
   subsets: ["latin"],
+  weight: ["300", "400", "500", "700", "900"],
 });
 
 const robotoMono = Roboto_Mono({
@@ -29,7 +30,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${inter.variable} ${robotoMono.variable} h-full antialiased`}
+      className={`${roboto.variable} ${robotoMono.variable} h-full antialiased`}
       data-scroll-behavior="smooth"
       suppressHydrationWarning
     >
@@ -39,11 +40,7 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               try {
-                if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-                  document.documentElement.classList.add('dark')
-                } else {
-                  document.documentElement.classList.remove('dark')
-                }
+                localStorage.removeItem('theme');
               } catch (_) {}
             `,
           }}
@@ -64,7 +61,7 @@ export default function RootLayout({
         </TooltipProvider>
         <MobileBottomNav />
         <Toaster
-          theme="system"
+          theme="light"
           position="top-right"
           toastOptions={{ duration: 4000 }}
           visibleToasts={3}

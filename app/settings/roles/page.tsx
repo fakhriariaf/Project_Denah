@@ -17,15 +17,15 @@ export const revalidate = 0
 
 // Role style config (colors & badges remain visual metadata)
 const ROLE_STYLE_CFG: Record<string, { color: string; badge: string }> = {
-  "Super Admin":       { color: "bg-purple-50/60 border-purple-100 text-purple-700 dark:bg-purple-950/30 dark:border-purple-900/30 dark:text-purple-400", badge: "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-400 dark:border-purple-900/40" },
-  "Admin Kantor":      { color: "bg-[#DDE8D8]/50 border-[#8FAF9A]/30 text-[#4F6F52] dark:bg-[#1B2821]/30 dark:border-[#8FAF9A]/10 dark:text-[#8FAF9A]", badge: "bg-[#DDE8D8] text-[#4F6F52] border-[#8FAF9A]/40 dark:bg-[#1B2821]/60 dark:text-[#8FAF9A] dark:border-[#8FAF9A]/20" },
-  "Marketing Manager": { color: "bg-sky-50/60 border-sky-100 text-sky-700 dark:bg-sky-950/30 dark:border-sky-900/30 dark:text-sky-400", badge: "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/40 dark:text-sky-400 dark:border-sky-900/40" },
-  "Marketing":         { color: "bg-blue-50/60 border-blue-100 text-blue-700 dark:bg-blue-950/30 dark:border-blue-900/30 dark:text-blue-400", badge: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-400 dark:border-blue-900/40" },
-  "Admin Keuangan":    { color: "bg-amber-50/60 border-amber-100 text-amber-700 dark:bg-amber-950/30 dark:border-amber-900/30 dark:text-amber-400", badge: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900/40" },
-  "Direksi / Manager": { color: "bg-rose-50/60 border-rose-100 text-rose-700 dark:bg-rose-950/30 dark:border-rose-900/30 dark:text-rose-400", badge: "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-900/40" },
-  "Pengawas Lapangan": { color: "bg-orange-50/60 border-orange-100 text-orange-700 dark:bg-orange-950/30 dark:border-orange-900/30 dark:text-orange-400", badge: "bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/40 dark:text-orange-400 dark:border-orange-900/40" },
-  "Kontraktor / Vendor": { color: "bg-indigo-50/60 border-indigo-100 text-indigo-700 dark:bg-indigo-950/30 dark:border-indigo-900/30 dark:text-indigo-400", badge: "bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-400 dark:border-indigo-900/40" },
-  "Viewer":            { color: "bg-slate-50/60 border-slate-100 text-slate-600 dark:bg-slate-900/30 dark:border-slate-800/30 dark:text-slate-400", badge: "bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-900/40 dark:text-slate-400 dark:border-slate-800/40" },
+  "Super Admin":       { color: "bg-purple-50/60 border-purple-100 text-purple-700", badge: "bg-purple-50 text-purple-700 border-purple-200" },
+  "Admin Kantor":      { color: "bg-[#DDE8D8]/50 border-[#8FAF9A]/30 text-[#4F6F52]#1B2821]/30#8FAF9A]/10#8FAF9A]", badge: "bg-[#DDE8D8] text-[#4F6F52] border-[#8FAF9A]/40#1B2821]/60#8FAF9A]#8FAF9A]/20" },
+  "Marketing Manager": { color: "bg-sky-50/60 border-sky-100 text-sky-700", badge: "bg-sky-50 text-sky-700 border-sky-200" },
+  "Marketing":         { color: "bg-blue-50/60 border-blue-100 text-blue-700", badge: "bg-blue-50 text-blue-700 border-blue-200" },
+  "Admin Keuangan":    { color: "bg-amber-50/60 border-amber-100 text-amber-700", badge: "bg-amber-50 text-amber-700 border-amber-200" },
+  "Direksi / Manager": { color: "bg-rose-50/60 border-rose-100 text-rose-700", badge: "bg-rose-50 text-rose-700 border-rose-200" },
+  "Pengawas Lapangan": { color: "bg-orange-50/60 border-orange-100 text-orange-700", badge: "bg-orange-50 text-orange-700 border-orange-200" },
+  "Kontraktor / Vendor": { color: "bg-indigo-50/60 border-indigo-100 text-indigo-700", badge: "bg-indigo-50 text-indigo-700 border-indigo-200" },
+  "Viewer":            { color: "bg-slate-50/60 border-slate-100 text-slate-600", badge: "bg-slate-50 text-slate-600 border-slate-200" },
 }
 
 const getRoleKey = (name: string) => {
@@ -174,14 +174,14 @@ export default async function RolesPermissionsPage() {
             const key = getRoleKey(role.name)
             const roleDesc = key ? t(key) : (role.description ?? "—")
             return (
-              <div key={role.id} className="flex items-center gap-4 px-6 py-4 hover:bg-[#F7F8F3]/60 dark:hover:bg-[#1C2B22]/30 transition-colors bg-white dark:bg-card">
-                <div className={`h-10 w-10 rounded-xl flex items-center justify-center border shrink-0 ${cfg?.color ?? "bg-slate-50 border-slate-100 text-slate-600 dark:bg-slate-900/30 dark:border-slate-800/30 dark:text-slate-400"}`}>
+              <div key={role.id} className="flex items-center gap-4 px-6 py-4 hover:bg-[#F7F8F3]/60#1C2B22]/30 transition-colors bg-white">
+                <div className={`h-10 w-10 rounded-xl flex items-center justify-center border shrink-0 ${cfg?.color ?? "bg-slate-50 border-slate-100 text-slate-600"}`}>
                   <Shield className="h-5 w-5" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <p className="font-bold text-[#243028] text-sm">{role.name}</p>
-                    <Badge className={`border text-[10px] font-bold px-2 py-0.5 rounded-full ${cfg?.badge ?? "bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-900/40 dark:text-slate-400 dark:border-slate-800/40"}`}>
+                    <Badge className={`border text-[10px] font-bold px-2 py-0.5 rounded-full ${cfg?.badge ?? "bg-slate-50 text-slate-600 border-slate-200"}`}>
                       {t("roles.user_badge", { count: userCount })}
                     </Badge>
                   </div>

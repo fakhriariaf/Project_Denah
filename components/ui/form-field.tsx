@@ -1,10 +1,10 @@
-"use client";
+﻿"use client";
 
 import * as React from "react";
 import { useFormContext } from "react-hook-form";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { FormLabel, FieldError, FieldHelp, FormFieldGroup } from "@/components/ui/form-primitives";
 import { cn } from "@/lib/utils";
 
 interface FormFieldProps {
@@ -14,13 +14,18 @@ interface FormFieldProps {
   placeholder?: string;
   options?: { value: string; label: string }[];
   className?: string;
+  required?: boolean;
+  /** Optional helper/description text shown below the label. */
+  helpText?: string;
+  disabled?: boolean;
 }
 
 /**
- * FormField compound component that combines Label + Input/Select/Textarea + inline error message.
- * Integrates with React Hook Form via useFormContext() for automatic field registration and error display.
+ * FormField compound component: Label + Input/Select/Textarea + inline error.
+ * Integrates with React Hook Form via useFormContext() for automatic field
+ * registration and error display. Uses theme tokens only (no hardcoded colors).
  *
- * Must be used within a <FormProvider> (or a parent that calls useForm and wraps children with FormProvider).
+ * Must be used within a <FormProvider>.
  */
 function FormField({
   name,
@@ -29,6 +34,9 @@ function FormField({
   placeholder,
   options,
   className,
+  required,
+  helpText,
+  disabled,
 }: FormFieldProps) {
   const {
     register,
@@ -40,31 +48,38 @@ function FormField({
   const errorMessage = error?.message as string | undefined;
 
   const fieldId = `field-${name}`;
+  const helpId = helpText ? `${fieldId}-help` : undefined;
+  const errorId = errorMessage ? `${fieldId}-error` : undefined;
+  const describedBy = [helpId, errorId].filter(Boolean).join(" ") || undefined;
+
+  const controlClasses =
+    "bg-card border-input rounded-xl text-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-transparent transition-all disabled:cursor-not-allowed disabled:opacity-50 aria-[invalid=true]:border-destructive";
 
   return (
-    <div className={cn("space-y-1.5", className)}>
-      <Label
-        htmlFor={fieldId}
-        className="text-xs font-semibold text-[#243028]"
-      >
+    <FormFieldGroup className={className}>
+      <FormLabel htmlFor={fieldId} required={required}>
         {label}
-      </Label>
+      </FormLabel>
+
+      {helpText && <FieldHelp id={helpId}>{helpText}</FieldHelp>}
 
       {type === "textarea" ? (
         <Textarea
           id={fieldId}
           placeholder={placeholder}
+          disabled={disabled}
           aria-invalid={!!errorMessage}
-          className="bg-white border-[#D6DED2] rounded-xl text-xs focus:ring-[#8FAF9A] focus:ring-2 focus:border-transparent transition-all"
+          aria-describedby={describedBy}
+          className={controlClasses}
           {...register(name)}
         />
       ) : type === "select" ? (
         <select
           id={fieldId}
+          disabled={disabled}
           aria-invalid={!!errorMessage}
-          className={cn(
-            "h-8 w-full rounded-xl border border-[#D6DED2] bg-white px-2.5 py-1 text-xs transition-colors outline-none focus:ring-[#8FAF9A] focus:ring-2 focus:border-transparent disabled:cursor-not-allowed disabled:opacity-50"
-          )}
+          aria-describedby={describedBy}
+          className={cn("h-9 w-full px-2.5 py-1 outline-none", controlClasses)}
           {...register(name)}
         >
           {placeholder && (
@@ -83,18 +98,16 @@ function FormField({
           id={fieldId}
           type={type}
           placeholder={placeholder}
+          disabled={disabled}
           aria-invalid={!!errorMessage}
-          className="bg-white border-[#D6DED2] rounded-xl text-xs h-9 focus:ring-[#8FAF9A] focus:ring-2 focus:border-transparent transition-all"
+          aria-describedby={describedBy}
+          className={cn("h-9", controlClasses)}
           {...register(name, type === "number" ? { valueAsNumber: true } : undefined)}
         />
       )}
 
-      {errorMessage && (
-        <p className="text-xs text-red-500" role="alert">
-          {errorMessage}
-        </p>
-      )}
-    </div>
+      <FieldError id={errorId}>{errorMessage}</FieldError>
+    </FormFieldGroup>
   );
 }
 

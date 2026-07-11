@@ -1,4 +1,4 @@
-import { db } from "@/db"
+﻿import { db } from "@/db"
 import { financeCategories } from "@/db/schema/master"
 import { requireAuth, getSessionRole } from "@/server/permissions"
 import { redirect } from "next/navigation"
@@ -52,7 +52,7 @@ export default async function CategoriesPage({
 
   return (
     <div className="flex flex-col gap-6">
-      {/* ── PREMIUM HEADER ── */}
+      {/* â”€â”€ PREMIUM HEADER â”€â”€ */}
       <div className="relative rounded-2xl overflow-hidden bg-gradient-to-r from-[#DDE8D8]/70 via-white/95 to-[#DDE8D8]/40 border border-[#D6DED2] shadow-sage p-6">
         <div className="absolute -top-6 -right-6 h-28 w-28 rounded-full bg-[#8FAF9A]/10 blur-2xl pointer-events-none" />
         <div className="absolute bottom-0 left-1/3 h-20 w-20 rounded-full bg-[#4F6F52]/8 blur-xl pointer-events-none" />
@@ -88,7 +88,7 @@ export default async function CategoriesPage({
                   i18nKey="category.search_placeholder"
                   name="q"
                   defaultValue={q ?? ""}
-                  className="max-w-xs h-9 text-xs bg-[#F7F8F3]/50 border-[#D6DED2] rounded-xl pl-10 pr-4 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#8FAF9A]/50 transition-premium"
+                  className="max-w-xs h-9 text-xs bg-[#F7F8F3]/50 border-[#D6DED2] rounded-xl pl-10 pr-4 focus:bg-white focus:outline-none focus:ring-2 focus:ring-ring/50 transition-premium"
                 />
                 <input type="hidden" name="type" value={type ?? ""} />
                 <button type="submit" className="sr-only">Search</button>

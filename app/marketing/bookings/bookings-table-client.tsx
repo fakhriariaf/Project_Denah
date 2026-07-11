@@ -180,14 +180,14 @@ export function BookingsTableClient({
       />
 
       {/* Data Table */}
-      <div className="bg-white dark:bg-card border border-[#D6DED2] dark:border-border rounded-2xl shadow-sage overflow-hidden">
+      <div className="bg-card border border-border rounded-2xl shadow-sage overflow-hidden">
         {/* Table Header Info */}
-        <div className="px-6 py-3.5 border-b border-[#D6DED2] dark:border-border bg-[#F7F8F3]/70 dark:bg-background/70">
+        <div className="px-6 py-3.5 border-b border-border bg-muted/30/70">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-[#66736A] uppercase tracking-wider">
+            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
               <Translate namespace="booking" translationKey="list_title" />
             </span>
-            <span className="text-xs font-mono text-[#8FAF9A] tabular-nums">
+            <span className="text-xs font-mono text-primary/70 tabular-nums">
               <Translate
                 namespace="booking"
                 translationKey="list_subtitle"
@@ -200,14 +200,14 @@ export function BookingsTableClient({
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="border-b border-[#D6DED2] text-[#66736A] text-xs font-bold uppercase tracking-wider">
+              <tr className="border-b border-border text-muted-foreground text-xs font-bold uppercase tracking-wider">
                 {/* Checkbox column */}
                 <th className="py-3.5 px-3 w-10">
                   <input
                     type="checkbox"
                     checked={allPageSelected}
                     onChange={() => togglePage(pageIds)}
-                    className="h-4 w-4 rounded border-[#B7CDB3] text-[#4F6F52] focus:ring-[#4F6F52] cursor-pointer"
+                    className="h-4 w-4 rounded border-[#B7CDB3] text-primary focus:ring-ring cursor-pointer"
                     aria-label="Pilih semua di halaman ini"
                   />
                 </th>
@@ -246,8 +246,8 @@ export function BookingsTableClient({
                   return (
                     <tr
                       key={booking.id}
-                      className={`hover:bg-[#F7F8F3]/80 transition-colors duration-150 group ${
-                        selected ? "bg-[#DDE8D8]/30" : ""
+                      className={`hover:bg-muted/30/80 transition-colors duration-150 group ${
+                        selected ? "bg-secondary/30" : ""
                       }`}
                     >
                       {/* Checkbox */}
@@ -256,17 +256,17 @@ export function BookingsTableClient({
                           type="checkbox"
                           checked={selected}
                           onChange={() => toggleItem(booking.id)}
-                          className="h-4 w-4 rounded border-[#B7CDB3] text-[#4F6F52] focus:ring-[#4F6F52] cursor-pointer"
+                          className="h-4 w-4 rounded border-[#B7CDB3] text-primary focus:ring-ring cursor-pointer"
                           aria-label={`Pilih booking ${booking.bookingNumber}`}
                         />
                       </td>
                       <td className="py-4 px-6">
                         <div className="space-y-0.5">
-                          <div className="font-semibold text-[#243028] font-mono text-[13px]">
+                          <div className="font-semibold text-foreground font-mono text-[13px]">
                             {booking.bookingNumber || "-"}
                           </div>
-                          <div className="flex items-center text-xs text-[#66736A]">
-                            <Calendar className="h-3 w-3 mr-1 text-[#8FAF9A]" />
+                          <div className="flex items-center text-xs text-muted-foreground">
+                            <Calendar className="h-3 w-3 mr-1 text-primary/70" />
                             <span className="font-mono">
                               {formatDate(booking.bookingDate)}
                             </span>
@@ -275,11 +275,11 @@ export function BookingsTableClient({
                       </td>
                       <td className="py-4 px-6">
                         <div className="flex items-start gap-3">
-                          <div className="h-8 w-8 rounded-full bg-[#DDE8D8] text-[#4F6F52] flex items-center justify-center font-bold text-xs shrink-0 border border-[#8FAF9A]/20">
+                          <div className="h-8 w-8 rounded-full bg-secondary text-primary flex items-center justify-center font-bold text-xs shrink-0 border border-primary/20">
                             {initials}
                           </div>
                           <div className="space-y-0.5">
-                            <div className="font-semibold text-[#243028] text-sm">
+                            <div className="font-semibold text-foreground text-sm">
                               {booking.customerName || (
                                 <Translate
                                   namespace="booking"
@@ -287,10 +287,10 @@ export function BookingsTableClient({
                                 />
                               )}
                             </div>
-                            <div className="text-xs text-[#66736A] flex items-center gap-1.5">
+                            <div className="text-xs text-muted-foreground flex items-center gap-1.5">
                               <span>{booking.projectName}</span>
-                              <span className="text-[#A8B0AA]">•</span>
-                              <span className="font-mono bg-[#DDE8D8]/60 text-[#4F6F52] px-1.5 py-0.5 rounded text-[10px] font-semibold border border-[#8FAF9A]/20">
+                              <span className="text-muted-foreground/70">•</span>
+                              <span className="font-mono bg-secondary/60 text-primary px-1.5 py-0.5 rounded text-[10px] font-semibold border border-primary/20">
                                 {booking.unitCode || "-"}
                               </span>
                             </div>
@@ -301,15 +301,15 @@ export function BookingsTableClient({
                         <div className="flex items-center gap-2">
                           {booking.marketingName ? (
                             <>
-                              <div className="h-6 w-6 rounded-full bg-[#DDE8D8] text-[#4F6F52] flex items-center justify-center text-[9px] font-bold shrink-0">
+                              <div className="h-6 w-6 rounded-full bg-secondary text-primary flex items-center justify-center text-[9px] font-bold shrink-0">
                                 {booking.marketingName.slice(0, 2).toUpperCase()}
                               </div>
-                              <span className="text-sm font-medium text-[#243028]">
+                              <span className="text-sm font-medium text-foreground">
                                 {booking.marketingName}
                               </span>
                             </>
                           ) : (
-                            <span className="text-xs text-[#A8B0AA] italic">
+                            <span className="text-xs text-muted-foreground/70 italic">
                               <Translate
                                 namespace="booking"
                                 translationKey="unassigned_marketing"
@@ -320,10 +320,10 @@ export function BookingsTableClient({
                       </td>
                       <td className="py-4 px-6 text-right">
                         <div className="space-y-0.5">
-                          <div className="font-mono font-semibold text-[#4F6F52] tabular-nums text-sm">
+                          <div className="font-mono font-semibold text-primary tabular-nums text-sm">
                             {formatRupiah(booking.bookingFee + booking.dpAmount)}
                           </div>
-                          <div className="text-[10px] text-[#A8B0AA] font-mono">
+                          <div className="text-[10px] text-muted-foreground/70 font-mono">
                             BF {formatRupiah(booking.bookingFee)} + DP{" "}
                             {formatRupiah(booking.dpAmount)}
                           </div>
@@ -332,7 +332,7 @@ export function BookingsTableClient({
                       <td className="py-4 px-6 text-center">
                         <Badge
                           variant="outline"
-                          className="uppercase font-semibold text-[10px] text-[#66736A] bg-[#F7F8F3] border-[#D6DED2] rounded-md"
+                          className="uppercase font-semibold text-[10px] text-muted-foreground bg-muted/30 border-border rounded-md"
                         >
                           <Translate
                             namespace="booking"
@@ -409,17 +409,17 @@ export function BookingsTableClient({
                 <tr>
                   <td colSpan={8} className="py-16 text-center">
                     <div className="flex flex-col items-center gap-3">
-                      <div className="h-16 w-16 rounded-full bg-[#DDE8D8]/50 flex items-center justify-center">
-                        <Calendar className="h-8 w-8 text-[#8FAF9A]" />
+                      <div className="h-16 w-16 rounded-full bg-secondary/50 flex items-center justify-center">
+                        <Calendar className="h-8 w-8 text-primary/70" />
                       </div>
                       <div>
-                        <p className="font-semibold text-[#243028] text-sm">
+                        <p className="font-semibold text-foreground text-sm">
                           <Translate
                             namespace="booking"
                             translationKey="not_found"
                           />
                         </p>
-                        <p className="text-xs text-[#66736A] mt-1">
+                        <p className="text-xs text-muted-foreground mt-1">
                           <Translate
                             namespace="booking"
                             translationKey="not_found_desc_1"

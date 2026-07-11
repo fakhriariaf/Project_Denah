@@ -28,7 +28,7 @@ export function PrintButton({ label = "Cetak Kuitansi / STTB" }: PrintButtonProp
 
       <Button
         onClick={() => window.print()}
-        className="bg-[#4F6F52] hover:bg-[#3F5941] text-white rounded-xl shadow-glow-sage hover:scale-[1.02] active:scale-[0.98] transition-all font-semibold text-xs flex items-center gap-2 px-4 py-2"
+        className="bg-[#4F6F52] hover:bg-[#3F5941] text-white rounded-xl btn-premium transition-all font-semibold text-xs flex items-center gap-2 px-4 py-2"
       >
         <Printer className="h-4 w-4" />
         {label}

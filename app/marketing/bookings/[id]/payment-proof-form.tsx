@@ -4,7 +4,6 @@ import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { uploadPaymentProof } from "@/server/actions/marketing";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import { Upload, FileCheck, AlertCircle, X, FilePlus } from "lucide-react";
 import { parseServerError } from "@/lib/error-parser";
 import { useI18n } from "@/lib/i18n";
@@ -102,16 +101,16 @@ export default function BookingPaymentProofForm({ bookingId, paymentType }: Prop
   };
 
   return (
-    <div className="bg-white border border-[#D6DED2] rounded-2xl p-5 shadow-sage">
+    <div className="bg-card border border-border rounded-2xl p-5 shadow-sage">
       <div className="flex items-center gap-2 mb-4">
-        <div className="h-8 w-8 rounded-xl bg-[#DDE8D8] text-[#4F6F52] flex items-center justify-center">
+        <div className="h-8 w-8 rounded-xl bg-secondary text-primary flex items-center justify-center">
           <FilePlus className="h-4 w-4" />
         </div>
         <div>
-          <h3 className="font-bold text-[#243028] text-sm">
+          <h3 className="font-bold text-foreground text-sm">
             {paymentType === "booking_fee" ? "Upload Bukti Booking Fee (BF)" : "Upload Bukti Uang Muka (DP)"}
           </h3>
-          <p className="text-[10px] text-[#66736A]">{t("booking_proof.format")}</p>
+          <p className="text-[10px] text-muted-foreground">{t("booking_proof.format")}</p>
         </div>
       </div>
 
@@ -138,10 +137,10 @@ export default function BookingPaymentProofForm({ bookingId, paymentType }: Prop
           onClick={() => fileInputRef.current?.click()}
           className={`relative flex flex-col items-center justify-center gap-3 p-6 rounded-xl border-2 border-dashed cursor-pointer transition-all duration-200 ${
             isDragOver
-              ? "border-[#4F6F52] bg-[#DDE8D8]/30 scale-[1.01]"
+              ? "border-[#4F6F52] bg-secondary/30 scale-[1.01]"
               : selectedFile
-                ? "border-[#8FAF9A] bg-[#DDE8D8]/20"
-                : "border-[#D6DED2] bg-[#F7F8F3]/50 hover:border-[#8FAF9A] hover:bg-[#DDE8D8]/10"
+                ? "border-primary/50 bg-secondary/20"
+                : "border-border bg-muted/30/50 hover:border-primary/50 hover:bg-secondary/10"
           }`}
         >
           <input
@@ -154,12 +153,12 @@ export default function BookingPaymentProofForm({ bookingId, paymentType }: Prop
           
           {selectedFile ? (
             <>
-              <div className="h-12 w-12 rounded-xl bg-[#DDE8D8] flex items-center justify-center">
-                <FileCheck className="h-6 w-6 text-[#4F6F52]" />
+              <div className="h-12 w-12 rounded-xl bg-secondary flex items-center justify-center">
+                <FileCheck className="h-6 w-6 text-primary" />
               </div>
               <div className="text-center">
-                <p className="text-sm font-bold text-[#243028] truncate max-w-[200px]">{selectedFile.name}</p>
-                <p className="text-xs text-[#8FAF9A] font-mono">{formatFileSize(selectedFile.size)}</p>
+                <p className="text-sm font-bold text-foreground truncate max-w-[200px]">{selectedFile.name}</p>
+                <p className="text-xs text-primary/70 font-mono">{formatFileSize(selectedFile.size)}</p>
               </div>
               <button
                 type="button"
@@ -175,14 +174,14 @@ export default function BookingPaymentProofForm({ bookingId, paymentType }: Prop
             </>
           ) : (
             <>
-              <div className="h-12 w-12 rounded-xl bg-[#DDE8D8]/60 flex items-center justify-center">
-                <Upload className="h-6 w-6 text-[#8FAF9A]" />
+              <div className="h-12 w-12 rounded-xl bg-secondary/60 flex items-center justify-center">
+                <Upload className="h-6 w-6 text-primary/70" />
               </div>
               <div className="text-center">
-                <p className="text-sm font-semibold text-[#243028]">
+                <p className="text-sm font-semibold text-foreground">
                   {t("booking_proof.drag_drop")}
                 </p>
-                <p className="text-xs text-[#8FAF9A]">{t("booking_proof.drag_drop_format")}</p>
+                <p className="text-xs text-primary/70">{t("booking_proof.drag_drop_format")}</p>
               </div>
             </>
           )}
@@ -191,7 +190,7 @@ export default function BookingPaymentProofForm({ bookingId, paymentType }: Prop
         <Button
           type="submit"
           disabled={loading || !selectedFile || success}
-          className="w-full bg-[#4F6F52] hover:bg-[#3F5941] text-white font-bold rounded-xl shadow-[0_2px_8px_rgba(79,111,82,0.25)] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          className="w-full bg-primary hover:bg-[#3F5941] text-white font-bold rounded-xl shadow-[0_2px_8px_rgba(79,111,82,0.25)] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
           {loading ? (
             <>

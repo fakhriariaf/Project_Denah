@@ -56,7 +56,7 @@ export function AuditLogFilter({ users }: AuditFilterProps) {
   return (
     <div className="bg-card border rounded-xl p-4 sm:p-5 shadow-sm space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-emerald-800 dark:text-emerald-400 flex items-center gap-2">
+        <h2 className="text-sm font-semibold text-emerald-800 flex items-center gap-2">
           <Search className="w-4 h-4" />
           {t("audit.filter_title")}
         </h2>
@@ -78,7 +78,7 @@ export function AuditLogFilter({ users }: AuditFilterProps) {
             disabled={isPending}
             items={[{ label: t("audit.all_users"), value: "all" }, ...users.map((u) => ({ label: `${u.name} (${u.email})`, value: u.id }))] }
           >
-            <SelectTrigger className="w-full text-xs rounded-xl border border-[#D6DED2] bg-white hover:bg-[#F7F8F3]/50 focus:ring-2 focus:ring-[#8FAF9A]/20 h-10 px-3 transition-premium">
+            <SelectTrigger className="w-full text-xs rounded-xl border border-[#D6DED2] bg-white hover:bg-[#F7F8F3]/50 focus:ring-2 focus:ring-ring/20 h-10 px-3 transition-premium">
               <SelectValue placeholder={t("audit.all_users")}>
                 {userId === "" || userId === "all" ? t("audit.all_users") : (() => {
                   const u = users.find(usr => usr.id === userId);
@@ -114,7 +114,7 @@ export function AuditLogFilter({ users }: AuditFilterProps) {
               { label: t("audit.mod_system"), value: "system" }
             ]}
           >
-            <SelectTrigger className="w-full text-xs rounded-xl border border-[#D6DED2] bg-white hover:bg-[#F7F8F3]/50 focus:ring-2 focus:ring-[#8FAF9A]/20 h-10 px-3 transition-premium text-capitalize">
+            <SelectTrigger className="w-full text-xs rounded-xl border border-[#D6DED2] bg-white hover:bg-[#F7F8F3]/50 focus:ring-2 focus:ring-ring/20 h-10 px-3 transition-premium text-capitalize">
               <SelectValue placeholder={t("audit.all_modules")}>
                 {moduleName === "" || moduleName === "all" ? t("audit.all_modules") : ""}
                 {moduleName === "auth" && t("audit.mod_auth")}
@@ -155,7 +155,7 @@ export function AuditLogFilter({ users }: AuditFilterProps) {
               { label: t("audit.act_logout"), value: "logout" }
             ]}
           >
-            <SelectTrigger className="w-full text-xs rounded-xl border border-[#D6DED2] bg-white hover:bg-[#F7F8F3]/50 focus:ring-2 focus:ring-[#8FAF9A]/20 h-10 px-3 transition-premium text-capitalize">
+            <SelectTrigger className="w-full text-xs rounded-xl border border-[#D6DED2] bg-white hover:bg-[#F7F8F3]/50 focus:ring-2 focus:ring-ring/20 h-10 px-3 transition-premium text-capitalize">
               <SelectValue placeholder={t("audit.all_actions")}>
                 {actionName === "" || actionName === "all" ? t("audit.all_actions") : ""}
                 {actionName === "create" && t("audit.act_create")}
@@ -204,25 +204,25 @@ export function AuditLogFilter({ users }: AuditFilterProps) {
 
         {/* Level Filter */}
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-muted-foreground">Level</label>
+          <label className="text-xs font-semibold text-muted-foreground">Tingkat</label>
           <Select
             value={levelFilter || "all"}
             onValueChange={(val) => updateFilters({ level: val === "all" ? "" : val })}
             disabled={isPending}
           >
-            <SelectTrigger className="w-full text-xs rounded-xl border border-[#D6DED2] bg-white hover:bg-[#F7F8F3]/50 focus:ring-2 focus:ring-[#8FAF9A]/20 h-10 px-3 transition-premium">
-              <SelectValue placeholder="Semua Level">
-                {levelFilter === "" || levelFilter === "all" ? "Semua Level" : ""}
-                {levelFilter === "log" && "🟢 Log"}
-                {levelFilter === "info" && "🔵 Info"}
-                {levelFilter === "error" && "🔴 Error"}
+            <SelectTrigger className="w-full text-xs rounded-xl border border-[#D6DED2] bg-white hover:bg-[#F7F8F3]/50 focus:ring-2 focus:ring-ring/20 h-10 px-3 transition-premium">
+              <SelectValue placeholder="Semua Tingkat">
+                {levelFilter === "" || levelFilter === "all" ? "Semua Tingkat" : ""}
+                {levelFilter === "log" && "🟢 Normal"}
+                {levelFilter === "info" && "🔵 Informasi"}
+                {levelFilter === "error" && "🔴 Kesalahan"}
               </SelectValue>
             </SelectTrigger>
             <SelectContent className="border-[#D6DED2] rounded-xl bg-white/95 backdrop-blur-md">
-              <SelectItem value="all" className="text-xs">Semua Level</SelectItem>
-              <SelectItem value="log" className="text-xs">🟢 Log</SelectItem>
-              <SelectItem value="info" className="text-xs">🔵 Info</SelectItem>
-              <SelectItem value="error" className="text-xs">🔴 Error</SelectItem>
+              <SelectItem value="all" className="text-xs">Semua Tingkat</SelectItem>
+              <SelectItem value="log" className="text-xs">🟢 Normal</SelectItem>
+              <SelectItem value="info" className="text-xs">🔵 Informasi</SelectItem>
+              <SelectItem value="error" className="text-xs">🔴 Kesalahan</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -235,17 +235,17 @@ export function AuditLogFilter({ users }: AuditFilterProps) {
             onValueChange={(val) => updateFilters({ status: val === "all" ? "" : val })}
             disabled={isPending}
           >
-            <SelectTrigger className="w-full text-xs rounded-xl border border-[#D6DED2] bg-white hover:bg-[#F7F8F3]/50 focus:ring-2 focus:ring-[#8FAF9A]/20 h-10 px-3 transition-premium">
+            <SelectTrigger className="w-full text-xs rounded-xl border border-[#D6DED2] bg-white hover:bg-[#F7F8F3]/50 focus:ring-2 focus:ring-ring/20 h-10 px-3 transition-premium">
               <SelectValue placeholder="Semua Status">
                 {statusFilter === "" || statusFilter === "all" ? "Semua Status" : ""}
-                {statusFilter === "success" && "✅ Success"}
-                {statusFilter === "failed" && "❌ Failed"}
+                {statusFilter === "success" && "✅ Berhasil"}
+                {statusFilter === "failed" && "❌ Gagal"}
               </SelectValue>
             </SelectTrigger>
             <SelectContent className="border-[#D6DED2] rounded-xl bg-white/95 backdrop-blur-md">
               <SelectItem value="all" className="text-xs">Semua Status</SelectItem>
-              <SelectItem value="success" className="text-xs">✅ Success</SelectItem>
-              <SelectItem value="failed" className="text-xs">❌ Failed</SelectItem>
+              <SelectItem value="success" className="text-xs">✅ Berhasil</SelectItem>
+              <SelectItem value="failed" className="text-xs">❌ Gagal</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -256,7 +256,7 @@ export function AuditLogFilter({ users }: AuditFilterProps) {
           <button
             onClick={handleReset}
             disabled={isPending}
-            className="text-xs font-semibold text-emerald-700 hover:text-emerald-800 bg-emerald-50 dark:bg-emerald-950/20 px-4 py-2 rounded-lg flex items-center gap-1.5 hover:bg-emerald-100 transition-all duration-200"
+            className="text-xs font-semibold text-emerald-700 hover:text-emerald-800 bg-emerald-50 px-4 py-2 rounded-lg flex items-center gap-1.5 hover:bg-emerald-100 transition-all duration-200"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             {t("audit.reset_filter")}

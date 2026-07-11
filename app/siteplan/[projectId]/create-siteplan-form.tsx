@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Plus, Check, X, FileUp, AlertCircle } from "lucide-react";
 import { parseServerError } from "@/lib/error-parser";
+import { toast } from "sonner";
 
 export function CreateSiteplanForm({ projectId }: { projectId: string }) {
   const router = useRouter();
@@ -36,7 +37,7 @@ export function CreateSiteplanForm({ projectId }: { projectId: string }) {
       setError(null);
       try {
         await createSiteplan(data);
-        alert("Gambar siteplan berhasil disimpan!");
+        toast.success("Gambar siteplan berhasil disimpan!");
         setOpen(false);
         router.refresh();
       } catch (err) {
@@ -48,7 +49,7 @@ export function CreateSiteplanForm({ projectId }: { projectId: string }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger nativeButton={true} render={
-        <Button className="bg-[#4F6F52] hover:bg-[#3D563F] text-white text-xs font-bold rounded-xl h-9 px-4 transition-all duration-300 btn-premium shadow-glow-sage flex items-center gap-1.5 active:scale-95">
+        <Button className="bg-[#4F6F52] hover:bg-[#3D563F] text-white text-xs font-bold rounded-xl h-9 px-4 transition-all duration-300 btn-premium flex items-center gap-1.5 active:scale-95">
           <Plus className="h-4 w-4 shrink-0" />
           <span>Buat Denah Siteplan</span>
         </Button>
@@ -86,7 +87,7 @@ export function CreateSiteplanForm({ projectId }: { projectId: string }) {
               required
               {...register("name")} 
               placeholder="Contoh: Denah Blok A & B" 
-              className="bg-white border-[#D6DED2] rounded-xl text-xs h-9 focus:ring-[#8FAF9A] input-premium text-[#243028]"
+              className="bg-white border-[#D6DED2] rounded-xl text-xs h-9 focus:ring-ring input-premium text-[#243028]"
             />
             {errors.name && (
               <p className="text-[10px] text-red-500 font-bold mt-1 pl-1">
@@ -103,7 +104,7 @@ export function CreateSiteplanForm({ projectId }: { projectId: string }) {
                 type="number" 
                 required
                 {...register("width", { valueAsNumber: true })} 
-                className="bg-white border-[#D6DED2] rounded-xl text-xs h-9 focus:ring-[#8FAF9A] font-mono tabular-nums text-[#243028]"
+                className="bg-white border-[#D6DED2] rounded-xl text-xs h-9 focus:ring-ring font-mono tabular-nums text-[#243028]"
               />
             </div>
             
@@ -114,7 +115,7 @@ export function CreateSiteplanForm({ projectId }: { projectId: string }) {
                 type="number" 
                 required
                 {...register("height", { valueAsNumber: true })} 
-                className="bg-white border-[#D6DED2] rounded-xl text-xs h-9 focus:ring-[#8FAF9A] font-mono tabular-nums text-[#243028]"
+                className="bg-white border-[#D6DED2] rounded-xl text-xs h-9 focus:ring-ring font-mono tabular-nums text-[#243028]"
               />
             </div>
           </div>

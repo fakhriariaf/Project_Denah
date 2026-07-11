@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useRef, useTransition, useMemo, useEffect } from "react";
 import { coordsToPolygonPoints, getStatusColor } from "@/lib/siteplan-utils";
@@ -166,8 +166,8 @@ export function SiteplanEditor({
       let blobToSend = blob;
       let finalExt = ext;
 
-      // SVG → kirim langsung ke Python SVG analyzer (koordinat EXACT dari elemen SVG)
-      // Jauh lebih presisi dibanding rasterisasi → OpenCV
+      // SVG â†’ kirim langsung ke Python SVG analyzer (koordinat EXACT dari elemen SVG)
+      // Jauh lebih presisi dibanding rasterisasi â†’ OpenCV
       // Python SVG analyzer membaca polygon/rect element native SVG
       if (ext === 'svg') {
         blobToSend = blob;
@@ -195,20 +195,20 @@ export function SiteplanEditor({
         const origWidth = aiData.meta?.original_width || width;
         const origHeight = aiData.meta?.original_height || height;
 
-        // ── PERBAIKAN PRESISI ──────────────────────────────────────────────────────
+        // â”€â”€ PERBAIKAN PRESISI â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         // SVG viewer menggunakan preserveAspectRatio="xMidYMid meet"
         // sehingga gambar di-scale uniform (scale terkecil) dan mungkin ada offset
-        // jika aspek rasio gambar ≠ aspek rasio viewBox
+        // jika aspek rasio gambar â‰  aspek rasio viewBox
         const effectiveScale = Math.min(width / origWidth, height / origHeight);
         const offsetX = (width - origWidth * effectiveScale) / 2;
         const offsetY = (height - origHeight * effectiveScale) / 2;
-        // ──────────────────────────────────────────────────────────────────────────
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         const newShapes: ExistingShape[] = aiData.data.map((item: any, index: number) => {
           let coords: Point[];
 
           if (item.polygon_points && item.polygon_points.length >= 3) {
-            // ✅ Gunakan titik polygon ASLI dari Python (lebih presisi)
+            // âœ… Gunakan titik polygon ASLI dari Python (lebih presisi)
             coords = (item.polygon_points as { x: number, y: number }[]).map(pt => ({
               x: Math.round(pt.x * effectiveScale + offsetX),
               y: Math.round(pt.y * effectiveScale + offsetY),
@@ -454,7 +454,7 @@ export function SiteplanEditor({
   return (
     <div className="flex flex-col gap-5">
 
-      {/* ── PREMIUM INTEGRATED TOOLBAR ── */}
+      {/* â”€â”€ PREMIUM INTEGRATED TOOLBAR â”€â”€ */}
       <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-[#D6DED2] bg-white p-3.5 shadow-sage">
 
         {/* View Mode Button */}
@@ -504,7 +504,7 @@ export function SiteplanEditor({
                 value={selectedUnitId}
                 onValueChange={(val) => setSelectedUnitId(val ?? "")}
               >
-                <SelectTrigger className="h-9 text-xs border-[#D6DED2] focus:ring-2 focus:ring-[#4F6F52]/20 rounded-xl font-bold bg-[#F7F8F3] text-[#243028] flex-1">
+                <SelectTrigger className="h-9 text-xs border-[#D6DED2] focus:ring-2 focus:ring-ring/20 rounded-xl font-bold bg-[#F7F8F3] text-[#243028] flex-1">
                   <SelectValue placeholder={t("siteplan_editor.select_unit")}>
                     {selectedUnitId ? (
                       units.find((u) => u.id === selectedUnitId)?.code || t("siteplan_editor.no_unit")
@@ -593,7 +593,7 @@ export function SiteplanEditor({
         )}
       </div>
 
-      {/* ── TWO-COLUMN INTERACTIVE EDITOR GRID ── */}
+      {/* â”€â”€ TWO-COLUMN INTERACTIVE EDITOR GRID â”€â”€ */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
 
         {/* LEFT COLUMN: SVG Canvas (col-span-8) */}
@@ -994,7 +994,7 @@ export function SiteplanEditor({
 
       </div>
 
-      {/* ── DESIGN STANDARD DOCUMENTATION / HELP FOOTER ── */}
+      {/* â”€â”€ DESIGN STANDARD DOCUMENTATION / HELP FOOTER â”€â”€ */}
       <div className="flex items-center gap-3 rounded-2xl border border-[#DDE8D8] bg-[#DDE8D8]/20 px-4 py-3.5 text-xs text-[#4F6F52] shadow-sm font-semibold leading-relaxed">
         <Info className="h-4.5 w-4.5 shrink-0 text-[#4F6F52]" />
         {mode === "draw" ? (

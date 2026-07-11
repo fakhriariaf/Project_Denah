@@ -245,7 +245,7 @@ export function KprShell({
 
     const TERMINAL_COLUMNS = ["realisasi", "physical_waiting", "handover_waiting", "bast_developer", "handover_done"];
     if (TERMINAL_COLUMNS.includes(targetStatus)) {
-      alert("Tahapan ini tidak dapat diubah dengan geser kartu.\n\n• Realisasi Dana → gunakan Form Realisasi di 'Kelola Berkas KPR'\n• Cek Fisik / Serah Terima → dikelola otomatis oleh sistem");
+      alert("Tahapan ini tidak dapat diubah dengan geser kartu.\n\nâ€¢ Realisasi Dana â†’ gunakan Form Realisasi di 'Kelola Berkas KPR'\nâ€¢ Cek Fisik / Serah Terima â†’ dikelola otomatis oleh sistem");
       setDraggingId(null);
       return;
     }
@@ -253,8 +253,8 @@ export function KprShell({
     const targetCard = initialKpr.find(k => k.id === id);
     if (!targetCard || targetCard.status === targetStatus) return;
 
-    // Check for unverified files — only mandatory KPR docs (KTP, NPWP, Slip Gaji, KK)
-    // Supporting docs (BAST, SPJB, kpr_doc) are uploaded AFTER akad/realisasi — do NOT gate here
+    // Check for unverified files â€” only mandatory KPR docs (KTP, NPWP, Slip Gaji, KK)
+    // Supporting docs (BAST, SPJB, kpr_doc) are uploaded AFTER akad/realisasi â€” do NOT gate here
     const MANDATORY_DOC_TYPES = ["ktp", "npwp", "slip_gaji", "kk"];
     const allClientDocs = documents.filter(d => d.customerId === targetCard.customerId);
     const mandatoryClientDocs = allClientDocs.filter(d => MANDATORY_DOC_TYPES.includes(d.documentType));
@@ -307,7 +307,7 @@ export function KprShell({
       }
     }
 
-    // Guard: approved is a one-way gate — cannot go backward
+    // Guard: approved is a one-way gate â€” cannot go backward
     const BACKWARD_FROM_APPROVED = ["bi_checking", "pemberkasan", "proses_bank", "offering"];
     if (targetCard.status === "approved" && BACKWARD_FROM_APPROVED.includes(targetStatus)) {
       alert(
@@ -319,7 +319,7 @@ export function KprShell({
       return;
     }
 
-    // Guard: realisasi is a terminal gate — RULE 7: cannot go backward at all
+    // Guard: realisasi is a terminal gate â€” RULE 7: cannot go backward at all
     const BACKWARD_FROM_REALISASI = ["bi_checking", "pemberkasan", "proses_bank", "offering", "approved", "akad"];
     if (targetCard.status === "realisasi" && BACKWARD_FROM_REALISASI.includes(targetStatus)) {
       alert(
@@ -409,32 +409,32 @@ export function KprShell({
 
   return (
     <div className="space-y-6">
-      {/* ── PREMIUM HEADER ── */}
-      <div className="relative rounded-2xl overflow-hidden bg-gradient-to-r from-[#DDE8D8]/70 via-white/95 to-[#DDE8D8]/40 border border-[#D6DED2] shadow-sage p-6">
+      {/* â”€â”€ PREMIUM HEADER â”€â”€ */}
+      <div className="relative rounded-2xl overflow-hidden bg-gradient-to-r from-[#DDE8D8]/70 via-white/95 to-[#DDE8D8]/40 border border-border shadow-sage p-6">
         <div className="absolute -top-6 -right-6 h-28 w-28 rounded-full bg-[#8FAF9A]/10 blur-2xl pointer-events-none" />
-        <div className="absolute bottom-0 left-1/3 h-20 w-20 rounded-full bg-[#4F6F52]/8 blur-xl pointer-events-none" />
+        <div className="absolute bottom-0 left-1/3 h-20 w-20 rounded-full bg-primary/8 blur-xl pointer-events-none" />
 
         <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-start gap-3">
-            <div className="h-12 w-12 rounded-2xl bg-[#4F6F52] flex items-center justify-center shadow-[0_4px_12px_rgba(79,111,82,0.3)] shrink-0">
+            <div className="h-12 w-12 rounded-2xl bg-primary flex items-center justify-center shadow-[0_4px_12px_rgba(79,111,82,0.3)] shrink-0">
               <Layers className="h-6 w-6 text-white" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="flex h-1.5 w-1.5 rounded-full bg-[#4F6F52] animate-pulse" />
-                <span className="text-[10px] font-bold text-[#4F6F52] uppercase tracking-wider">{t("kpr_board.module_name")}</span>
+                <span className="flex h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+                <span className="text-[10px] font-bold text-primary uppercase tracking-wider">{t("kpr_board.module_name")}</span>
               </div>
-              <h2 className="text-2xl font-black text-[#243028] tracking-tight">{t("kpr_board.title")}</h2>
-              <p className="text-sm text-[#66736A] mt-0.5">{t("kpr_board.subtitle")}</p>
+              <h2 className="text-2xl font-black text-foreground tracking-tight">{t("kpr_board.title")}</h2>
+              <p className="text-sm text-muted-foreground mt-0.5">{t("kpr_board.subtitle")}</p>
             </div>
           </div>
 
           {/* Project Filter */}
-          <div className="flex items-center gap-2.5 bg-white/90 backdrop-blur-sm border border-[#D6DED2]/60 px-4 py-2 rounded-2xl shadow-sm self-end md:self-center">
-            <Filter className="w-4 h-4 text-[#4F6F52] shrink-0" />
-            <span className="text-xs font-bold text-[#66736A] uppercase tracking-wider hidden sm:inline">{t("kpr_board.filter_project")}</span>
+          <div className="flex items-center gap-2.5 bg-white/90 backdrop-blur-sm border border-border/60 px-4 py-2 rounded-2xl shadow-sm self-end md:self-center">
+            <Filter className="w-4 h-4 text-primary shrink-0" />
+            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider hidden sm:inline">{t("kpr_board.filter_project")}</span>
             <Select value={projectFilter} onValueChange={(val: string | null) => setProjectFilter(val || "all")}>
-              <SelectTrigger className="w-[180px] h-8 text-xs bg-white border-[#D6DED2] rounded-xl focus:ring-[#8FAF9A]/20">
+              <SelectTrigger className="w-[180px] h-8 text-xs bg-card border-input rounded-xl focus:ring-ring/20">
                 <SelectValue placeholder={t("kpr_board.all_projects")}>
                   {projectFilter === "all" ? t("kpr_board.all_projects") : projectFilter}
                 </SelectValue>
@@ -450,26 +450,26 @@ export function KprShell({
         </div>
       </div>
 
-      {/* ── KPI METRICS BAR (Opsi B) ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* â”€â”€ KPI METRICS BAR (Opsi B) â”€â”€ */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         {/* KPI 1: Active KPR */}
-        <Card className="border-[#D6DED2] bg-white rounded-2xl shadow-sm hover:shadow-md transition-all">
+        <Card className="border-border bg-card rounded-2xl shadow-sm hover:shadow-md transition-all">
           <CardContent className="p-4 flex items-center justify-between">
             <div className="space-y-1">
-              <span className="text-[10px] font-black text-[#66736A] uppercase tracking-wider block">{t("kpr_board.kpi_active")}</span>
-              <span className="font-mono text-2xl font-black text-[#243028] block">{kpiTotalActive}</span>
+              <span className="text-[10px] font-black text-muted-foreground uppercase tracking-wider block">{t("kpr_board.kpi_active")}</span>
+              <span className="font-mono text-2xl font-black text-foreground block">{kpiTotalActive}</span>
             </div>
-            <div className="h-10 w-10 bg-[#DDE8D8]/50 text-[#4F6F52] rounded-xl flex items-center justify-center">
+            <div className="h-10 w-10 bg-secondary/50 text-primary rounded-xl flex items-center justify-center">
               <Layers className="h-5 w-5" />
             </div>
           </CardContent>
         </Card>
 
         {/* KPI 2: Incomplete Docs */}
-        <Card className="border-[#D6DED2] bg-white rounded-2xl shadow-sm hover:shadow-md transition-all">
+        <Card className="border-border bg-card rounded-2xl shadow-sm hover:shadow-md transition-all">
           <CardContent className="p-4 flex items-center justify-between">
             <div className="space-y-1">
-              <span className="text-[10px] font-black text-[#66736A] uppercase tracking-wider block">{t("kpr_board.kpi_incomplete")}</span>
+              <span className="text-[10px] font-black text-muted-foreground uppercase tracking-wider block">{t("kpr_board.kpi_incomplete")}</span>
               <span className="font-mono text-2xl font-black text-amber-700 block">{kpiIncompleteDocs}</span>
             </div>
             <div className="h-10 w-10 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center">
@@ -479,10 +479,10 @@ export function KprShell({
         </Card>
 
         {/* KPI 3: SLA Overdue */}
-        <Card className="border-[#D6DED2] bg-white rounded-2xl shadow-sm hover:shadow-md transition-all">
+        <Card className="border-border bg-card rounded-2xl shadow-sm hover:shadow-md transition-all">
           <CardContent className="p-4 flex items-center justify-between">
             <div className="space-y-1">
-              <span className="text-[10px] font-black text-[#66736A] uppercase tracking-wider block">{t("kpr_board.kpi_overdue")}</span>
+              <span className="text-[10px] font-black text-muted-foreground uppercase tracking-wider block">{t("kpr_board.kpi_overdue")}</span>
               <span className="font-mono text-2xl font-black text-rose-700 block">{kpiSlaOverdue}</span>
             </div>
             <div className="h-10 w-10 bg-rose-50 text-rose-600 rounded-xl flex items-center justify-center">
@@ -492,10 +492,10 @@ export function KprShell({
         </Card>
 
         {/* KPI 4: Bank Approved */}
-        <Card className="border-[#D6DED2] bg-white rounded-2xl shadow-sm hover:shadow-md transition-all">
+        <Card className="border-border bg-card rounded-2xl shadow-sm hover:shadow-md transition-all">
           <CardContent className="p-4 flex items-center justify-between">
             <div className="space-y-1">
-              <span className="text-[10px] font-black text-[#66736A] uppercase tracking-wider block">{t("kpr_board.kpi_approved")}</span>
+              <span className="text-[10px] font-black text-muted-foreground uppercase tracking-wider block">{t("kpr_board.kpi_approved")}</span>
               <span className="font-mono text-2xl font-black text-emerald-700 block">{kpiBankApproved}</span>
             </div>
             <div className="h-10 w-10 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center">
@@ -505,24 +505,24 @@ export function KprShell({
         </Card>
       </div>
 
-      {/* ── ADVANCED CONTROLS & FILTER BAR (Opsi C) ── */}
-      <div className="flex flex-col sm:flex-row gap-3 bg-white p-3.5 rounded-2xl border border-[#D6DED2] shadow-sm">
+      {/* â”€â”€ ADVANCED CONTROLS & FILTER BAR (Opsi C) â”€â”€ */}
+      <div className="flex flex-col sm:flex-row gap-3 bg-card p-3.5 rounded-2xl border border-border shadow-sm">
         {/* Real-time search */}
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-[#66736A]/60" />
+          <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground/60" />
           <Input
             placeholder={t("kpr_board.search_ph")}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9 h-9 text-xs border-[#D6DED2] rounded-xl focus-visible:ring-[#8FAF9A]/30 focus-visible:border-[#8FAF9A]"
+            className="pl-9 h-9 text-xs border-border rounded-xl focus-visible:ring-ring/30 focus-visible:border-primary/50"
           />
         </div>
 
         {/* Doc checklist filter */}
         <div className="flex items-center gap-2">
-          <span className="text-[10px] font-bold text-[#66736A] uppercase whitespace-nowrap">{t("kpr_board.filter_doc")}</span>
+          <span className="text-[10px] font-bold text-muted-foreground uppercase whitespace-nowrap">{t("kpr_board.filter_doc")}</span>
           <Select value={docFilter} onValueChange={(val: string | null) => setDocFilter(val || "all")}>
-            <SelectTrigger className="w-[140px] h-9 text-xs border-[#D6DED2] rounded-xl bg-white">
+            <SelectTrigger className="w-[140px] h-9 text-xs border-border rounded-xl bg-card">
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="rounded-xl">
@@ -535,9 +535,9 @@ export function KprShell({
 
         {/* SLA Warning filter */}
         <div className="flex items-center gap-2">
-          <span className="text-[10px] font-bold text-[#66736A] uppercase whitespace-nowrap">{t("kpr_board.filter_sla")}</span>
+          <span className="text-[10px] font-bold text-muted-foreground uppercase whitespace-nowrap">{t("kpr_board.filter_sla")}</span>
           <Select value={slaFilter} onValueChange={(val: string | null) => setSlaFilter(val || "all")}>
-            <SelectTrigger className="w-[140px] h-9 text-xs border-[#D6DED2] rounded-xl bg-white">
+            <SelectTrigger className="w-[140px] h-9 text-xs border-border rounded-xl bg-card">
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="rounded-xl">
@@ -549,7 +549,7 @@ export function KprShell({
         </div>
       </div>
 
-      {/* ── PIPELINE KANBAN BOARD ── */}
+      {/* â”€â”€ PIPELINE KANBAN BOARD â”€â”€ */}
       <div className="flex gap-4 overflow-x-auto pb-6 items-start scrollbar-thin scrollbar-thumb-[#8FAF9A]/30 scrollbar-track-[#F7F8F3] w-full">
         {COLUMNS.map((col) => {
           const colCards = filteredKpr.filter((k) => getCardKanbanColumn(k) === col.id);
@@ -563,17 +563,17 @@ export function KprShell({
               onDrop={(e) => handleDrop(e, col.id)}
               className={`p-3 rounded-2xl flex flex-col h-[calc(100vh-340px)] min-h-[500px] w-[280px] shrink-0 shadow-sm transition-all duration-200 ${
                 isOver 
-                  ? "bg-[#DDE8D8]/50 border-2 border-dashed border-[#4F6F52] scale-[1.01]" 
-                  : "bg-[#F7F8F3]/60 border border-[#D6DED2]/60 hover:shadow-md"
+                  ? "bg-secondary/50 border-2 border-dashed border-[#4F6F52] scale-[1.01]" 
+                  : "bg-muted/30/60 border border-border/60 hover:shadow-md"
               }`}
             >
               {/* Column Header */}
-              <div className={`p-3 rounded-xl border flex items-center justify-between font-bold text-xs mb-3 shadow-sm bg-white shrink-0 ${col.color}`}>
+              <div className={`p-3 rounded-xl border flex items-center justify-between font-bold text-xs mb-3 shadow-sm bg-card shrink-0 ${col.color}`}>
                 <div className="flex items-center gap-2">
                   <span className={`w-2 h-2 rounded-full ${col.marker}`} />
                   <span className="uppercase tracking-wider font-extrabold">{col.label}</span>
                 </div>
-                <Badge className="bg-[#F7F8F3] text-[#243028] border border-[#D6DED2]/60 font-mono font-bold text-[10px] px-2 py-0.5 rounded-md">
+                <Badge className="bg-muted/30 text-foreground border border-border/60 font-mono font-bold text-[10px] px-2 py-0.5 rounded-md">
                   {colCards.length}
                 </Badge>
               </div>
@@ -610,10 +610,10 @@ export function KprShell({
                       >
                         <Card 
                           onClick={() => setViewingKpr(kprCard)}
-                          className={`cursor-pointer hover:shadow-sage-lg active:scale-[0.99] shadow-sage-md bg-white border rounded-2xl relative transition-all duration-200 group hover:-translate-y-1 ${
+                          className={`cursor-pointer hover:shadow-sage-lg active:scale-[0.99] shadow-sage-md bg-card border rounded-2xl relative transition-all duration-200 group hover:-translate-y-1 ${
                             isSlaOverdue 
                               ? "shadow-[0_0_15px_rgba(215,122,122,0.25)] border-[#D77A7A]/70" 
-                              : "border-[#D6DED2]/80 hover:border-[#8FAF9A]"
+                              : "border-border/80 hover:border-primary/50"
                           }`}
                         >
                           {/* SLA Overdue Bar indicator */}
@@ -625,25 +625,25 @@ export function KprShell({
                             {/* Customer Avatar & Name */}
                             <div className="flex items-center gap-3">
                               <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 shadow-inner ${
-                                isSlaOverdue ? "bg-[#F8D4DA] text-[#8B3443]" : "bg-[#DDE8D8] text-[#4F6F52]"
+                                isSlaOverdue ? "bg-[#F8D4DA] text-[#8B3443]" : "bg-secondary text-primary"
                               }`}>
                                 {kprCard.customerName.substring(0, 2).toUpperCase()}
                               </div>
                               <div className="min-w-0 flex-1">
-                                <h4 className="font-bold text-[#243028] group-hover:text-[#4F6F52] transition text-xs truncate leading-tight">
+                                <h4 className="font-bold text-foreground group-hover:text-primary transition text-xs truncate leading-tight">
                                   {kprCard.customerName}
                                 </h4>
-                                <p className="text-[9px] text-[#66736A] font-semibold mt-0.5">
-                                  {t("kpr_board.card_booking")} <span className="font-mono text-[#4F6F52]">{kprCard.bookingNumber}</span>
+                                <p className="text-[9px] text-muted-foreground font-semibold mt-0.5">
+                                  {t("kpr_board.card_booking")} <span className="font-mono text-primary">{kprCard.bookingNumber}</span>
                                 </p>
                               </div>
                             </div>
 
                             {/* Unit Specifications info */}
-                            <div className="flex flex-col gap-1.5 bg-[#F7F8F3] p-2.5 rounded-xl border border-[#D6DED2]/30">
+                            <div className="flex flex-col gap-1.5 bg-muted/30 p-2.5 rounded-xl border border-border/30">
                               <div className="flex items-center justify-between text-[10px]">
-                                <span className="text-[#66736A] font-bold truncate pr-2">{kprCard.projectName}</span>
-                                <Badge variant="outline" className="font-mono font-black bg-white border-[#D6DED2] text-[#4F6F52] text-[9px] px-2 py-0.5 rounded-md shrink-0">
+                                <span className="text-muted-foreground font-bold truncate pr-2">{kprCard.projectName}</span>
+                                <Badge variant="outline" className="font-mono font-black bg-card border-input text-primary text-[9px] px-2 py-0.5 rounded-md shrink-0">
                                   {kprCard.unitCode}
                                 </Badge>
                               </div>
@@ -655,16 +655,16 @@ export function KprShell({
                                 }).filter(Boolean);
 
                                 return submittedBanks.length > 0 ? (
-                                  <div className="flex flex-wrap gap-1 pt-1 border-t border-[#D6DED2]/20">
+                                  <div className="flex flex-wrap gap-1 pt-1 border-t border-border/20">
                                     {submittedBanks.map((bankName, idx) => (
-                                      <Badge key={idx} variant="outline" className="bg-[#DDE8D8]/50 text-[#4F6F52] border-[#D6DED2]/60 text-[8px] font-extrabold px-1.5 py-0.5 rounded-md shrink-0 flex items-center gap-1">
-                                        <span>🏦</span>
+                                      <Badge key={idx} variant="outline" className="bg-secondary/50 text-primary border-border/60 text-[8px] font-extrabold px-1.5 py-0.5 rounded-md shrink-0 flex items-center gap-1">
+                                        <span>ðŸ¦</span>
                                         <span>{bankName}</span>
                                       </Badge>
                                     ))}
                                   </div>
                                 ) : (
-                                  <div className="text-[8px] text-[#A8B0AA] font-bold pt-1 border-t border-[#D6DED2]/20">
+                                  <div className="text-[8px] text-muted-foreground/70 font-bold pt-1 border-t border-border/20">
                                     Belum Ada Bank Rekanan
                                   </div>
                                 );
@@ -687,14 +687,14 @@ export function KprShell({
                               };
 
                               return (
-                                <div className="grid grid-cols-2 gap-2 text-[9px] bg-[#F7F8F3]/80 p-2.5 rounded-xl border border-[#D6DED2]/30">
+                                <div className="grid grid-cols-2 gap-2 text-[9px] bg-muted/30/80 p-2.5 rounded-xl border border-border/30">
                                   <div>
-                                    <span className="text-[#66736A] font-bold block mb-0.5">Harga Unit</span>
-                                    <span className="font-mono font-black text-[#243028]">{formatVal(kprCard.price || 0)}</span>
+                                    <span className="text-muted-foreground font-bold block mb-0.5">Harga Unit</span>
+                                    <span className="font-mono font-black text-foreground">{formatVal(kprCard.price || 0)}</span>
                                   </div>
                                   <div>
-                                    <span className="text-[#66736A] font-bold block mb-0.5">Plafond KPR</span>
-                                    <span className="font-mono font-black text-[#4F6F52]">
+                                    <span className="text-muted-foreground font-bold block mb-0.5">Plafond KPR</span>
+                                    <span className="font-mono font-black text-primary">
                                       {displayPlafond > 0 ? formatVal(displayPlafond) : "Rp 0"}
                                     </span>
                                   </div>
@@ -708,14 +708,14 @@ export function KprShell({
                               const kprStatusLabel = colInfo?.label || kprCard.status;
                               return (
                                 <div className="grid grid-cols-2 gap-2 text-[9px] font-bold">
-                                  <div className="bg-[#F7F8F3]/70 p-2 rounded-xl border border-[#D6DED2]/30 flex flex-col gap-0.5">
-                                    <span className="text-[8px] text-[#66736A] uppercase tracking-wider">Status KPR</span>
-                                    <span className="text-[#4F6F52] font-black uppercase truncate">
+                                  <div className="bg-muted/30/70 p-2 rounded-xl border border-border/30 flex flex-col gap-0.5">
+                                    <span className="text-[8px] text-muted-foreground uppercase tracking-wider">Status KPR</span>
+                                    <span className="text-primary font-black uppercase truncate">
                                       {kprStatusLabel}
                                     </span>
                                   </div>
-                                  <div className="bg-[#F7F8F3]/70 p-2 rounded-xl border border-[#D6DED2]/30 flex flex-col gap-0.5">
-                                    <span className="text-[8px] text-[#66736A] uppercase tracking-wider">BI Checking</span>
+                                  <div className="bg-muted/30/70 p-2 rounded-xl border border-border/30 flex flex-col gap-0.5">
+                                    <span className="text-[8px] text-muted-foreground uppercase tracking-wider">BI Checking</span>
                                     <span className={`font-black uppercase truncate ${
                                       kprCard.biCheckStatus === "approved" 
                                         ? "text-emerald-700" 
@@ -739,7 +739,7 @@ export function KprShell({
                             })()}
 
                             {/* Progress Bar Kelengkapan Berkas & Bank Submission Counts */}
-                            <div className="flex flex-col gap-2.5 bg-[#F7F8F3]/40 p-2.5 rounded-xl border border-dashed border-[#D6DED2]/50 text-[9px] font-bold">
+                            <div className="flex flex-col gap-2.5 bg-muted/30/40 p-2.5 rounded-xl border border-dashed border-border/50 text-[9px] font-bold">
                               {/* Progress Bar Kelengkapan Berkas */}
                               {(() => {
                                 const uploadedCount = [hasKtp, hasNpwp, hasSlip, hasKk].filter(Boolean).length;
@@ -747,8 +747,8 @@ export function KprShell({
                                 return (
                                   <div className="space-y-1.5 w-full">
                                     <div className="flex justify-between items-center text-[9px] font-bold">
-                                      <span className="text-[#66736A] uppercase tracking-wider">Kelengkapan Dokumen</span>
-                                      <span className="text-[#4F6F52] font-mono">{uploadedCount}/4 ({percentage}%)</span>
+                                      <span className="text-muted-foreground uppercase tracking-wider">Kelengkapan Dokumen</span>
+                                      <span className="text-primary font-mono">{uploadedCount}/4 ({percentage}%)</span>
                                     </div>
                                     <Progress value={percentage} className="h-1.5 w-full rounded-full [&_[data-slot=progress-track]]:h-1.5 [&_[data-slot=progress-track]]:bg-slate-100" />
                                   </div>
@@ -756,11 +756,11 @@ export function KprShell({
                               })()}
 
                               {/* Row 2: Bank count */}
-                              <div className="flex items-center justify-between w-full pt-2 border-t border-[#D6DED2]/40">
-                                <span className="text-[#66736A] font-extrabold uppercase tracking-wider text-[8px]">Pengajuan Bank</span>
-                                <div className="flex items-center gap-1 font-bold text-[#66736A]">
-                                  <Building className="h-3 w-3 text-[#A8B0AA] shrink-0" />
-                                  <span className="text-[#243028]">{t("kpr_board.banks_count", { count: clientSubmissions.length })}</span>
+                              <div className="flex items-center justify-between w-full pt-2 border-t border-border/40">
+                                <span className="text-muted-foreground font-extrabold uppercase tracking-wider text-[8px]">Pengajuan Bank</span>
+                                <div className="flex items-center gap-1 font-bold text-muted-foreground">
+                                  <Building className="h-3 w-3 text-muted-foreground/70 shrink-0" />
+                                  <span className="text-foreground">{t("kpr_board.banks_count", { count: clientSubmissions.length })}</span>
                                 </div>
                               </div>
                             </div>
@@ -786,7 +786,7 @@ export function KprShell({
                                   ? "bg-[#D77A7A]/10 border-[#D77A7A]/30 text-[#D77A7A]" 
                                   : remainingDays <= 1 
                                   ? "bg-amber-50 border-amber-200 text-amber-700"
-                                  : "bg-[#DDE8D8]/20 border-[#8FAF9A]/20 text-[#4F6F52]"
+                                  : "bg-secondary/20 border-primary/20 text-primary"
                               }`}>
                                 {isSlaOverdue ? (
                                   <>
@@ -803,7 +803,7 @@ export function KprShell({
                             )}
 
                             {/* INTEGRATED DIALOG & WHATSAPP QUICK-LINK */}
-                            <div className="pt-2 border-t border-[#D6DED2]/30 flex gap-2" onClick={(e) => e.stopPropagation()}>
+                            <div className="pt-2 border-t border-border/30 flex gap-2" onClick={(e) => e.stopPropagation()}>
                               <a
                                 href={`https://wa.me/${kprCard.customerPhone.replace(/[^0-9]/g, "")}`}
                                 target="_blank"
@@ -833,10 +833,10 @@ export function KprShell({
                     );
                   })
                 ) : (
-                  <div className="py-20 text-center text-[10px] text-[#A8B0AA] border-dashed border-2 border-[#D6DED2]/40 rounded-2xl bg-white/40 flex flex-col justify-center items-center px-4 space-y-2">
-                    <Layers className="w-6 h-6 text-[#A8B0AA] opacity-60" />
+                  <div className="py-20 text-center text-[10px] text-muted-foreground/70 border-dashed border-2 border-border/40 rounded-2xl bg-white/40 flex flex-col justify-center items-center px-4 space-y-2">
+                    <Layers className="w-6 h-6 text-muted-foreground/70 opacity-60" />
                     <p className="font-bold">{t("kpr_board.empty")}</p>
-                    <p className="text-[9px] text-[#66736A]/60 leading-normal">{t("kpr_board.empty_desc")}</p>
+                    <p className="text-[9px] text-muted-foreground/60 leading-normal">{t("kpr_board.empty_desc")}</p>
                   </div>
                 )}
               </div>

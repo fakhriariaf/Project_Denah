@@ -306,8 +306,8 @@ export default function KprCardDetailDialog({
       `Pembangunan fisik unit ${kpr.unitCode} masih berjalan (${kpr.constructionProgress ?? 0}%). ` +
       "Proses Akad hanya bisa dilakukan setelah pembangunan fisik selesai 100%. " +
       "Pantau progress di modul Produksi.";
-  // NOTE: BAST gate removed — BAST diupload SETELAH akad/realisasi, bukan sebelum akad.
-  // Urutan benar: KPR approved → Akad → Realisasi → Upload BAST → Verifikasi BAST → Serah Terima
+  // NOTE: BAST gate removed â€” BAST diupload SETELAH akad/realisasi, bukan sebelum akad.
+  // Urutan benar: KPR approved â†’ Akad â†’ Realisasi â†’ Upload BAST â†’ Verifikasi BAST â†’ Serah Terima
   } else if (status === "rejected" && kpr.status === "approved") {
     clientValidationError =
       "KPR yang sudah berstatus Approved tidak dapat dikembalikan ke Ditolak (Rejected). " +
@@ -357,7 +357,7 @@ export default function KprCardDetailDialog({
         setMemoAttachmentId(res.attachmentId);
         setMemoFileName(file.name);
         setMemoFileUrl(fileData.url);
-        setError("✓ Memo pencairan bank berhasil diunggah!");
+        setError("âœ“ Memo pencairan bank berhasil diunggah!");
       }
     } catch (err: any) {
       setError(err.message || "Gagal mengunggah berkas memo pencairan.");
@@ -402,7 +402,7 @@ export default function KprCardDetailDialog({
 
     if (!confirm(
       "Apakah Anda yakin ingin melakukan Realisasi Dana KPR?\n\n" +
-      "⚠️ Aksi ini berdampak pada:\n" +
+      "âš ï¸ Aksi ini berdampak pada:\n" +
       "1. Status KPR -> 'Realisasi' (permanen)\n" +
       "2. Buku Kas Finance -> Pencatatan kas masuk bersih Rp " + net.toLocaleString("id-ID") + "\n" +
       "3. Status Unit -> 'Menunggu Serah Terima'\n" +
@@ -445,8 +445,8 @@ export default function KprCardDetailDialog({
     e.preventDefault();
     if (clientValidationError) return;
 
-    // Check for unverified files — only mandatory KPR docs (KTP, NPWP, Slip Gaji, KK)
-    // Supporting docs like BAST, SPJB, kpr_doc are uploaded AFTER akad/realisasi — do NOT gate here
+    // Check for unverified files â€” only mandatory KPR docs (KTP, NPWP, Slip Gaji, KK)
+    // Supporting docs like BAST, SPJB, kpr_doc are uploaded AFTER akad/realisasi â€” do NOT gate here
     const MANDATORY_DOC_TYPES = ["ktp", "npwp", "slip_gaji", "kk"];
     const mandatoryDocs = docsList.filter(d => MANDATORY_DOC_TYPES.includes(d.documentType));
     const hasUnverifiedDocs = mandatoryDocs.some(d => d.status !== "verified");
@@ -578,7 +578,7 @@ export default function KprCardDetailDialog({
       });
       if (res.success) {
         setEditingSubId(null);
-        setError("✓ Status pengajuan bank berhasil diperbarui!");
+        setError("âœ“ Status pengajuan bank berhasil diperbarui!");
         router.refresh();
       }
     } catch (err: any) {
@@ -597,7 +597,7 @@ export default function KprCardDetailDialog({
       const res = await deleteBankSubmission(subId);
       if (res.success) {
         setEditingSubId(null);
-        setError("✓ Pengajuan bank berhasil dihapus!");
+        setError("âœ“ Pengajuan bank berhasil dihapus!");
         router.refresh();
       }
     } catch (err: any) {
@@ -635,7 +635,7 @@ export default function KprCardDetailDialog({
           setDocStatus("incomplete");
         }
 
-        setError(`✓ Status dokumen berhasil diperbarui!`);
+        setError(`âœ“ Status dokumen berhasil diperbarui!`);
         router.refresh();
       }
     } catch (err: any) {
@@ -798,9 +798,9 @@ export default function KprCardDetailDialog({
       "Konfirmasi Selesaikan Serah Terima\n\n" +
       "Aksi ini akan mengubah status unit menjadi 'Serah Terima Selesai' secara PERMANEN.\n\n" +
       "Pastikan:\n" +
-      "• BAST Developer → Konsumen sudah ditandatangani\n" +
-      "• Dokumen BAST sudah diverifikasi Admin\n" +
-      "• Konsumen sudah menerima kunci unit\n\n" +
+      "â€¢ BAST Developer â†’ Konsumen sudah ditandatangani\n" +
+      "â€¢ Dokumen BAST sudah diverifikasi Admin\n" +
+      "â€¢ Konsumen sudah menerima kunci unit\n\n" +
       "Lanjutkan?"
     )) return;
 
@@ -809,7 +809,7 @@ export default function KprCardDetailDialog({
     try {
       const res = await approveBastKonsumen(kpr.bookingId);
       if (res.success) {
-        setError("✓ Serah Terima Selesai! Status unit telah diperbarui menjadi Handover Complete.");
+        setError("âœ“ Serah Terima Selesai! Status unit telah diperbarui menjadi Handover Complete.");
         router.refresh();
       }
     } catch (err: any) {
@@ -830,13 +830,13 @@ export default function KprCardDetailDialog({
     <Sheet open={open} onOpenChange={setOpen}>
       <div className="flex gap-2 mt-2">
         <SheetTrigger nativeButton={true} render={
-          <Button size="sm" className="flex-1 bg-slate-50 hover:bg-slate-100 text-[#4F6F52] hover:text-[#3F5941] font-semibold border border-slate-200/60 shadow-sm flex items-center justify-center gap-1">
+          <Button size="sm" className="flex-1 bg-slate-50 hover:bg-slate-100 text-primary hover:text-[#3F5941] font-semibold border border-slate-200/60 shadow-sm flex items-center justify-center gap-1">
             <Eye className="h-4 w-4" /> {t("kpr_dialog.btn_manage")}
           </Button>
         } />
         <a
           href={`/marketing/kpr/${kpr.id}`}
-          className="h-9 px-3 bg-[#4F6F52]/10 hover:bg-[#4F6F52]/20 text-[#4F6F52] font-semibold border border-[#4F6F52]/20 rounded-md text-xs flex items-center gap-1 transition-colors"
+          className="h-9 px-3 bg-primary/10 hover:bg-primary/20 text-primary font-semibold border border-[#4F6F52]/20 rounded-md text-xs flex items-center gap-1 transition-colors"
           title="Lihat Detail"
         >
           <ChevronRight className="h-3.5 w-3.5" />
@@ -844,29 +844,29 @@ export default function KprCardDetailDialog({
         </a>
       </div>
       
-      <SheetContent side="right" className="w-full sm:max-w-4xl bg-white/98 backdrop-blur-md border-l border-[#D6DED2] p-0 overflow-hidden flex flex-col h-full z-[100] sm:rounded-l-3xl shadow-[0_8px_30px_rgba(79,111,82,0.18)]">
+      <SheetContent side="right" className="w-full sm:max-w-4xl bg-white/98 backdrop-blur-md border-l border-border p-0 overflow-hidden flex flex-col h-full z-[100] sm:rounded-l-3xl shadow-[0_8px_30px_rgba(79,111,82,0.18)]">
         
         {/* Header */}
-        <div className="bg-gradient-to-r from-[#DDE8D8]/70 via-white/80 to-transparent p-5 border-b border-[#D6DED2] shrink-0">
+        <div className="bg-gradient-to-r from-[#DDE8D8]/70 via-white/80 to-transparent p-5 border-b border-border shrink-0">
           <SheetHeader>
             <div className="flex flex-col gap-4">
               <div className="flex items-center gap-3.5">
-                <div className="h-10 w-10 rounded-xl bg-white border border-[#D6DED2] flex items-center justify-center shadow-sm shrink-0">
-                  <CreditCard className="h-5.5 w-5.5 text-[#4F6F52]" />
+                <div className="h-10 w-10 rounded-xl bg-card border border-border flex items-center justify-center shadow-sm shrink-0">
+                  <CreditCard className="h-5.5 w-5.5 text-primary" />
                 </div>
                 <div className="min-w-0">
-                  <SheetTitle className="text-base font-black text-[#243028] tracking-tight truncate">
+                  <SheetTitle className="text-base font-black text-foreground tracking-tight truncate">
                     {t("kpr_dialog.title", { name: kpr.customerName })}
                   </SheetTitle>
                   <div className="flex flex-wrap items-center gap-2 mt-0.5">
-                    <span className="text-xs text-[#66736A] font-semibold">
+                    <span className="text-xs text-muted-foreground font-semibold">
                       {t("kpr_dialog.unit")}{" "}
-                      <span className="font-mono font-bold text-[#243028] bg-[#DDE8D8] px-1.5 py-0.5 rounded">
+                      <span className="font-mono font-bold text-foreground bg-secondary px-1.5 py-0.5 rounded">
                         {kpr.unitCode}
                       </span>
                     </span>
-                    <span className="text-[10px] text-[#A8B0AA] font-bold">•</span>
-                    <span className="text-xs text-[#66736A] font-bold">{kpr.projectName}</span>
+                    <span className="text-[10px] text-muted-foreground/70 font-bold">â€¢</span>
+                    <span className="text-xs text-muted-foreground font-bold">{kpr.projectName}</span>
                     {kpr.isReadyStock && (
                       <Badge className="bg-[#4B286D]/15 text-[#4B286D] hover:bg-[#4B286D]/20 border-none font-extrabold text-[9px] px-2 py-0.5 rounded-full shrink-0">
                         Ready Stock
@@ -877,7 +877,7 @@ export default function KprCardDetailDialog({
               </div>
 
               {/* Milestone Tracker Area */}
-              <div className="pt-2 border-t border-[#D6DED2]/50">
+              <div className="pt-2 border-t border-border/50">
                 <KprMilestoneTracker 
                   data={{
                     unitStatus: kpr.unitStatus,
@@ -897,7 +897,7 @@ export default function KprCardDetailDialog({
         <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
           
           {/* LEFT SIDEBAR PANEL (2/5 Width) */}
-          <div className="w-full md:w-[360px] border-r border-[#D6DED2] bg-[#F7F8F3]/50 p-5 overflow-y-auto flex flex-col shrink-0">
+          <div className="w-full md:w-[360px] border-r border-border bg-muted/30/50 p-5 overflow-y-auto flex flex-col shrink-0">
             {status === "realisasi" && kpr.status !== "realisasi" ? (
               <form onSubmit={handleRealizeKpr} className="space-y-4 flex-1 flex flex-col">
                 {/* Business alerts */}
@@ -908,7 +908,7 @@ export default function KprCardDetailDialog({
                   </div>
                 )}
 
-                <div className="bg-white p-3.5 rounded-2xl border border-violet-200 bg-violet-50/10 shadow-sm space-y-3.5 shrink-0">
+                <div className="bg-card p-3.5 rounded-2xl border border-violet-200 bg-violet-50/10 shadow-sm space-y-3.5 shrink-0">
                   <div className="flex items-center gap-2 border-b border-violet-100 pb-1.5">
                     <CreditCard className="h-4 w-4 text-violet-600" />
                     <span className="text-xs font-black text-violet-800 uppercase tracking-wider">Form Realisasi Dana KPR</span>
@@ -916,11 +916,11 @@ export default function KprCardDetailDialog({
 
                   {/* Stage selector */}
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-[#243028]">{t("kpr_dialog.status_stage")}</Label>
+                    <Label className="text-xs font-bold text-foreground">{t("kpr_dialog.status_stage")}</Label>
                     <select
                       value={status}
                       onChange={(e) => handleStatusChange(e.target.value)}
-                      className="flex h-10 w-full rounded-xl border border-[#D6DED2] bg-[#F7F8F3]/60 px-3 py-2 text-sm focus:border-violet-500 focus-visible:outline-none focus:bg-white transition-all font-semibold"
+                      className="flex h-10 w-full rounded-xl border border-border bg-muted/30/60 px-3 py-2 text-sm focus:border-violet-500 focus-visible:outline-none focus:bg-card transition-all font-semibold"
                     >
                       <option value="akad">{t("kpr_dialog.stage_akad")}</option>
                       <option value="realisasi">Realisasi Dana</option>
@@ -929,60 +929,60 @@ export default function KprCardDetailDialog({
 
                   {/* Tanggal Realisasi */}
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-[#243028]">Tanggal Realisasi</Label>
+                    <Label className="text-xs font-bold text-foreground">Tanggal Realisasi</Label>
                     <input
                       type="date"
                       value={realizedDate}
                       onChange={(e) => setRealizedDate(e.target.value)}
-                      className="flex h-10 w-full rounded-xl border border-[#D6DED2] bg-white px-3 py-2 text-sm focus:border-violet-500 focus-visible:outline-none transition-all font-semibold"
+                      className="flex h-10 w-full rounded-xl border border-border bg-card px-3 py-2 text-sm focus:border-violet-500 focus-visible:outline-none transition-all font-semibold"
                     />
                   </div>
 
                   {/* Plafond Disetujui */}
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-[#243028]">Plafond Disetujui (Rp)</Label>
+                    <Label className="text-xs font-bold text-foreground">Plafond Disetujui (Rp)</Label>
                     <Input
                       type="number"
                       placeholder="Contoh: 450000000"
                       value={realizedPlafond}
                       onChange={(e) => setRealizedPlafond(e.target.value)}
-                      className="h-10 text-sm rounded-xl border-[#D6DED2] focus-visible:ring-violet-500"
+                      className="h-10 text-sm rounded-xl border-border focus-visible:ring-violet-500"
                     />
                   </div>
 
                   {/* Potongan Admin Bank */}
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-[#243028]">Potongan Provisi/Admin Bank (Rp)</Label>
+                    <Label className="text-xs font-bold text-foreground">Potongan Provisi/Admin Bank (Rp)</Label>
                     <Input
                       type="number"
                       placeholder="0"
                       value={realizedBankFees}
                       onChange={(e) => setRealizedBankFees(e.target.value)}
-                      className="h-10 text-sm rounded-xl border-[#D6DED2] focus-visible:ring-violet-500"
+                      className="h-10 text-sm rounded-xl border-border focus-visible:ring-violet-500"
                     />
                   </div>
 
                   {/* Premi Asuransi */}
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-[#243028]">Premi Asuransi KPR (Rp)</Label>
+                    <Label className="text-xs font-bold text-foreground">Premi Asuransi KPR (Rp)</Label>
                     <Input
                       type="number"
                       placeholder="0"
                       value={realizedInsuranceFees}
                       onChange={(e) => setRealizedInsuranceFees(e.target.value)}
-                      className="h-10 text-sm rounded-xl border-[#D6DED2] focus-visible:ring-violet-500"
+                      className="h-10 text-sm rounded-xl border-border focus-visible:ring-violet-500"
                     />
                   </div>
 
                   {/* Hold Amount */}
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-[#243028]">Dana Ditahan / Hold (Rp)</Label>
+                    <Label className="text-xs font-bold text-foreground">Dana Ditahan / Hold (Rp)</Label>
                     <Input
                       type="number"
                       placeholder="0"
                       value={realizedWithheldAmount}
                       onChange={(e) => setRealizedWithheldAmount(e.target.value)}
-                      className="h-10 text-sm rounded-xl border-[#D6DED2] focus-visible:ring-violet-500"
+                      className="h-10 text-sm rounded-xl border-border focus-visible:ring-violet-500"
                     />
                   </div>
 
@@ -996,11 +996,11 @@ export default function KprCardDetailDialog({
 
                   {/* Rekening Tujuan */}
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-[#243028]">Rekening Tujuan</Label>
+                    <Label className="text-xs font-bold text-foreground">Rekening Tujuan</Label>
                     <select
                       value={realizedAccountId}
                       onChange={(e) => setRealizedAccountId(e.target.value)}
-                      className="flex h-10 w-full rounded-xl border border-[#D6DED2] bg-white px-3 py-2 text-sm focus:border-violet-500 focus-visible:outline-none transition-all font-semibold"
+                      className="flex h-10 w-full rounded-xl border border-border bg-card px-3 py-2 text-sm focus:border-violet-500 focus-visible:outline-none transition-all font-semibold"
                     >
                       <option value="">-- Pilih Rekening Kas/Bank --</option>
                       {accounts.map((acc: any) => (
@@ -1013,7 +1013,7 @@ export default function KprCardDetailDialog({
 
                   {/* Memo Upload */}
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-[#243028]">Memo Pencairan Bank (Wajib)</Label>
+                    <Label className="text-xs font-bold text-foreground">Memo Pencairan Bank (Wajib)</Label>
                     <div className="flex items-center gap-2">
                       <Button
                         type="button"
@@ -1051,12 +1051,12 @@ export default function KprCardDetailDialog({
 
                   {/* Catatan Realisasi */}
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-[#243028]">Catatan</Label>
+                    <Label className="text-xs font-bold text-foreground">Catatan</Label>
                     <textarea
                       value={realizedNotes}
                       onChange={(e) => setRealizedNotes(e.target.value)}
                       placeholder="Masukkan catatan realisasi..."
-                      className="flex min-h-[60px] w-full rounded-xl border border-[#D6DED2] bg-white px-3 py-2 text-xs focus:border-violet-500 focus-visible:outline-none transition-all font-medium"
+                      className="flex min-h-[60px] w-full rounded-xl border border-border bg-card px-3 py-2 text-xs focus:border-violet-500 focus-visible:outline-none transition-all font-medium"
                     />
                   </div>
                 </div>
@@ -1077,11 +1077,11 @@ export default function KprCardDetailDialog({
                 </div>
 
                 {/* Submit buttons */}
-                <div className="pt-3 mt-auto flex gap-3 border-t border-[#D6DED2]">
+                <div className="pt-3 mt-auto flex gap-3 border-t border-border">
                   <Button
                     type="button"
                     variant="outline"
-                    className="flex-1 rounded-xl h-10 font-bold border-[#D6DED2] text-[#66736A] text-xs"
+                    className="flex-1 rounded-xl h-10 font-bold border-border text-muted-foreground text-xs"
                     onClick={() => handleStatusChange("akad")}
                   >
                     Batal
@@ -1097,7 +1097,7 @@ export default function KprCardDetailDialog({
               </form>
             ) : kpr.status === "realisasi" ? (
               <div className="space-y-4 flex-1 flex flex-col">
-                <div className="bg-white p-4 rounded-2xl border border-teal-200 bg-teal-50/10 shadow-sm space-y-3">
+                <div className="bg-card p-4 rounded-2xl border border-teal-200 bg-teal-50/10 shadow-sm space-y-3">
                   <div className="flex items-center gap-2 border-b border-teal-100 pb-1.5">
                     <CheckCircle className="h-4.5 w-4.5 text-teal-600" />
                     <span className="text-xs font-black text-teal-800 uppercase tracking-wider">Dana KPR Telah Direalisasikan</span>
@@ -1143,7 +1143,7 @@ export default function KprCardDetailDialog({
                   <Button
                     type="button"
                     variant="outline"
-                    className="w-full rounded-xl h-10 font-bold border-[#D6DED2] text-[#66736A] text-xs"
+                    className="w-full rounded-xl h-10 font-bold border-border text-muted-foreground text-xs"
                     onClick={() => setOpen(false)}
                   >
                     Tutup Detail
@@ -1163,14 +1163,14 @@ export default function KprCardDetailDialog({
                   </div>
                 )}
 
-                <div className="bg-white p-3.5 rounded-2xl border border-[#D6DED2] shadow-sm space-y-3.5">
+                <div className="bg-card p-3.5 rounded-2xl border border-border shadow-sm space-y-3.5">
                   {/* Stage selector */}
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-[#243028]">{t("kpr_dialog.status_stage")}</Label>
+                    <Label className="text-xs font-bold text-foreground">{t("kpr_dialog.status_stage")}</Label>
                     <select
                       value={status}
                       onChange={(e) => handleStatusChange(e.target.value)}
-                      className="flex h-10 w-full rounded-xl border border-[#D6DED2] bg-[#F7F8F3]/60 px-3 py-2 text-sm focus:border-[#4F6F52] focus-visible:outline-none focus:bg-white transition-all font-semibold"
+                      className="flex h-10 w-full rounded-xl border border-border bg-muted/30/60 px-3 py-2 text-sm focus:border-[#4F6F52] focus-visible:outline-none focus:bg-card transition-all font-semibold"
                     >
                       <option value="bi_checking" disabled={isCurrentlyApproved || isCurrentlyRealisasi}>{t("kpr_dialog.stage_bi")}{(isCurrentlyApproved || isCurrentlyRealisasi) ? " (terkunci)" : ""}</option>
                       <option value="pemberkasan" disabled={isCurrentlyApproved || isCurrentlyRealisasi}>{t("kpr_dialog.stage_docs")}{(isCurrentlyApproved || isCurrentlyRealisasi) ? " (terkunci)" : ""}</option>
@@ -1185,11 +1185,11 @@ export default function KprCardDetailDialog({
 
                   {/* BI Checking status selector */}
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-[#243028]">{t("kpr_dialog.status_bi")}</Label>
+                    <Label className="text-xs font-bold text-foreground">{t("kpr_dialog.status_bi")}</Label>
                     <select
                       value={biCheckStatus}
                       onChange={(e) => setBiCheckStatus(e.target.value as any)}
-                      className="flex h-10 w-full rounded-xl border border-[#D6DED2] bg-[#F7F8F3]/60 px-3 py-2 text-sm focus:border-[#4F6F52] focus-visible:outline-none focus:bg-white transition-all font-semibold"
+                      className="flex h-10 w-full rounded-xl border border-border bg-muted/30/60 px-3 py-2 text-sm focus:border-[#4F6F52] focus-visible:outline-none focus:bg-card transition-all font-semibold"
                     >
                       <option value="pending">{t("kpr_dialog.bi_pending")}</option>
                       <option value="partial">{t("kpr_dialog.bi_partial")}</option>
@@ -1201,11 +1201,11 @@ export default function KprCardDetailDialog({
 
                   {/* Document Status completeness selector */}
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-[#243028]">{t("kpr_dialog.status_doc")}</Label>
+                    <Label className="text-xs font-bold text-foreground">{t("kpr_dialog.status_doc")}</Label>
                     <select
                       value={docStatus}
                       onChange={(e) => setDocStatus(e.target.value as any)}
-                      className="flex h-10 w-full rounded-xl border border-[#D6DED2] bg-[#F7F8F3]/60 px-3 py-2 text-sm focus:border-[#4F6F52] focus-visible:outline-none focus:bg-white transition-all font-semibold"
+                      className="flex h-10 w-full rounded-xl border border-border bg-muted/30/60 px-3 py-2 text-sm focus:border-[#4F6F52] focus-visible:outline-none focus:bg-card transition-all font-semibold"
                     >
                       <option value="incomplete">{t("kpr_dialog.doc_inc")}</option>
                       <option value="complete">{t("kpr_dialog.doc_comp")}</option>
@@ -1215,18 +1215,18 @@ export default function KprCardDetailDialog({
 
                 {/* DYNAMIC SECTION: BANK APPROVAL DETAILS */}
                 {isStageRequiringBank && (
-                  <div className="bg-white p-3.5 rounded-2xl border border-[#D6DED2] shadow-sm space-y-3 animate-fadeIn">
-                    <span className="text-[10px] font-black text-[#4F6F52] uppercase tracking-wider block border-b border-slate-100 pb-1">
+                  <div className="bg-card p-3.5 rounded-2xl border border-border shadow-sm space-y-3 animate-fadeIn">
+                    <span className="text-[10px] font-black text-primary uppercase tracking-wider block border-b border-slate-100 pb-1">
                       Detail Persetujuan Bank
                     </span>
                     
                     {/* Select Bank Penyetuju */}
                     <div className="space-y-1.5">
-                      <Label className="text-xs font-bold text-[#243028]">{t("kpr_dialog.approved_bank")}</Label>
+                      <Label className="text-xs font-bold text-foreground">{t("kpr_dialog.approved_bank")}</Label>
                       <select
                         value={approvedBankId}
                         onChange={(e) => setApprovedBankId(e.target.value)}
-                        className="flex h-9 w-full rounded-xl border border-[#D6DED2] bg-[#F7F8F3]/60 px-2.5 py-1 text-xs focus:border-[#4F6F52] focus-visible:outline-none font-semibold"
+                        className="flex h-9 w-full rounded-xl border border-border bg-muted/30/60 px-2.5 py-1 text-xs focus:border-[#4F6F52] focus-visible:outline-none font-semibold"
                       >
                         <option value="">{t("kpr_dialog.approved_bank_ph")}</option>
                         {submittedBankPartners.map((b) => (
@@ -1237,7 +1237,7 @@ export default function KprCardDetailDialog({
 
                     {/* Plafond Disetujui */}
                     <div className="space-y-1.5">
-                      <Label className="text-xs font-bold text-[#243028]">{t("kpr_dialog.approved_plafond")}</Label>
+                      <Label className="text-xs font-bold text-foreground">{t("kpr_dialog.approved_plafond")}</Label>
                       <Input
                         type="number"
                         placeholder="Contoh: 450000000"
@@ -1250,13 +1250,13 @@ export default function KprCardDetailDialog({
                             setApprovedPlafondError(null);
                           }
                         }}
-                        className={`h-9 text-xs rounded-xl ${approvedPlafondError ? "border-red-500 focus-visible:ring-red-500" : "border-[#D6DED2]"}`}
+                        className={`h-9 text-xs rounded-xl ${approvedPlafondError ? "border-red-500 focus-visible:ring-red-500" : "border-border"}`}
                       />
                     </div>
 
                     {/* Tenor Disetujui */}
                     <div className="space-y-1.5">
-                      <Label className="text-xs font-bold text-[#243028]">{t("kpr_dialog.approved_tenor")}</Label>
+                      <Label className="text-xs font-bold text-foreground">{t("kpr_dialog.approved_tenor")}</Label>
                       <Input
                         type="number"
                         placeholder="Contoh: 15"
@@ -1270,32 +1270,32 @@ export default function KprCardDetailDialog({
                             setApprovedTenorError(null);
                           }
                         }}
-                        className={`h-9 text-xs rounded-xl ${approvedTenorError ? "border-red-500 focus-visible:ring-red-500" : "border-[#D6DED2]"}`}
+                        className={`h-9 text-xs rounded-xl ${approvedTenorError ? "border-red-500 focus-visible:ring-red-500" : "border-border"}`}
                       />
                     </div>
                   </div>
                 )}
 
                 {/* Notes map textbox */}
-                <div className="bg-white p-3.5 rounded-2xl border border-[#D6DED2] shadow-sm space-y-1.5">
-                  <Label className="text-xs font-bold text-[#243028]">{t("kpr_dialog.notes")}</Label>
+                <div className="bg-card p-3.5 rounded-2xl border border-border shadow-sm space-y-1.5">
+                  <Label className="text-xs font-bold text-foreground">{t("kpr_dialog.notes")}</Label>
                   <textarea
                     value={currentNote}
                     onChange={(e) => setCurrentNote(e.target.value)}
                     placeholder={t("kpr_dialog.notes_ph")}
-                    className="flex min-h-[70px] w-full rounded-xl border border-[#D6DED2] bg-[#F7F8F3]/60 px-3 py-2 text-xs focus:border-[#4F6F52] focus-visible:outline-none focus:bg-white transition-all font-medium leading-normal"
+                    className="flex min-h-[70px] w-full rounded-xl border border-border bg-muted/30/60 px-3 py-2 text-xs focus:border-[#4F6F52] focus-visible:outline-none focus:bg-card transition-all font-medium leading-normal"
                   />
                 </div>
 
                 {/* Left pane form buttons */}
-                <div className="pt-3 mt-auto flex gap-3 border-t border-[#D6DED2]">
-                  <Button type="button" variant="outline" className="flex-1 rounded-xl h-10 font-bold border-[#D6DED2] text-[#66736A] text-xs" onClick={() => setOpen(false)}>
+                <div className="pt-3 mt-auto flex gap-3 border-t border-border">
+                  <Button type="button" variant="outline" className="flex-1 rounded-xl h-10 font-bold border-border text-muted-foreground text-xs" onClick={() => setOpen(false)}>
                     {t("action.cancel")}
                   </Button>
                   <Button 
                     type="submit" 
                     disabled={loading || !!clientValidationError} 
-                    className="flex-1 bg-[#4F6F52] hover:bg-[#3F5941] text-white rounded-xl h-10 font-bold shadow-sm transition-all text-xs"
+                    className="flex-1 bg-primary hover:bg-[#3F5941] text-white rounded-xl h-10 font-bold shadow-sm transition-all text-xs"
                   >
                     {loading ? t("kpr_dialog.btn_saving") : t("kpr_dialog.btn_update")}
                   </Button>
@@ -1342,13 +1342,13 @@ export default function KprCardDetailDialog({
                         : "text-orange-700"
                     }`}>
                       {kpr.unitStatus === "construction_done"
-                        ? "✓ Pembangunan fisik selesai. Unit siap melanjutkan ke Akad."
-                        : `⏳ Pembangunan fisik sedang berjalan. Akad baru bisa dilakukan setelah konstruksi selesai 100%.`}
+                        ? "âœ“ Pembangunan fisik selesai. Unit siap melanjutkan ke Akad."
+                        : `â³ Pembangunan fisik sedang berjalan. Akad baru bisa dilakukan setelah konstruksi selesai 100%.`}
                     </p>
                   </div>
                 )}
 
-                {/* ── STATUS: Menunggu Serah Terima ── */}
+                {/* â”€â”€ STATUS: Menunggu Serah Terima â”€â”€ */}
                 {kpr.unitStatus === "menunggu_serah_terima" && !isHandoverDone && (
                   <div className="rounded-2xl border border-violet-200 bg-violet-50/60 p-3.5 space-y-2 shadow-sm">
                     <div className="flex items-center gap-2">
@@ -1356,19 +1356,19 @@ export default function KprCardDetailDialog({
                       <span className="text-[10px] font-black uppercase tracking-wider text-violet-700">Menunggu Serah Terima</span>
                     </div>
                     <p className="text-[10px] font-semibold text-violet-700 leading-relaxed">
-                      ⏳ Dana KPR telah direalisasikan. Unit menunggu proses serah terima fisik kepada konsumen.
+                      â³ Dana KPR telah direalisasikan. Unit menunggu proses serah terima fisik kepada konsumen.
                     </p>
                   </div>
                 )}
 
-                {/* ── SERAH TERIMA — Tombol Approve ── */}
+                {/* â”€â”€ SERAH TERIMA â€” Tombol Approve â”€â”€ */}
                 {canShowHandoverSection && (
                   <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-3.5 space-y-2.5 shadow-sm">
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700">Serah Terima Konsumen</span>
                     </div>
                     <p className="text-[10px] font-semibold text-emerald-700 leading-relaxed">
-                      ✓ BAST Developer → Konsumen telah diverifikasi. Unit siap untuk diserahterimakan.
+                      âœ“ BAST Developer â†’ Konsumen telah diverifikasi. Unit siap untuk diserahterimakan.
                     </p>
                     <Button
                       type="button"
@@ -1376,12 +1376,12 @@ export default function KprCardDetailDialog({
                       onClick={handleApproveHandover}
                       className="w-full h-9 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl shadow-sm transition-all disabled:opacity-60"
                     >
-                      {handoverLoading ? "Memproses..." : "✅ Selesaikan Serah Terima"}
+                      {handoverLoading ? "Memproses..." : "âœ… Selesaikan Serah Terima"}
                     </Button>
                   </div>
                 )}
 
-                {/* ── STATUS: Serah Terima Selesai ── */}
+                {/* â”€â”€ STATUS: Serah Terima Selesai â”€â”€ */}
                 {isHandoverDone && (
                   <div className="rounded-2xl border border-teal-200 bg-teal-50/60 p-3.5 space-y-1.5 shadow-sm">
                     <div className="flex items-center gap-2">
@@ -1389,7 +1389,7 @@ export default function KprCardDetailDialog({
                       <span className="text-[10px] font-black uppercase tracking-wider text-teal-700">Serah Terima Selesai</span>
                     </div>
                     <p className="text-[10px] font-semibold text-teal-700 leading-relaxed">
-                      ✓ Unit telah resmi diserahterimakan kepada konsumen. BAST Developer → Konsumen telah disetujui.
+                      âœ“ Unit telah resmi diserahterimakan kepada konsumen. BAST Developer â†’ Konsumen telah disetujui.
                     </p>
                   </div>
                 )}
@@ -1400,11 +1400,11 @@ export default function KprCardDetailDialog({
           {/* RIGHT TAB CONTAINER (3/5 Width) */}
           <div className="flex-1 p-5 overflow-y-auto flex flex-col">
             <Tabs defaultValue="docs" className="w-full flex-1 flex flex-col">
-              <TabsList className="h-10 group-data-horizontal/tabs:h-10 grid w-full grid-cols-2 bg-[#E7E9E7]/60 border border-[#D6DED2] rounded-xl p-1 mb-4 shrink-0">
-                <TabsTrigger value="docs" className="h-full font-extrabold text-xs font-inter py-2 rounded-lg data-active:bg-white data-active:text-[#4F6F52] data-active:shadow-sm text-slate-500 hover:text-slate-800">
+              <TabsList className="h-10 group-data-horizontal/tabs:h-10 grid w-full grid-cols-2 bg-[#E7E9E7]/60 border border-border rounded-xl p-1 mb-4 shrink-0">
+                <TabsTrigger value="docs" className="h-full font-extrabold text-xs font-sans py-2 rounded-lg data-active:bg-card data-active:text-primary data-active:shadow-sm text-slate-500 hover:text-slate-800">
                   {t("kpr_dialog.tab_docs")}
                 </TabsTrigger>
-                <TabsTrigger value="bank" className="h-full font-extrabold text-xs font-inter py-2 rounded-lg data-active:bg-white data-active:text-[#4F6F52] data-active:shadow-sm text-slate-500 hover:text-slate-800">
+                <TabsTrigger value="bank" className="h-full font-extrabold text-xs font-sans py-2 rounded-lg data-active:bg-card data-active:text-primary data-active:shadow-sm text-slate-500 hover:text-slate-800">
                   {t("kpr_dialog.tab_bank")}
                 </TabsTrigger>
               </TabsList>
@@ -1418,14 +1418,14 @@ export default function KprCardDetailDialog({
                   </div>
                 )}
                 
-                <div className="p-3.5 bg-[#DDE8D8]/40 rounded-2xl border border-[#D6DED2]/80 text-xs text-[#243028] font-inter space-y-1 shadow-sm">
-                  <span className="font-extrabold text-[#4F6F52]">{t("kpr_dialog.req_title")}</span>
-                  <p className="leading-relaxed text-[#66736A] font-medium text-[11px]">{t("kpr_dialog.req_desc")}</p>
+                <div className="p-3.5 bg-secondary/40 rounded-2xl border border-border/80 text-xs text-foreground font-sans space-y-1 shadow-sm">
+                  <span className="font-extrabold text-primary">{t("kpr_dialog.req_title")}</span>
+                  <p className="leading-relaxed text-muted-foreground font-medium text-[11px]">{t("kpr_dialog.req_desc")}</p>
                 </div>
 
                 {/* Mandatories */}
                 <div className="space-y-2.5">
-                  <div className="text-[9px] font-black text-[#4F6F52] uppercase tracking-wider pl-1">
+                  <div className="text-[9px] font-black text-primary uppercase tracking-wider pl-1">
                     {t("kpr_dialog.sec_mandatory")}
                   </div>
                   {MANDATORY_DOCS.map((doc) => renderDocRow(doc))}
@@ -1433,7 +1433,7 @@ export default function KprCardDetailDialog({
 
                 {/* Supportings */}
                 <div className="space-y-2.5 pt-1">
-                  <div className="text-[9px] font-black text-[#4F6F52] uppercase tracking-wider pl-1">
+                  <div className="text-[9px] font-black text-primary uppercase tracking-wider pl-1">
                     {t("kpr_dialog.sec_supporting")}
                   </div>
                   {SUPPORTING_DOCS.map((doc) => renderDocRow(doc))}
@@ -1449,16 +1449,16 @@ export default function KprCardDetailDialog({
                   </div>
                 )}
 
-                <form onSubmit={handleBankSubmit} className="p-3.5 bg-white border border-[#D6DED2] rounded-2xl space-y-3 shadow-sm">
-                  <div className="text-[10px] font-black text-[#4F6F52] uppercase tracking-wider font-inter">{t("kpr_dialog.bank_submit")}</div>
+                <form onSubmit={handleBankSubmit} className="p-3.5 bg-card border border-border rounded-2xl space-y-3 shadow-sm">
+                  <div className="text-[10px] font-black text-primary uppercase tracking-wider font-sans">{t("kpr_dialog.bank_submit")}</div>
                   
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">
-                      <Label className="text-[10px] font-bold text-[#66736A]">{t("kpr_dialog.bank_choose")}</Label>
+                      <Label className="text-[10px] font-bold text-muted-foreground">{t("kpr_dialog.bank_choose")}</Label>
                       <select
                         value={bankId}
                         onChange={(e) => setBankId(e.target.value)}
-                        className="flex h-8.5 w-full rounded-xl border border-[#D6DED2] bg-[#F7F8F3]/60 px-2.5 py-1 text-xs focus:border-[#4F6F52] focus-visible:outline-none font-semibold"
+                        className="flex h-8.5 w-full rounded-xl border border-border bg-muted/30/60 px-2.5 py-1 text-xs focus:border-[#4F6F52] focus-visible:outline-none font-semibold"
                       >
                         <option value="">{t("kpr_dialog.bank_ph")}</option>
                         {bankPartners.map((b) => (
@@ -1467,19 +1467,19 @@ export default function KprCardDetailDialog({
                       </select>
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-[10px] font-bold text-[#66736A]">{t("kpr_dialog.date")}</Label>
+                      <Label className="text-[10px] font-bold text-muted-foreground">{t("kpr_dialog.date")}</Label>
                       <input
                         type="date"
                         value={subDate}
                         onChange={(e) => setSubDate(e.target.value)}
-                        className="flex h-8.5 w-full rounded-xl border border-[#D6DED2] bg-[#F7F8F3]/60 px-2.5 py-1 text-xs focus:border-[#4F6F52] focus-visible:outline-none font-semibold"
+                        className="flex h-8.5 w-full rounded-xl border border-border bg-muted/30/60 px-2.5 py-1 text-xs focus:border-[#4F6F52] focus-visible:outline-none font-semibold"
                       />
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">
-                      <Label className="text-[10px] font-bold text-[#66736A]">{t("kpr_dialog.plafond")}</Label>
+                      <Label className="text-[10px] font-bold text-muted-foreground">{t("kpr_dialog.plafond")}</Label>
                       <Input
                         type="number"
                         placeholder={t("kpr_dialog.plafond_ph")}
@@ -1492,14 +1492,14 @@ export default function KprCardDetailDialog({
                             setPlafondError(null);
                           }
                         }}
-                        className={`h-8.5 text-xs rounded-xl focus-visible:ring-[#8FAF9A]/30 ${plafondError ? "border-red-500 focus-visible:ring-red-500" : "border-[#D6DED2]"}`}
+                        className={`h-8.5 text-xs rounded-xl focus-visible:ring-ring/30 ${plafondError ? "border-red-500 focus-visible:ring-red-500" : "border-border"}`}
                       />
                       {plafondError && (
-                        <p className="text-[8px] font-bold text-red-600 pl-0.5 mt-0.5">{plafondError}</p>
+                        <p className="text-[8px] font-bold text-destructive pl-0.5 mt-0.5">{plafondError}</p>
                       )}
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-[10px] font-bold text-[#66736A]">{t("kpr_dialog.tenor")}</Label>
+                      <Label className="text-[10px] font-bold text-muted-foreground">{t("kpr_dialog.tenor")}</Label>
                       <Input
                         type="number"
                         placeholder={t("kpr_dialog.tenor_ph")}
@@ -1513,10 +1513,10 @@ export default function KprCardDetailDialog({
                             setTenorError(null);
                           }
                         }}
-                        className={`h-8.5 text-xs rounded-xl focus-visible:ring-[#8FAF9A]/30 ${tenorError ? "border-red-500 focus-visible:ring-red-500" : "border-[#D6DED2]"}`}
+                        className={`h-8.5 text-xs rounded-xl focus-visible:ring-ring/30 ${tenorError ? "border-red-500 focus-visible:ring-red-500" : "border-border"}`}
                       />
                       {tenorError && (
-                        <p className="text-[8px] font-bold text-red-600 pl-0.5 mt-0.5">{tenorError}</p>
+                        <p className="text-[8px] font-bold text-destructive pl-0.5 mt-0.5">{tenorError}</p>
                       )}
                     </div>
                   </div>
@@ -1526,7 +1526,7 @@ export default function KprCardDetailDialog({
                       type="submit" 
                       disabled={loading || !!plafondError || !!tenorError || !bankId || !subDate} 
                       size="sm" 
-                      className="bg-[#4F6F52] hover:bg-[#3F5941] text-white text-[10px] font-bold rounded-xl px-4 h-8.5 shadow-sm"
+                      className="bg-primary hover:bg-[#3F5941] text-white text-[10px] font-bold rounded-xl px-4 h-8.5 shadow-sm"
                     >
                       {loading ? t("kpr_dialog.btn_saving") : t("kpr_dialog.btn_send")}
                     </Button>
@@ -1535,16 +1535,16 @@ export default function KprCardDetailDialog({
 
                 {/* Submissions list */}
                 <div className="space-y-2.5">
-                  <div className="text-[10px] font-black text-[#4F6F52] uppercase tracking-wider font-inter pl-1">{t("kpr_dialog.history")}</div>
+                  <div className="text-[10px] font-black text-primary uppercase tracking-wider font-sans pl-1">{t("kpr_dialog.history")}</div>
                   {submissions.length > 0 ? (
                     submissions.map((sub) => {
                       const partner = bankPartners.find(b => b.id === sub.bankPartnerId);
                       
                       if (editingSubId === sub.id) {
                         return (
-                          <div key={sub.id} className="p-3.5 bg-white border-2 border-[#8FAF9A] rounded-2xl text-xs shadow-md space-y-3 animate-fadeIn">
+                          <div key={sub.id} className="p-3.5 bg-card border-2 border-primary/50 rounded-2xl text-xs shadow-md space-y-3 animate-fadeIn">
                             <div className="flex items-center justify-between">
-                              <span className="font-extrabold text-[#243028]">{partner?.name || "Bank Partner"}</span>
+                              <span className="font-extrabold text-foreground">{partner?.name || "Bank Partner"}</span>
                               <Button
                                 type="button"
                                 variant="ghost"
@@ -1559,11 +1559,11 @@ export default function KprCardDetailDialog({
                             
                             <div className="grid grid-cols-3 gap-2">
                               <div className="space-y-1">
-                                <Label className="text-[9px] font-bold text-[#66736A]">Status</Label>
+                                <Label className="text-[9px] font-bold text-muted-foreground">Status</Label>
                                 <select
                                   value={editStatus}
                                   onChange={(e) => setEditStatus(e.target.value as any)}
-                                  className="flex h-8 w-full rounded-xl border border-[#D6DED2] bg-[#F7F8F3]/60 px-2 py-1 text-[11px] focus:border-[#4F6F52] focus-visible:outline-none font-semibold"
+                                  className="flex h-8 w-full rounded-xl border border-border bg-muted/30/60 px-2 py-1 text-[11px] focus:border-[#4F6F52] focus-visible:outline-none font-semibold"
                                 >
                                   <option value="submitted">Submitted</option>
                                   <option value="verified">Verified</option>
@@ -1573,23 +1573,23 @@ export default function KprCardDetailDialog({
                                 </select>
                               </div>
                               <div className="space-y-1">
-                                <Label className="text-[9px] font-bold text-[#66736A]">{t("kpr_dialog.plafond")}</Label>
+                                <Label className="text-[9px] font-bold text-muted-foreground">{t("kpr_dialog.plafond")}</Label>
                                 <Input
                                   type="number"
                                   placeholder="Plafond"
                                   value={editPlafond}
                                   onChange={(e) => setEditPlafond(e.target.value)}
-                                  className="h-8 text-[11px] rounded-xl border-[#D6DED2]"
+                                  className="h-8 text-[11px] rounded-xl border-border"
                                 />
                               </div>
                               <div className="space-y-1">
-                                <Label className="text-[9px] font-bold text-[#66736A]">{t("kpr_dialog.tenor")}</Label>
+                                <Label className="text-[9px] font-bold text-muted-foreground">{t("kpr_dialog.tenor")}</Label>
                                 <Input
                                   type="number"
                                   placeholder="Tenor"
                                   value={editTenor}
                                   onChange={(e) => setEditTenor(e.target.value)}
-                                  className="h-8 text-[11px] rounded-xl border-[#D6DED2]"
+                                  className="h-8 text-[11px] rounded-xl border-border"
                                 />
                               </div>
                             </div>
@@ -1600,7 +1600,7 @@ export default function KprCardDetailDialog({
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => setEditingSubId(null)}
-                                className="text-[#66736A] font-bold h-8 rounded-xl text-[10px]"
+                                className="text-muted-foreground font-bold h-8 rounded-xl text-[10px]"
                               >
                                 {t("action.cancel")}
                               </Button>
@@ -1609,7 +1609,7 @@ export default function KprCardDetailDialog({
                                 size="sm"
                                 onClick={() => handleSaveSubmission(sub.id)}
                                 disabled={loading}
-                                className="bg-[#4F6F52] hover:bg-[#3F5941] text-white font-bold h-8 rounded-xl px-3 text-[10px]"
+                                className="bg-primary hover:bg-[#3F5941] text-white font-bold h-8 rounded-xl px-3 text-[10px]"
                               >
                                 {loading ? t("kpr_dialog.btn_saving") : "Simpan"}
                               </Button>
@@ -1619,20 +1619,20 @@ export default function KprCardDetailDialog({
                       }
 
                       return (
-                        <div key={sub.id} className="p-3 bg-white border border-[#D6DED2] rounded-2xl flex items-center justify-between text-xs shadow-sm hover:border-[#8FAF9A]/60 transition-all">
+                        <div key={sub.id} className="p-3 bg-card border border-border rounded-2xl flex items-center justify-between text-xs shadow-sm hover:border-primary/50/60 transition-all">
                           <div>
-                            <div className="font-extrabold text-[#243028] font-inter text-xs">{partner?.name || "Bank Partner"}</div>
-                            <div className="text-[#66736A] font-mono text-[9px] mt-1 flex flex-wrap gap-x-2">
+                            <div className="font-extrabold text-foreground font-sans text-xs">{partner?.name || "Bank Partner"}</div>
+                            <div className="text-muted-foreground font-mono text-[9px] mt-1 flex flex-wrap gap-x-2">
                               <span>{t("kpr_dialog.date_val", { date: new Date(sub.submissionDate).toLocaleDateString("id-ID") })}</span>
                               {sub.plafondAmount && (
                                 <>
-                                  <span className="text-[#D6DED2]">•</span>
-                                  <span className="font-semibold text-[#243028]">{formatRupiah(sub.plafondAmount)}</span>
+                                  <span className="text-[#D6DED2]">â€¢</span>
+                                  <span className="font-semibold text-foreground">{formatRupiah(sub.plafondAmount)}</span>
                                 </>
                               )}
                               {sub.tenorYear && (
                                 <>
-                                  <span className="text-[#D6DED2]">•</span>
+                                  <span className="text-[#D6DED2]">â€¢</span>
                                   <span>{t("kpr_dialog.tenor_val", { val: sub.tenorYear })}</span>
                                 </>
                               )}
@@ -1658,7 +1658,7 @@ export default function KprCardDetailDialog({
                                 setEditPlafond(sub.plafondAmount ? String(sub.plafondAmount) : "");
                                 setEditTenor(sub.tenorYear ? String(sub.tenorYear) : "");
                               }}
-                              className="h-7 w-7 rounded-xl bg-slate-50 hover:bg-[#DDE8D8]/50 border border-[#D6DED2]/50 text-[#4F6F52] flex items-center justify-center transition-all shadow-sm"
+                              className="h-7 w-7 rounded-xl bg-slate-50 hover:bg-secondary/50 border border-border/50 text-primary flex items-center justify-center transition-all shadow-sm"
                               title="Edit Pengajuan"
                             >
                               <FileText className="h-3.5 w-3.5" />
@@ -1668,7 +1668,7 @@ export default function KprCardDetailDialog({
                       );
                     })
                   ) : (
-                    <div className="py-6 text-center text-xs text-[#66736A] italic bg-white rounded-2xl border border-[#D6DED2] shadow-sm">
+                    <div className="py-6 text-center text-xs text-muted-foreground italic bg-card rounded-2xl border border-border shadow-sm">
                       {t("kpr_dialog.history_empty")}
                     </div>
                   )}
@@ -1681,13 +1681,13 @@ export default function KprCardDetailDialog({
 
         {/* Document Delete Confirmation Dialog */}
         <Dialog open={!!deleteDocTarget} onOpenChange={(open) => !open && setDeleteDocTarget(null)}>
-          <DialogContent className="max-w-sm rounded-3xl bg-white border border-[#D6DED2] shadow-[0_8px_30px_rgba(79,111,82,0.15)] p-0 overflow-hidden z-[150]">
+          <DialogContent className="max-w-sm rounded-3xl bg-card border border-border shadow-[0_8px_30px_rgba(79,111,82,0.15)] p-0 overflow-hidden z-[150]">
             <div className="flex flex-col items-center pt-7 pb-4 px-6 bg-gradient-to-b from-rose-50/60 to-transparent">
               <div className="h-11 w-11 rounded-full bg-rose-100 flex items-center justify-center mb-3 shadow-[0_0_0_4px_rgba(239,68,68,0.2)]">
                 <Trash2 className="h-5 w-5 text-rose-600" />
               </div>
-              <DialogTitle className="text-base font-black text-[#243028] text-center">{t("kpr_dialog.del_confirm")}</DialogTitle>
-              <DialogDescription className="text-xs text-[#66736A] text-center mt-1 leading-relaxed max-w-[280px]">
+              <DialogTitle className="text-base font-black text-foreground text-center">{t("kpr_dialog.del_confirm")}</DialogTitle>
+              <DialogDescription className="text-xs text-muted-foreground text-center mt-1 leading-relaxed max-w-[280px]">
                 <Translate namespace="kpr_dialog" translationKey="del_desc" values={{ type: deleteDocTarget?.toUpperCase() || "" }} components={{ strong: <strong /> }} />
               </DialogDescription>
             </div>
@@ -1695,7 +1695,7 @@ export default function KprCardDetailDialog({
               <Button
                 variant="outline"
                 onClick={() => setDeleteDocTarget(null)}
-                className="flex-1 border-[#D6DED2] text-[#66736A] hover:bg-[#F7F8F3] rounded-xl h-10 font-bold text-xs"
+                className="flex-1 border-border text-muted-foreground hover:bg-muted/30 rounded-xl h-10 font-bold text-xs"
               >
                 {t("action.cancel")}
               </Button>
@@ -1738,7 +1738,7 @@ export default function KprCardDetailDialog({
     return (
       <div 
         key={doc.type} 
-        className="p-3 rounded-2xl border transition-all duration-200 bg-white border-[#D6DED2]/80 shadow-sm hover:shadow-md hover:border-[#8FAF9A]/60"
+        className="p-3 rounded-2xl border transition-all duration-200 bg-card border-input/80 shadow-sm hover:shadow-md hover:border-primary/50/60"
       >
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
@@ -1748,7 +1748,7 @@ export default function KprCardDetailDialog({
             {/* Details */}
             <div className="min-w-0">
               <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-xs font-extrabold text-[#243028] block truncate max-w-[150px] sm:max-w-[200px]">{doc.label}</span>
+                <span className="text-xs font-extrabold text-foreground block truncate max-w-[150px] sm:max-w-[200px]">{doc.label}</span>
                 {uploaded && (
                   <Badge 
                     variant="outline" 
@@ -1769,11 +1769,11 @@ export default function KprCardDetailDialog({
                 )}
               </div>
               {uploaded ? (
-                <span className="text-[9px] text-[#66736A] font-mono block truncate max-w-[120px] sm:max-w-[175px] mt-0.5" title={docObj.fileName}>
+                <span className="text-[9px] text-muted-foreground font-mono block truncate max-w-[120px] sm:max-w-[175px] mt-0.5" title={docObj.fileName}>
                   {docObj.fileName || "dokumen.pdf"}
                 </span>
               ) : (
-                <span className="text-[9px] text-[#A8B0AA] font-semibold mt-0.5 block">
+                <span className="text-[9px] text-muted-foreground/70 font-semibold mt-0.5 block">
                   PDF, JPG, PNG (Maks. 5MB)
                 </span>
               )}
@@ -1790,7 +1790,7 @@ export default function KprCardDetailDialog({
                     href={docObj.fileUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="h-8 px-2 rounded-xl bg-slate-50 hover:bg-[#DDE8D8]/50 border border-[#D6DED2]/50 text-[#4F6F52] flex items-center justify-center transition-all shadow-sm"
+                    className="h-8 px-2 rounded-xl bg-slate-50 hover:bg-secondary/50 border border-border/50 text-primary flex items-center justify-center transition-all shadow-sm"
                     title="Lihat Berkas"
                   >
                     <Eye className="h-3.5 w-3.5" />
@@ -1874,7 +1874,7 @@ export default function KprCardDetailDialog({
                 variant="outline" 
                 onClick={() => triggerFileSelect(doc.type)}
                 disabled={loading}
-                className="text-[9px] font-extrabold h-8 px-2.5 rounded-xl border-[#D6DED2] hover:bg-[#DDE8D8]/40 text-[#4F6F52] flex items-center gap-1 shadow-sm"
+                className="text-[9px] font-extrabold h-8 px-2.5 rounded-xl border-border hover:bg-secondary/40 text-primary flex items-center gap-1 shadow-sm"
               >
                 {loadingDocType === doc.type ? (
                   <>
@@ -1902,7 +1902,7 @@ export default function KprCardDetailDialog({
               value={rejectionNotes}
               onChange={(e) => setRejectionNotes(e.target.value)}
               placeholder={t("kpr_dialog.reject_reason_ph")}
-              className="w-full text-xs p-2 rounded-lg border border-rose-200 bg-white focus:outline-none focus:border-rose-400 font-semibold"
+              className="w-full text-xs p-2 rounded-lg border border-rose-200 bg-card focus:outline-none focus:border-rose-400 font-semibold"
             />
             <div className="flex justify-end gap-1.5 text-[9px]">
               <Button

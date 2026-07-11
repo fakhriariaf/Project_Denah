@@ -171,7 +171,7 @@ export default async function FinanceAccountsPage({
             />
             <input type="hidden" name="type" value={type} />
             <input type="hidden" name="status" value={status} />
-            <button type="submit" className="w-full md:w-auto h-10 px-5 bg-[#4F6F52] hover:bg-[#3F5941] text-white rounded-xl shadow-glow-sage hover:scale-[1.02] active:scale-[0.98] transition-all font-semibold text-sm">
+            <button type="submit" className="w-full md:w-auto h-10 px-5 bg-[#4F6F52] hover:bg-[#3F5941] text-white rounded-xl btn-premium transition-all font-semibold text-sm">
               <Translate namespace="action" translationKey="search" />
             </button>
             {(q || type || status) && (

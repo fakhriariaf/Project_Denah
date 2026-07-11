@@ -248,7 +248,7 @@ export function NotificationDropdown() {
     }
     if (entityType === "unit_construction_ready") {
       return (
-        <div className={baseStyle + "bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400"}>
+        <div className={baseStyle + "bg-orange-100 text-orange-600"}>
           <Hammer className="w-5 h-5" />
         </div>
       );
@@ -256,25 +256,25 @@ export function NotificationDropdown() {
     switch (type) {
       case "approval_pending":
         return (
-          <div className={baseStyle + "bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400"}>
+          <div className={baseStyle + "bg-amber-100 text-amber-600"}>
             <AlertCircle className="w-5 h-5" />
           </div>
         );
       case "kpr_sla":
         return (
-          <div className={baseStyle + "bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400"}>
+          <div className={baseStyle + "bg-rose-100 text-rose-600"}>
             <Clock className="w-5 h-5 animate-pulse" />
           </div>
         );
       case "spk_overdue":
         return (
-          <div className={baseStyle + "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400"}>
+          <div className={baseStyle + "bg-red-100 text-red-600"}>
             <AlertTriangle className="w-5 h-5 animate-bounce" />
           </div>
         );
       case "progress_done":
         return (
-          <div className={baseStyle + "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"}>
+          <div className={baseStyle + "bg-emerald-100 text-emerald-600"}>
             <CheckCircle2 className="w-5 h-5" />
           </div>
         );

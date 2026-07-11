@@ -2,6 +2,7 @@
 import { useRouter } from "next/navigation";
 
 import * as React from "react";
+import { toast } from "sonner";
 import { useI18n } from "@/lib/i18n";
 import { InvoicePrintModal } from "@/components/invoice-print-modal";
 import {
@@ -179,13 +180,15 @@ export function InvoicesTab({
         notes: invoiceForm.notes || null,
       });
       if (res.success) {
-        alert(t("finance.invoice_created"));
+        toast.success(t("finance.invoice_created"));
         setInvoiceForm(f => ({ ...f, amount: "", notes: "", dueDate: "" }));
         setInvoiceOpen(false);
         router.refresh();
       }
     } catch (err: any) {
-      setErrorMsg(err.message || "Gagal membuat invoice");
+      const msg = err.message || "Gagal membuat invoice";
+      setErrorMsg(msg);
+      toast.error(msg);
     } finally {
       setIsSubmitting(false);
     }
@@ -199,11 +202,11 @@ export function InvoicesTab({
     try {
       const res = await deleteInvoice(invoiceId);
       if (res.success) {
-        alert(t("finance.invoice_deleted"));
+        toast.success(t("finance.invoice_deleted"));
         router.refresh();
       }
     } catch (err: any) {
-      alert(err.message || "Gagal menghapus invoice");
+      toast.error(err.message || "Gagal menghapus invoice");
     } finally {
       setIsSubmitting(false);
     }
@@ -211,20 +214,20 @@ export function InvoicesTab({
 
   return (
     <>
-      <Card className="bg-white border-[#D6DED2]">
+      <Card className="bg-card border-input">
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
-            <CardTitle className="text-lg text-[#243028]">{t("finance.invoice_list_title")}</CardTitle>
+            <CardTitle className="text-lg text-foreground">{t("finance.invoice_list_title")}</CardTitle>
             <CardDescription className="text-xs">{t("finance.invoice_list_desc")}</CardDescription>
           </div>
 
           <Dialog open={invoiceOpen} onOpenChange={setInvoiceOpen}>
             <DialogTrigger nativeButton={true} render={
-              <Button className="bg-[#8FAF9A] hover:bg-[#4F6F52] text-white flex items-center gap-1.5 text-xs">
+              <Button className="bg-[#8FAF9A] hover:bg-primary text-white flex items-center gap-1.5 text-xs">
                 <Plus className="h-3.5 w-3.5" /> {t("finance.invoice_btn_new")}
               </Button>
             } />
-            <DialogContent className="bg-white">
+            <DialogContent className="bg-card">
               <DialogHeader>
                 <DialogTitle>{t("finance.invoice_form_title")}</DialogTitle>
                 <DialogDescription>{t("finance.invoice_form_desc")}</DialogDescription>
@@ -237,13 +240,13 @@ export function InvoicesTab({
               <form onSubmit={handleCreateInvoiceSubmit} className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold text-[#243028]">{t("finance.invoice_lbl_project")}</label>
+                    <label className="text-xs font-semibold text-foreground">{t("finance.invoice_lbl_project")}</label>
                     <Select
                       value={invoiceForm.projectId}
                       onValueChange={(val) => setInvoiceForm(f => ({ ...f, projectId: val || "", unitId: "" }))}
                       items={projects.map(p => ({ label: p.name, value: p.id }))}
                     >
-                      <SelectTrigger className="bg-white border-[#D6DED2] w-full">
+                      <SelectTrigger className="bg-card border-input w-full">
                         <SelectValue placeholder={t("finance.invoice_lbl_project")}>
                           {invoiceForm.projectId ? projects.find(p => p.id === invoiceForm.projectId)?.name : undefined}
                         </SelectValue>
@@ -256,13 +259,13 @@ export function InvoicesTab({
                     </Select>
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold text-[#243028]">{t("finance.invoice_lbl_unit")}</label>
+                    <label className="text-xs font-semibold text-foreground">{t("finance.invoice_lbl_unit")}</label>
                     <Select
                       value={invoiceForm.unitId}
                       onValueChange={(val) => setInvoiceForm(f => ({ ...f, unitId: val || "" }))}
                       items={currentProjUnits.map(u => ({ label: u.code, value: u.id }))}
                     >
-                      <SelectTrigger className="bg-white border-[#D6DED2] w-full">
+                      <SelectTrigger className="bg-card border-input w-full">
                         <SelectValue placeholder={t("finance.invoice_lbl_unit")}>
                           {invoiceForm.unitId ? units.find(u => u.id === invoiceForm.unitId)?.code : undefined}
                         </SelectValue>
@@ -277,13 +280,13 @@ export function InvoicesTab({
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-[#243028]">{t("finance.invoice_lbl_customer")}</label>
+                  <label className="text-xs font-semibold text-foreground">{t("finance.invoice_lbl_customer")}</label>
                   <Select
                     value={invoiceForm.customerId}
                     onValueChange={(val) => setInvoiceForm(f => ({ ...f, customerId: val || "" }))}
                     items={customers.map(c => ({ label: `${c.name} (${c.phone})`, value: c.id }))}
                   >
-                    <SelectTrigger className="bg-white border-[#D6DED2] w-full">
+                    <SelectTrigger className="bg-card border-input w-full">
                       <SelectValue placeholder="Pilih Customer">
                         {invoiceForm.customerId ? (() => {
                           const c = customers.find(cust => cust.id === invoiceForm.customerId);
@@ -301,7 +304,7 @@ export function InvoicesTab({
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold text-[#243028]">{t("finance.invoice_lbl_type")}</label>
+                    <label className="text-xs font-semibold text-foreground">{t("finance.invoice_lbl_type")}</label>
                     <Select
                       value={invoiceForm.type}
                       onValueChange={(val: any) => setInvoiceForm(f => ({ ...f, type: val }))}
@@ -312,7 +315,7 @@ export function InvoicesTab({
                         { label: t("finance.invoice_type_other"), value: "other" },
                       ]}
                     >
-                      <SelectTrigger className="bg-white border-[#D6DED2] w-full">
+                      <SelectTrigger className="bg-card border-input w-full">
                         <SelectValue placeholder={t("finance.invoice_lbl_type")}>
                           {invoiceForm.type === "booking_fee" && t("finance.invoice_type_bf")}
                           {invoiceForm.type === "dp" && t("finance.invoice_type_dp")}
@@ -329,51 +332,51 @@ export function InvoicesTab({
                     </Select>
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold text-[#243028]">{t("finance.invoice_lbl_amount")}</label>
+                    <label className="text-xs font-semibold text-foreground">{t("finance.invoice_lbl_amount")}</label>
                     <Input
                       type="number"
                       placeholder="Rp 0"
                       value={invoiceForm.amount}
                       onChange={(e) => setInvoiceForm(f => ({ ...f, amount: e.target.value }))}
-                      className="bg-white border-[#D6DED2]"
+                      className="bg-card border-input"
                       required
                     />
                   </div>
                 </div>
 
                 {invoiceForm.amount && !isNaN(Number(invoiceForm.amount)) && (
-                  <div className="p-2.5 bg-[#DDE8D8]/50 border border-[#8FAF9A]/30 rounded-xl space-y-0.5 animate-in slide-in-from-top-1 duration-200">
-                    <span className="text-[9px] font-bold text-[#66736A] uppercase tracking-wider block">{t("finance.invoice_format_rupiah")}</span>
-                    <span className="font-mono font-extrabold text-sm text-[#4F6F52] tracking-tight tabular-nums">
+                  <div className="p-2.5 bg-secondary/50 border border-primary/30 rounded-xl space-y-0.5 animate-in slide-in-from-top-1 duration-200">
+                    <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider block">{t("finance.invoice_format_rupiah")}</span>
+                    <span className="font-mono font-extrabold text-sm text-primary tracking-tight tabular-nums">
                       Rp {Number(invoiceForm.amount).toLocaleString("id-ID")}
                     </span>
                   </div>
                 )}
 
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-[#243028]">{t("finance.invoice_lbl_due")}</label>
+                  <label className="text-xs font-semibold text-foreground">{t("finance.invoice_lbl_due")}</label>
                   <Input
                     type="date"
                     value={invoiceForm.dueDate}
                     onChange={(e) => setInvoiceForm(f => ({ ...f, dueDate: e.target.value }))}
-                    className="bg-white border-[#D6DED2]"
+                    className="bg-card border-input"
                   />
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-[#243028]">{t("finance.invoice_lbl_notes")}</label>
+                  <label className="text-xs font-semibold text-foreground">{t("finance.invoice_lbl_notes")}</label>
                   <Input
                     placeholder={t("finance.invoice_lbl_notes_ph")}
                     value={invoiceForm.notes}
                     onChange={(e) => setInvoiceForm(f => ({ ...f, notes: e.target.value }))}
-                    className="bg-white border-[#D6DED2]"
+                    className="bg-card border-input"
                   />
                 </div>
 
                 <DialogFooter>
                   <Button
                     type="submit"
-                    className="bg-[#4F6F52] hover:bg-[#8FAF9A] text-white w-full"
+                    className="bg-primary hover:bg-[#8FAF9A] text-white w-full"
                     disabled={isSubmitting}
                   >
                     {isSubmitting ? t("finance.saving") : t("finance.invoice_btn_submit")}
@@ -402,12 +405,12 @@ export function InvoicesTab({
                 <TableRow>
                   <TableCell colSpan={7} className="py-12 text-center">
                     <div className="flex flex-col items-center gap-3">
-                      <div className="h-16 w-16 rounded-full bg-[#DDE8D8]/50 flex items-center justify-center mx-auto">
-                        <FileText className="h-8 w-8 text-[#4F6F52]" />
+                      <div className="h-16 w-16 rounded-full bg-secondary/50 flex items-center justify-center mx-auto">
+                        <FileText className="h-8 w-8 text-primary" />
                       </div>
                       <div>
-                        <p className="font-semibold text-[#243028] text-sm">{t("finance.invoice_empty")}</p>
-                        <p className="text-xs text-[#66736A] mt-1">{t("finance.invoice_empty_desc")}</p>
+                        <p className="font-semibold text-foreground text-sm">{t("finance.invoice_empty")}</p>
+                        <p className="text-xs text-muted-foreground mt-1">{t("finance.invoice_empty_desc")}</p>
                       </div>
                     </div>
                   </TableCell>
@@ -415,13 +418,13 @@ export function InvoicesTab({
               ) : (
                 invoicePageData.data.map((inv) => (
                   <TableRow key={inv.id}>
-                    <TableCell className="font-mono text-xs font-semibold text-[#243028]">
+                    <TableCell className="font-mono text-xs font-semibold text-foreground">
                       {inv.invoiceNumber}
                     </TableCell>
-                    <TableCell className="text-xs text-[#243028]">
+                    <TableCell className="text-xs text-foreground">
                       {inv.customerName || "—"}
                     </TableCell>
-                    <TableCell className="font-mono text-xs text-[#66736A]">
+                    <TableCell className="font-mono text-xs text-muted-foreground">
                       {inv.unitCode || "—"}
                     </TableCell>
                     <TableCell className="text-xs">
@@ -443,7 +446,7 @@ export function InvoicesTab({
                         </span>
                       )}
                     </TableCell>
-                    <TableCell className="text-right font-mono font-semibold text-[#243028] tabular-nums text-xs">
+                    <TableCell className="text-right font-mono font-semibold text-foreground tabular-nums text-xs">
                       Rp {inv.amount.toLocaleString("id-ID")}
                     </TableCell>
                     <TableCell className="text-center">
@@ -471,7 +474,7 @@ export function InvoicesTab({
                                 href={matchingPayment.proofFileUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-[10px] text-[#4F6F52] hover:text-[#3D563F] underline font-bold inline-flex items-center gap-1 mt-0.5"
+                                className="text-[10px] text-primary hover:text-[#3D563F] underline font-bold inline-flex items-center gap-1 mt-0.5"
                               >
                                 <Eye className="h-3 w-3" /> {t("finance.view_proof")}
                               </a>
@@ -489,7 +492,7 @@ export function InvoicesTab({
                             if (fullInvoice) setPrintInvoice(fullInvoice);
                           }}
                           title={t("finance.btn_print")}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#DDE8D8] hover:bg-[#4F6F52] text-[#4F6F52] hover:text-white text-[11px] font-semibold transition-all duration-200 hover:scale-105 border border-[#8FAF9A]/30"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-secondary hover:bg-primary text-primary hover:text-white text-[11px] font-semibold transition-all duration-200 hover:scale-105 border border-primary/30"
                         >
                           🖨️ {t("finance.btn_print")}
                         </button>

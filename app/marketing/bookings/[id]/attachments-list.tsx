@@ -70,11 +70,11 @@ export default function BookingAttachmentsList({ bookingId, initialAttachments, 
   if (attachmentsList.length === 0) {
     return (
       <div className="py-8 text-center">
-        <div className="h-12 w-12 rounded-full bg-[#DDE8D8]/40 flex items-center justify-center mx-auto mb-2">
-          <FileText className="h-6 w-6 text-[#8FAF9A]" />
+        <div className="h-12 w-12 rounded-full bg-secondary/40 flex items-center justify-center mx-auto mb-2">
+          <FileText className="h-6 w-6 text-primary/70" />
         </div>
-        <p className="text-xs text-[#66736A] font-medium">{t("booking_proof.empty")}</p>
-        <p className="text-[10px] text-[#A8B0AA] mt-0.5">{t("booking_proof.empty_desc")}</p>
+        <p className="text-xs text-muted-foreground font-medium">{t("booking_proof.empty")}</p>
+        <p className="text-[10px] text-muted-foreground/70 mt-0.5">{t("booking_proof.empty_desc")}</p>
       </div>
     );
   }
@@ -89,14 +89,14 @@ export default function BookingAttachmentsList({ bookingId, initialAttachments, 
       {attachmentsList.map((att) => (
         <div
           key={att.id}
-          className="flex items-center gap-2 p-2.5 rounded-lg bg-[#F7F8F3] border border-[#D6DED2]/50 hover:border-[#8FAF9A]/40 transition-colors"
+          className="flex items-center gap-2 p-2.5 rounded-lg bg-muted/30 border border-border/50 hover:border-primary/40 transition-colors"
         >
-          <div className="h-8 w-8 rounded-lg bg-[#DDE8D8] flex items-center justify-center shrink-0">
-            <FileText className="h-4 w-4 text-[#4F6F52]" />
+          <div className="h-8 w-8 rounded-lg bg-secondary flex items-center justify-center shrink-0">
+            <FileText className="h-4 w-4 text-primary" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-xs font-semibold text-[#243028] truncate">{att.fileName}</p>
-            <p className="text-[10px] text-[#8FAF9A] font-mono">
+            <p className="text-xs font-semibold text-foreground truncate">{att.fileName}</p>
+            <p className="text-[10px] text-primary/70 font-mono">
               {att.createdAt ? formatDate(att.createdAt) : "-"}
             </p>
           </div>
@@ -130,10 +130,10 @@ export default function BookingAttachmentsList({ bookingId, initialAttachments, 
 
       {/* Confirmation Dialog Pop-up */}
       <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
-        <DialogContent className="max-w-md bg-white p-6 rounded-3xl border border-[#D6DED2] shadow-sage-lg">
+        <DialogContent className="max-w-md bg-card p-6 rounded-3xl border border-border shadow-sage-lg">
           <DialogHeader>
-            <DialogTitle className="text-lg font-bold text-[#243028] tracking-tight">{t("booking_proof.delete_title")}</DialogTitle>
-            <DialogDescription className="text-xs text-[#66736A] mt-2 leading-relaxed">
+            <DialogTitle className="text-lg font-bold text-foreground tracking-tight">{t("booking_proof.delete_title")}</DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground mt-2 leading-relaxed">
               <Translate namespace="booking_proof" translationKey="delete_desc" values={{ fileName: deleteTarget?.fileName || "" }} components={{ strong: <strong /> }} />
             </DialogDescription>
           </DialogHeader>
@@ -141,7 +141,7 @@ export default function BookingAttachmentsList({ bookingId, initialAttachments, 
             <Button
               variant="outline"
               onClick={() => setDeleteTarget(null)}
-              className="rounded-xl border-[#D6DED2] text-xs font-semibold"
+              className="rounded-xl border-border text-xs font-semibold"
             >
               {t("action.cancel")}
             </Button>

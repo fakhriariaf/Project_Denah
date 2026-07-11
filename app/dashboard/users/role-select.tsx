@@ -7,6 +7,7 @@ import {
 } from "@/components/ui/select";
 import { Check, Loader2 } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
+import { toast } from "sonner";
 
 type RoleOption = { id: string; name: string };
 
@@ -38,7 +39,7 @@ export function RoleSelect({
       } catch (err) {
         // Rollback on error
         setSelectedRole(currentRoleId ?? "");
-        alert(err instanceof Error ? err.message : t("users.create_error"));
+        toast.error(err instanceof Error ? err.message : t("users.create_error"));
       }
     });
   };

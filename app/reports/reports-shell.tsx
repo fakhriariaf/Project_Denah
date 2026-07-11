@@ -268,7 +268,7 @@ export default function ReportsShell({
           <div className="flex flex-wrap items-center gap-3">
             <div className="w-[240px] flex-shrink-0">
               <Select value={selectedProjectId} onValueChange={handleProjectChange}>
-                <SelectTrigger className="w-full bg-white border-[#D6DED2] text-xs font-semibold text-[#243028] h-10 rounded-xl shadow-sage focus:ring-[#8FAF9A]">
+                <SelectTrigger className="w-full bg-white border-[#D6DED2] text-xs font-semibold text-[#243028] h-10 rounded-xl shadow-sage focus:ring-ring">
                   <SelectValue placeholder={t("reports.sel_project")}>
                     {selectedProjectId === "all"
                       ? t("reports.all_projects")
@@ -288,14 +288,14 @@ export default function ReportsShell({
               <div className="flex gap-2">
                 <Button
                   onClick={handlePrint}
-                  className="bg-[#4F6F52] hover:bg-[#3D563F] text-white flex items-center gap-2 text-xs font-semibold px-4 h-10 rounded-xl shadow-[0_4px_12px_rgba(79,111,82,0.3)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 animate-in fade-in"
+                  className="bg-[#4F6F52] hover:bg-[#3D563F] text-white flex items-center gap-2 text-xs font-semibold px-4 h-10 rounded-xl shadow-[0_4px_12px_rgba(79,111,82,0.3)] btn-premium animate-in fade-in"
                 >
                   <Printer className="h-4 w-4" /> {t("reports.btn_print")}
                 </Button>
                 {activeTab === "production" && (
                   <Button
                     onClick={handleExportExcel}
-                    className="bg-[#4F6F52] hover:bg-[#3D563F] text-white flex items-center gap-2 text-xs font-semibold px-4 h-10 rounded-xl shadow-[0_4px_12px_rgba(79,111,82,0.3)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-300"
+                    className="bg-[#4F6F52] hover:bg-[#3D563F] text-white flex items-center gap-2 text-xs font-semibold px-4 h-10 rounded-xl shadow-[0_4px_12px_rgba(79,111,82,0.3)] btn-premium"
                   >
                     <FileSpreadsheet className="h-4 w-4" /> {t("reports.btn_export")}
                   </Button>
@@ -304,7 +304,7 @@ export default function ReportsShell({
             ) : (
               <Button
                 onClick={handleExportExcel}
-                className="bg-[#4F6F52] hover:bg-[#3D563F] text-white flex items-center gap-2 text-xs font-semibold px-4 h-10 rounded-xl shadow-[0_4px_12px_rgba(79,111,82,0.3)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-300"
+                className="bg-[#4F6F52] hover:bg-[#3D563F] text-white flex items-center gap-2 text-xs font-semibold px-4 h-10 rounded-xl shadow-[0_4px_12px_rgba(79,111,82,0.3)] btn-premium"
               >
                 <FileSpreadsheet className="h-4 w-4" /> {t("reports.btn_export")}
               </Button>
@@ -381,7 +381,7 @@ export default function ReportsShell({
                   <CardContent className="p-6">
                     <div className="flex items-center justify-between mb-3">
                       <p className="text-[10px] text-[#66736A] font-bold uppercase tracking-wider pl-3">{t("reports.kpi_income")}</p>
-                      <div className="h-9 w-9 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
+                      <div className="h-9 w-9 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0">
                         <TrendingUp className="h-4 w-4" />
                       </div>
                     </div>
@@ -421,7 +421,7 @@ export default function ReportsShell({
                   <CardContent className="p-6">
                     <div className="flex items-center justify-between mb-3">
                       <p className="text-[10px] text-[#66736A] font-bold uppercase tracking-wider pl-3">{t("reports.kpi_net")}</p>
-                      <div className="h-9 w-9 rounded-xl bg-sky-50 dark:bg-sky-950/40 flex items-center justify-center text-sky-600 dark:text-sky-400 shrink-0">
+                      <div className="h-9 w-9 rounded-xl bg-sky-50 flex items-center justify-center text-sky-600 shrink-0">
                         <PiggyBank className="h-4 w-4" />
                       </div>
                     </div>
@@ -437,7 +437,7 @@ export default function ReportsShell({
               </div>
 
               {/* Chart + Account Balances */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {/* Gradient Bar Chart */}
                 <Card className="bg-white border-[#D6DED2] lg:col-span-2 shadow-sage print:shadow-none">
                   <CardHeader className="pb-2 border-b border-[#D6DED2]">

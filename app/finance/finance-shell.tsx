@@ -34,6 +34,7 @@ import {
   createBudget,
 } from "@/server/actions/finance";
 import type { PaginatedResult } from "@/lib/pagination";
+import { toast } from "sonner";
 import { InvoicesTab } from "./tabs/invoices-tab";
 import { PaymentsTab } from "./tabs/payments-tab";
 import { TransactionsTab } from "./tabs/transactions-tab";
@@ -166,6 +167,17 @@ interface FinanceShellProps {
 
 /** Type for a single transaction item from the FinanceShellProps.transactions array */
 type FinanceTransactionItem = FinanceShellProps["transactions"][number];
+
+type FinanceTabKey = "invoices" | "payments" | "transactions" | "approvals" | "budgets" | "reports";
+
+const financeTabs: Array<{ key: FinanceTabKey; labelKey: string; icon: React.ComponentType<{ className?: string }> }> = [
+  { key: "invoices", labelKey: "finance.tab_invoices", icon: FileText },
+  { key: "payments", labelKey: "finance.tab_payments", icon: FileText },
+  { key: "transactions", labelKey: "finance.tab_transactions", icon: CircleDollarSign },
+  { key: "approvals", labelKey: "finance.tab_approvals", icon: Clock },
+  { key: "budgets", labelKey: "finance.tab_budgets", icon: FolderOpen },
+  { key: "reports", labelKey: "finance.tab_reports", icon: PieChart },
+];
 
 export default function FinanceShell({
   activeUser,
@@ -351,13 +363,15 @@ export default function FinanceShell({
         paymentMethod: paymentForm.paymentMethod,
       });
       if (res.success) {
-        alert(t("finance.payment_recorded"));
+        toast.success(t("finance.payment_recorded"));
         setPaymentForm(f => ({ ...f, amount: "", invoiceId: "", unitId: "", customerId: "" }));
         setPaymentOpen(false);
         router.refresh();
       }
     } catch (err: any) {
-      setErrorMsg(err.message || "Gagal mencatat pembayaran");
+      const msg = err.message || "Gagal mencatat pembayaran";
+      setErrorMsg(msg);
+      toast.error(msg);
     } finally {
       setIsSubmitting(false);
     }
@@ -375,18 +389,22 @@ export default function FinanceShell({
         verificationNotes
       );
       if (res.success) {
-        // Sprint 3: Structured feedback � tampilkan info handover jika triggered
+        // Sprint 3: Structured feedback ï¿½ tampilkan info handover jika triggered
         if (isApproved && res.handoverTriggered) {
-          alert(`? ${t("finance.payment_verified")}\n\n${t("finance.handover_triggered")}`);
+          toast.success(t("finance.payment_verified"), { description: t("finance.handover_triggered") });
+        } else if (isApproved) {
+          toast.success(t("finance.payment_verified"));
         } else {
-          alert(isApproved ? t("finance.payment_verified") : t("finance.payment_rejected"));
+          toast.info(t("finance.payment_rejected"));
         }
         setSelectedPayment(null);
         setVerificationNotes("");
         router.refresh();
       }
     } catch (err: any) {
-      setErrorMsg(err.message || "Gagal memverifikasi pembayaran");
+      const msg = err.message || "Gagal memverifikasi pembayaran";
+      setErrorMsg(msg);
+      toast.error(msg);
     } finally {
       setIsSubmitting(false);
     }
@@ -401,12 +419,14 @@ export default function FinanceShell({
     try {
       const res = await deletePayment(selectedPayment.id);
       if (res.success) {
-        alert(t("finance.payment_deleted"));
+        toast.success(t("finance.payment_deleted"));
         setSelectedPayment(null);
         router.refresh();
       }
     } catch (err: any) {
-      setErrorMsg(err.message || "Gagal menghapus pembayaran");
+      const msg = err.message || "Gagal menghapus pembayaran";
+      setErrorMsg(msg);
+      toast.error(msg);
     } finally {
       setIsSubmitting(false);
     }
@@ -427,12 +447,14 @@ export default function FinanceShell({
         paymentMethod: expenseForm.paymentMethod,
       });
       if (res.success) {
-        alert(t("finance.expense_submitted"));
+        toast.success(t("finance.expense_submitted"));
         setExpenseForm(f => ({ ...f, amount: "", description: "" }));
         router.refresh();
       }
     } catch (err: any) {
-      setErrorMsg(err.message || "Gagal mengajukan kas keluar");
+      const msg = err.message || "Gagal mengajukan kas keluar";
+      setErrorMsg(msg);
+      toast.error(msg);
     } finally {
       setIsSubmitting(false);
     }
@@ -450,13 +472,19 @@ export default function FinanceShell({
         res = await rejectExpense(selectedExpense.id, approvalNotes);
       }
       if (res.success) {
-        alert(isApproved ? t("finance.expense_approved") : t("finance.expense_rejected_msg"));
+        if (isApproved) {
+          toast.success(t("finance.expense_approved"));
+        } else {
+          toast.info(t("finance.expense_rejected_msg"));
+        }
         setSelectedExpense(null);
         setApprovalNotes("");
         router.refresh();
       }
     } catch (err: any) {
-      setErrorMsg(err.message || "Operasi persetujuan gagal");
+      const msg = err.message || "Operasi persetujuan gagal";
+      setErrorMsg(msg);
+      toast.error(msg);
     } finally {
       setIsSubmitting(false);
     }
@@ -481,13 +509,15 @@ export default function FinanceShell({
         ],
       });
       if (res.success) {
-        alert(t("finance.budget_created"));
+        toast.success(t("finance.budget_created"));
         setBudgetForm(f => ({ ...f, name: "", totalAmount: "", allocatedAmount: "" }));
         setBudgetOpen(false);
         router.refresh();
       }
     } catch (err: any) {
-      setErrorMsg(err.message || "Gagal membuat anggaran");
+      const msg = err.message || "Gagal membuat anggaran";
+      setErrorMsg(msg);
+      toast.error(msg);
     } finally {
       setIsSubmitting(false);
     }
@@ -521,7 +551,7 @@ export default function FinanceShell({
                 onValueChange={(val) => setSelectedProjectId(val || "all")}
                 items={[{ label: t("finance.all_projects"), value: "all" }, ...projects.map(p => ({ label: p.name, value: p.id }))] }
               >
-                <SelectTrigger className="bg-white/90 backdrop-blur-sm border-[#D6DED2] focus:ring-[#8FAF9A] rounded-xl shadow-sm">
+                <SelectTrigger className="bg-white/90 backdrop-blur-sm border-border focus:ring-ring rounded-xl shadow-sm">
                   <SelectValue placeholder={t("finance.all_projects")}>
                     {selectedProjectId === "all" ? t("finance.all_projects") : projects.find(p => p.id === selectedProjectId)?.name}
                   </SelectValue>
@@ -536,12 +566,12 @@ export default function FinanceShell({
             </div>
 
             <div className="relative w-[240px]">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-[#A8B0AA]" />
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground/70" />
               <Input
                 placeholder={t("finance.search_ph")}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 bg-white/90 backdrop-blur-sm border-[#D6DED2] focus-visible:ring-[#8FAF9A] rounded-xl shadow-sm"
+                className="pl-9 bg-white/90 backdrop-blur-sm border-border focus-visible:ring-ring rounded-xl shadow-sm"
               />
             </div>
           </div>
@@ -577,78 +607,45 @@ export default function FinanceShell({
       </div>
 
       {/* 3. Operational Custom Tabs Navigation */}
-      <div className="flex border-b border-[#D6DED2]">
-        <button
-          onClick={() => setActiveTab("invoices")}
-          className={`px-4 py-2 text-sm font-semibold border-b-2 transition-colors duration-150 flex items-center gap-2 ${
-            activeTab === "invoices"
-              ? "border-[#4F6F52] text-[#4F6F52]"
-              : "border-transparent text-[#66736A] hover:text-[#243028]"
-          }`}
-        >
-          <FileText className="h-4 w-4" /> {t("finance.tab_invoices")}
-        </button>
-        <button
-          onClick={() => setActiveTab("payments")}
-          className={`px-4 py-2 text-sm font-semibold border-b-2 transition-colors duration-150 flex items-center gap-2 ${
-            activeTab === "payments"
-              ? "border-[#4F6F52] text-[#4F6F52]"
-              : "border-transparent text-[#66736A] hover:text-[#243028]"
-          }`}
-        >
-          <FileText className="h-4 w-4" /> {t("finance.tab_payments")}
-        </button>
-        <button
-          onClick={() => setActiveTab("transactions")}
-          className={`px-4 py-2 text-sm font-semibold border-b-2 transition-colors duration-150 flex items-center gap-2 ${
-            activeTab === "transactions"
-              ? "border-[#4F6F52] text-[#4F6F52]"
-              : "border-transparent text-[#66736A] hover:text-[#243028]"
-          }`}
-        >
-          <CircleDollarSign className="h-4 w-4" /> {t("finance.tab_transactions")}
-        </button>
-        
-        {/* Approvals tab only for Super Admin or Manager/Director */}
-        <button
-          onClick={() => setActiveTab("approvals")}
-          className={`px-4 py-2 text-sm font-semibold border-b-2 transition-colors duration-150 flex items-center gap-2 relative ${
-            activeTab === "approvals"
-              ? "border-[#4F6F52] text-[#4F6F52]"
-              : "border-transparent text-[#66736A] hover:text-[#243028]"
-          }`}
-        >
-          <Clock className="h-4 w-4" /> {t("finance.tab_approvals")}
-          {pendingApprovals.length > 0 && (
-            <Badge className="ml-1.5 bg-[#D77A7A] hover:bg-[#D77A7A] text-white rounded-full px-1.5 py-0 text-[10px]">
-              {pendingApprovals.length}
-            </Badge>
-          )}
-        </button>
-
-        <button
-          onClick={() => setActiveTab("budgets")}
-          className={`px-4 py-2 text-sm font-semibold border-b-2 transition-colors duration-150 flex items-center gap-2 ${
-            activeTab === "budgets"
-              ? "border-[#4F6F52] text-[#4F6F52]"
-              : "border-transparent text-[#66736A] hover:text-[#243028]"
-          }`}
-        >
-          <FolderOpen className="h-4 w-4" /> {t("finance.tab_budgets")}
-        </button>
-        <button
-          onClick={() => setActiveTab("reports")}
-          className={`px-4 py-2 text-sm font-semibold border-b-2 transition-colors duration-150 flex items-center gap-2 ${
-            activeTab === "reports"
-              ? "border-[#4F6F52] text-[#4F6F52]"
-              : "border-transparent text-[#66736A] hover:text-[#243028]"
-          }`}
-        >
-          <PieChart className="h-4 w-4" /> {t("finance.tab_reports")}
-        </button>
+      <div role="tablist" aria-label={t("finance.title")} className="flex border-b border-border">
+        {financeTabs.map((tab) => {
+          const isActive = activeTab === tab.key;
+          const Icon = tab.icon;
+          return (
+            <button
+              key={tab.key}
+              type="button"
+              role="tab"
+              id={`finance-tab-${tab.key}`}
+              aria-selected={isActive}
+              aria-controls={`finance-panel-${tab.key}`}
+              tabIndex={isActive ? 0 : -1}
+              onClick={() => setActiveTab(tab.key)}
+              className={`relative px-4 py-2 text-sm font-semibold border-b-2 transition-colors duration-150 flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 ${
+                isActive
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Icon className="h-4 w-4" /> {t(tab.labelKey as Parameters<typeof t>[0])}
+              {tab.key === "approvals" && pendingApprovals.length > 0 && (
+                <Badge className="ml-1.5 bg-destructive hover:bg-destructive text-destructive-foreground rounded-full px-1.5 py-0 text-[10px]">
+                  {pendingApprovals.length}
+                </Badge>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {/* 4. Tab Panels Layouts */}
+      <div
+        role="tabpanel"
+        id={`finance-panel-${activeTab}`}
+        aria-labelledby={`finance-tab-${activeTab}`}
+        tabIndex={0}
+        className="focus-visible:outline-none"
+      >
 
       {activeTab === "invoices" && (
         <InvoicesTab
@@ -741,6 +738,7 @@ export default function FinanceShell({
         />
       )}
 
+      </div>
     </div>
     </>
   );

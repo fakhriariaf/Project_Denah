@@ -52,14 +52,14 @@ export function ComplaintsTab({
         </div>
         <Button
           onClick={onNewComplaint}
-          className="bg-primary hover:bg-[#4F6F52] text-primary-foreground font-semibold text-xs"
+          className="bg-primary hover:bg-primary text-primary-foreground font-semibold text-xs"
         >
           <Plus className="mr-1.5 h-3.5 w-3.5" />
           {t("production.btn_new_complaint")}
         </Button>
       </div>
 
-      <div className="rounded-md border border-[#8FAF9A]/20 overflow-hidden">
+      <div className="rounded-md border border-primary/20 overflow-hidden">
         <Table>
           <TableHeader className="bg-[#8FAF9A]/10">
             <TableRow>
@@ -78,12 +78,12 @@ export function ComplaintsTab({
               <TableRow>
                 <TableCell colSpan={8} className="py-12 text-center">
                   <div className="flex flex-col items-center gap-3">
-                    <div className="h-16 w-16 rounded-full bg-[#DDE8D8]/50 flex items-center justify-center mx-auto">
-                      <AlertTriangle className="h-8 w-8 text-[#4F6F52]" />
+                    <div className="h-16 w-16 rounded-full bg-secondary/50 flex items-center justify-center mx-auto">
+                      <AlertTriangle className="h-8 w-8 text-primary" />
                     </div>
                     <div>
-                      <p className="font-semibold text-[#243028] text-sm">{t("production.complaint_empty")}</p>
-                      <p className="text-xs text-[#66736A] mt-1">{t("production.complaint_empty_desc")}</p>
+                      <p className="font-semibold text-foreground text-sm">{t("production.complaint_empty")}</p>
+                      <p className="text-xs text-muted-foreground mt-1">{t("production.complaint_empty_desc")}</p>
                     </div>
                   </div>
                 </TableCell>
@@ -95,7 +95,7 @@ export function ComplaintsTab({
                   <TableCell className="font-medium text-foreground">{c.customerName}</TableCell>
                   <TableCell className="font-semibold text-foreground">{c.unitCode}</TableCell>
                   <TableCell>
-                    <Badge variant="outline" className="text-xs border-[#8FAF9A] text-primary bg-[#8FAF9A]/5 font-semibold shadow-none">
+                    <Badge variant="outline" className="text-xs border-primary/50 text-primary bg-[#8FAF9A]/5 font-semibold shadow-none">
                       {c.category === "quality" ? t("production.cat_quality") : c.category === "delay" ? t("production.cat_delay") : c.category === "document" ? t("production.cat_document") : c.category === "payment" ? t("production.cat_payment") : t("production.cat_other")}
                     </Badge>
                   </TableCell>
@@ -107,7 +107,7 @@ export function ComplaintsTab({
                     <Badge
                       className={`shadow-none font-semibold ${
                         c.status === "resolved"
-                          ? "bg-[#DDE8D8] text-[#4F6F52] border border-[#8FAF9A]/30"
+                          ? "bg-secondary text-primary border border-primary/30"
                           : "bg-amber-50 text-amber-700 border border-amber-200"
                       }`}
                     >
@@ -120,7 +120,7 @@ export function ComplaintsTab({
                         <Button
                           size="sm"
                           variant="outline"
-                          className="border-[#8FAF9A] text-[#4F6F52] hover:bg-[#DDE8D8]/50 font-semibold text-xs h-8"
+                          className="border-primary/50 text-primary hover:bg-secondary/50 font-semibold text-xs h-8"
                         >
                           <Eye className="mr-1 h-3.5 w-3.5" />
                           Detail
@@ -130,7 +130,7 @@ export function ComplaintsTab({
                         <Button
                           size="sm"
                           onClick={() => onResolveComplaint(c)}
-                          className="bg-primary hover:bg-[#4F6F52] text-primary-foreground font-semibold text-xs h-8"
+                          className="bg-primary hover:bg-primary text-primary-foreground font-semibold text-xs h-8"
                         >
                           {t("production.btn_resolve")}
                         </Button>

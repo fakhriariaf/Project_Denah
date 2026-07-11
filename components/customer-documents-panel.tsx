@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -296,15 +296,15 @@ export function CustomerDocumentsPanel({
             const status = docObj?.customer_documents.status;
             
             let pillClass = "bg-[#F7F8F3] border-[#D6DED2] text-[#A8B0AA]";
-            let pillIcon = "○";
+            let pillIcon = "â—‹";
             
             if (docObj) {
               if (status === "rejected") {
                 pillClass = "bg-rose-50 border-rose-100 text-rose-700";
-                pillIcon = "✗";
+                pillIcon = "âœ—";
               } else {
                 pillClass = "bg-emerald-50 border-emerald-100 text-emerald-700";
-                pillIcon = "✓";
+                pillIcon = "âœ“";
               }
             }
             
@@ -351,7 +351,7 @@ export function CustomerDocumentsPanel({
             <div>
               <label className="text-xs font-medium text-[#243028] mb-1 block">Jenis Dokumen</label>
               <Select value={selectedDocType} onValueChange={(val: string | null) => setSelectedDocType(val ?? "ktp")}>
-                <SelectTrigger className="border-[#D6DED2] focus:ring-[#8FAF9A]/50 focus:border-[#8FAF9A]">
+                <SelectTrigger className="border-[#D6DED2] focus:ring-ring/50 focus:border-[#8FAF9A]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="rounded-xl border-[#D6DED2] bg-white/95 backdrop-blur-md">
@@ -480,7 +480,7 @@ export function CustomerDocumentsPanel({
                       </button>
                     )}
 
-                    {/* Verify/Reject — for authorized roles */}
+                    {/* Verify/Reject â€” for authorized roles */}
                     {canVerify && doc.customer_documents.status === "uploaded" && (
                       <>
                         <button

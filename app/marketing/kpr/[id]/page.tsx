@@ -166,7 +166,7 @@ export default async function KprDetailPage({ params }: KprDetailPageProps) {
       {/* Back link */}
       <Link
         href="/marketing/kpr"
-        className="inline-flex items-center gap-2 text-sm text-[#66736A] hover:text-[#4F6F52] transition-colors w-fit"
+        className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors w-fit"
       >
         <ArrowLeft className="h-4 w-4" />
         Kembali ke Pipeline KPR
@@ -186,9 +186,9 @@ export default async function KprDetailPage({ params }: KprDetailPageProps) {
       />
 
       {/* Milestone Tracker */}
-      <Card className="border-[#D6DED2] shadow-sage">
+      <Card className="border-border shadow-sage">
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-bold text-[#243028]">
+          <CardTitle className="text-sm font-bold text-foreground">
             Tahapan Proses KPR
           </CardTitle>
         </CardHeader>
@@ -209,10 +209,10 @@ export default async function KprDetailPage({ params }: KprDetailPageProps) {
       {/* Detail Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {/* Customer Info */}
-        <Card className="border-[#D6DED2] shadow-sage">
+        <Card className="border-border shadow-sage">
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-bold text-[#243028] flex items-center gap-2">
-              <User className="h-4 w-4 text-[#4F6F52]" />
+            <CardTitle className="text-sm font-bold text-foreground flex items-center gap-2">
+              <User className="h-4 w-4 text-primary" />
               Informasi Konsumen
             </CardTitle>
           </CardHeader>
@@ -225,10 +225,10 @@ export default async function KprDetailPage({ params }: KprDetailPageProps) {
         </Card>
 
         {/* Unit Info */}
-        <Card className="border-[#D6DED2] shadow-sage">
+        <Card className="border-border shadow-sage">
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-bold text-[#243028] flex items-center gap-2">
-              <Building2 className="h-4 w-4 text-[#4F6F52]" />
+            <CardTitle className="text-sm font-bold text-foreground flex items-center gap-2">
+              <Building2 className="h-4 w-4 text-primary" />
               Informasi Unit
             </CardTitle>
           </CardHeader>
@@ -241,10 +241,10 @@ export default async function KprDetailPage({ params }: KprDetailPageProps) {
         </Card>
 
         {/* KPR Process Info */}
-        <Card className="border-[#D6DED2] shadow-sage">
+        <Card className="border-border shadow-sage">
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-bold text-[#243028] flex items-center gap-2">
-              <Landmark className="h-4 w-4 text-[#4F6F52]" />
+            <CardTitle className="text-sm font-bold text-foreground flex items-center gap-2">
+              <Landmark className="h-4 w-4 text-primary" />
               Proses KPR
             </CardTitle>
           </CardHeader>
@@ -263,10 +263,10 @@ export default async function KprDetailPage({ params }: KprDetailPageProps) {
       </div>
 
       {/* Bank Submissions Table */}
-      <Card className="border-[#D6DED2] shadow-sage">
+      <Card className="border-border shadow-sage">
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-bold text-[#243028] flex items-center gap-2">
-            <Landmark className="h-4 w-4 text-[#4F6F52]" />
+          <CardTitle className="text-sm font-bold text-foreground flex items-center gap-2">
+            <Landmark className="h-4 w-4 text-primary" />
             Pengajuan Bank ({bankSubmissions.length})
           </CardTitle>
         </CardHeader>
@@ -307,7 +307,7 @@ export default async function KprDetailPage({ params }: KprDetailPageProps) {
               </Table>
             </div>
           ) : (
-            <p className="text-sm text-[#A8B0AA] text-center py-6">
+            <p className="text-sm text-muted-foreground/70 text-center py-6">
               Belum ada pengajuan bank untuk KPR ini.
             </p>
           )}
@@ -315,10 +315,10 @@ export default async function KprDetailPage({ params }: KprDetailPageProps) {
       </Card>
 
       {/* Documents Section */}
-      <Card className="border-[#D6DED2] shadow-sage">
+      <Card className="border-border shadow-sage">
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-bold text-[#243028] flex items-center gap-2">
-            <FileText className="h-4 w-4 text-[#4F6F52]" />
+          <CardTitle className="text-sm font-bold text-foreground flex items-center gap-2">
+            <FileText className="h-4 w-4 text-primary" />
             Dokumen Konsumen ({customerDocs.length})
           </CardTitle>
         </CardHeader>
@@ -328,16 +328,16 @@ export default async function KprDetailPage({ params }: KprDetailPageProps) {
               {customerDocs.map((doc) => (
                 <div
                   key={doc.id}
-                  className="flex items-center gap-3 p-3 rounded-xl border border-[#D6DED2] bg-[#F7F8F3]/50 hover:bg-[#F7F8F3] transition-colors"
+                  className="flex items-center gap-3 p-3 rounded-xl border border-border bg-muted/30/50 hover:bg-muted/30 transition-colors"
                 >
-                  <div className="h-9 w-9 rounded-lg bg-[#DDE8D8] flex items-center justify-center shrink-0">
+                  <div className="h-9 w-9 rounded-lg bg-secondary flex items-center justify-center shrink-0">
                     <DocTypeIcon mimeType={doc.mimeType} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold text-[#243028] truncate">
+                    <p className="text-xs font-semibold text-foreground truncate">
                       {getDocTypeLabel(doc.documentType)}
                     </p>
-                    <p className="text-[10px] text-[#66736A] truncate">
+                    <p className="text-[10px] text-muted-foreground truncate">
                       {doc.fileName}
                     </p>
                   </div>
@@ -348,10 +348,10 @@ export default async function KprDetailPage({ params }: KprDetailPageProps) {
                         href={doc.fileUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="h-7 w-7 rounded-lg bg-[#4F6F52]/10 hover:bg-[#4F6F52]/20 flex items-center justify-center transition-colors"
+                        className="h-7 w-7 rounded-lg bg-primary/10 hover:bg-primary/20 flex items-center justify-center transition-colors"
                         title="Download"
                       >
-                        <Download className="h-3.5 w-3.5 text-[#4F6F52]" />
+                        <Download className="h-3.5 w-3.5 text-primary" />
                       </a>
                     )}
                   </div>
@@ -359,7 +359,7 @@ export default async function KprDetailPage({ params }: KprDetailPageProps) {
               ))}
             </div>
           ) : (
-            <p className="text-sm text-[#A8B0AA] text-center py-6">
+            <p className="text-sm text-muted-foreground/70 text-center py-6">
               Belum ada dokumen yang diunggah.
             </p>
           )}
@@ -374,8 +374,8 @@ export default async function KprDetailPage({ params }: KprDetailPageProps) {
 function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-2">
-      <span className="text-[#66736A] shrink-0">{label}</span>
-      <span className="text-[#243028] font-medium text-right">{typeof value === "string" ? value : value}</span>
+      <span className="text-muted-foreground shrink-0">{label}</span>
+      <span className="text-foreground font-medium text-right">{typeof value === "string" ? value : value}</span>
     </div>
   );
 }
@@ -460,9 +460,9 @@ function DocVerificationBadge({ status }: { status: string }) {
 
 function DocTypeIcon({ mimeType }: { mimeType: string | null }) {
   if (mimeType && mimeType.startsWith("image/")) {
-    return <FileImage className="h-4 w-4 text-[#4F6F52]" />;
+    return <FileImage className="h-4 w-4 text-primary" />;
   }
-  return <File className="h-4 w-4 text-[#4F6F52]" />;
+  return <File className="h-4 w-4 text-primary" />;
 }
 
 function SlaIndicator({ status, days }: { status: "safe" | "warning" | "overdue"; days: number }) {

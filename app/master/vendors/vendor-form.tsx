@@ -8,12 +8,13 @@ import { vendorSchema, type VendorInput } from "@/server/validators/master";
 import { createVendor, updateVendor } from "@/server/actions/master";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { FormLabel, FieldError, FormFieldGroup } from "@/components/ui/form-primitives";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Truck, Loader2, AlertCircle, Copy, CheckCircle2, KeyRound } from "lucide-react";
 import { parseServerError } from "@/lib/error-parser";
 import { useI18n } from "@/lib/i18n";
+import { toast } from "sonner";
 
 const VENDOR_STATUS_LABELS: Record<string, string> = {
   active: "Aktif",
@@ -68,7 +69,7 @@ export function VendorForm({
       try {
         if (id) {
           await updateVendor(id, data);
-          alert("Data vendor berhasil diperbarui!");
+          toast.success("Data vendor berhasil diperbarui!");
           setOpen(false);
           reset();
           router.refresh();
@@ -78,9 +79,9 @@ export function VendorForm({
             setCredential({ email: result.email, tempPassword: result.tempPassword });
           } else {
             if (result.warning) {
-              alert(`Vendor berhasil dibuat.\n\nPeringatan: ${result.warning}`);
+              toast.warning("Vendor berhasil dibuat.", { description: result.warning });
             } else {
-              alert("Data vendor berhasil disimpan!");
+              toast.success("Data vendor berhasil disimpan!");
             }
             setOpen(false);
             reset();
@@ -98,24 +99,24 @@ export function VendorForm({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger nativeButton={true} render={
         id ? (
-          <Button variant="outline" size="sm" className="h-7 text-xs border-[#D6DED2] rounded-lg hover:bg-[#F7F8F3]/50">{t("vendor_form.edit_btn")}</Button>
+          <Button variant="outline" size="sm" className="h-7 text-xs border-input rounded-lg hover:bg-muted/50">{t("vendor_form.edit_btn")}</Button>
         ) : (
-          <Button className="bg-[#4F6F52] hover:bg-[#3D563F] text-white active:scale-95 shadow-[0_4px_14px_rgba(79,111,82,0.25)] transition-all duration-300 h-9 rounded-xl font-bold text-xs px-4">
+          <Button className="bg-primary hover:bg-primary/90 text-primary-foreground active:scale-95 shadow-[0_4px_14px_rgba(79,111,82,0.25)] transition-all duration-300 h-9 rounded-xl font-bold text-xs px-4">
             <Plus className="mr-2 h-4 w-4" />
             {t("vendor_form.add_btn")}
           </Button>
         )
       } />
-      <DialogContent className="sm:max-w-lg rounded-3xl bg-white/98 backdrop-blur-md border border-[#D6DED2] shadow-[0_8px_30px_rgb(143,175,154,0.15)] p-0 overflow-hidden font-sans">
-        <div className="bg-gradient-to-r from-[#DDE8D8]/70 via-white/80 to-transparent p-6 border-b border-[#D6DED2]">
+      <DialogContent className="sm:max-w-lg rounded-3xl bg-white/98 backdrop-blur-md border border-border shadow-[0_8px_30px_rgb(143,175,154,0.15)] p-0 overflow-hidden font-sans">
+        <div className="bg-gradient-to-r from-[#DDE8D8]/70 via-white/80 to-transparent p-6 border-b border-border">
           <DialogHeader>
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-xl bg-white/80 border border-[#D6DED2] flex items-center justify-center shadow-sm">
-                <Truck className="h-5 w-5 text-[#4F6F52]" />
+              <div className="h-10 w-10 rounded-xl bg-white/80 border border-border flex items-center justify-center shadow-sm">
+                <Truck className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <DialogTitle className="text-xl font-black text-[#243028] tracking-tight">{id ? t("vendor_form.edit_title") : t("vendor_form.add_title")}</DialogTitle>
-                <DialogDescription className="text-xs text-[#66736A] mt-1">
+                <DialogTitle className="text-xl font-black text-foreground tracking-tight">{id ? t("vendor_form.edit_title") : t("vendor_form.add_title")}</DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground mt-1">
                   {id ? t("vendor_form.edit_desc") : t("vendor_form.add_desc")}
                 </DialogDescription>
               </div>
@@ -129,42 +130,42 @@ export function VendorForm({
             </div>
           )}
           
-          <div className="space-y-1.5">
-            <Label htmlFor="name" className="text-xs font-semibold text-[#243028]">{t("vendor_form.name")} <span className="text-red-500">*</span></Label>
-            <Input id="name" required {...register("name")} placeholder={t("vendor_form.name_placeholder")} className="bg-white border-[#D6DED2] rounded-xl text-xs h-9 focus:ring-[#8FAF9A] focus:ring-2 focus:border-transparent transition-all" />
-            {errors.name && <p className="text-xs text-red-500">{errors.name.message as string}</p>}
-          </div>
+          <FormFieldGroup>
+            <FormLabel htmlFor="name" required>{t("vendor_form.name")}</FormLabel>
+            <Input id="name" required {...register("name")} placeholder={t("vendor_form.name_placeholder")} className="bg-card border-input rounded-xl text-xs h-9 focus-visible:ring-2 focus-visible:ring-ring transition-all" />
+            <FieldError>{errors.name?.message}</FieldError>
+          </FormFieldGroup>
 
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="phone" className="text-xs font-semibold text-[#243028]">{t("vendor_form.phone")} <span className="text-[#8FAF9A] font-normal">(Opsional)</span></Label>
-              <Input id="phone" {...register("phone")} placeholder={t("vendor_form.phone_placeholder")} className="font-mono bg-white border-[#D6DED2] rounded-xl text-xs h-9 focus:ring-[#8FAF9A] focus:ring-2 focus:border-transparent transition-all tabular-nums" />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="email" className="text-xs font-semibold text-[#243028]">{t("vendor_form.email")} <span className="text-[#8FAF9A] font-normal">(Opsional)</span></Label>
-              <Input id="email" type="email" {...register("email")} placeholder={t("vendor_form.email_placeholder")} className="bg-white border-[#D6DED2] rounded-xl text-xs h-9 focus:ring-[#8FAF9A] focus:ring-2 focus:border-transparent transition-all" />
-              {errors.email && <p className="text-xs text-red-500">{errors.email.message as string}</p>}
-            </div>
+            <FormFieldGroup>
+              <FormLabel htmlFor="phone">{t("vendor_form.phone")} <span className="font-normal text-muted-foreground">(Opsional)</span></FormLabel>
+              <Input id="phone" {...register("phone")} placeholder={t("vendor_form.phone_placeholder")} className="font-mono bg-card border-input rounded-xl text-xs h-9 focus-visible:ring-2 focus-visible:ring-ring transition-all tabular-nums" />
+            </FormFieldGroup>
+            <FormFieldGroup>
+              <FormLabel htmlFor="email">{t("vendor_form.email")} <span className="font-normal text-muted-foreground">(Opsional)</span></FormLabel>
+              <Input id="email" type="email" {...register("email")} placeholder={t("vendor_form.email_placeholder")} className="bg-card border-input rounded-xl text-xs h-9 focus-visible:ring-2 focus-visible:ring-ring transition-all" />
+              <FieldError>{errors.email?.message}</FieldError>
+            </FormFieldGroup>
           </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="legalDocNumber" className="text-xs font-semibold text-[#243028]">{t("vendor_form.legal")} <span className="text-[#8FAF9A] font-normal">(Opsional)</span></Label>
-            <Input id="legalDocNumber" {...register("legalDocNumber")} placeholder={t("vendor_form.legal_placeholder")} className="font-mono bg-white border-[#D6DED2] rounded-xl text-xs h-9 focus:ring-[#8FAF9A] focus:ring-2 focus:border-transparent transition-all tabular-nums" />
-          </div>
+          <FormFieldGroup>
+            <FormLabel htmlFor="legalDocNumber">{t("vendor_form.legal")} <span className="font-normal text-muted-foreground">(Opsional)</span></FormLabel>
+            <Input id="legalDocNumber" {...register("legalDocNumber")} placeholder={t("vendor_form.legal_placeholder")} className="font-mono bg-card border-input rounded-xl text-xs h-9 focus-visible:ring-2 focus-visible:ring-ring transition-all tabular-nums" />
+          </FormFieldGroup>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="address" className="text-xs font-semibold text-[#243028]">{t("vendor_form.address")} <span className="text-[#8FAF9A] font-normal">(Opsional)</span></Label>
-            <Input id="address" {...register("address")} placeholder={t("vendor_form.address_placeholder")} className="bg-white border-[#D6DED2] rounded-xl text-xs h-9 focus:ring-[#8FAF9A] focus:ring-2 focus:border-transparent transition-all" />
-          </div>
+          <FormFieldGroup>
+            <FormLabel htmlFor="address">{t("vendor_form.address")} <span className="font-normal text-muted-foreground">(Opsional)</span></FormLabel>
+            <Input id="address" {...register("address")} placeholder={t("vendor_form.address_placeholder")} className="bg-card border-input rounded-xl text-xs h-9 focus-visible:ring-2 focus-visible:ring-ring transition-all" />
+          </FormFieldGroup>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="status" className="text-xs font-semibold text-[#243028]">{t("vendor_form.status")}</Label>
+          <FormFieldGroup>
+            <FormLabel htmlFor="status">{t("vendor_form.status")}</FormLabel>
             <Select 
               value={watch("status") ?? ""} 
               onValueChange={(val) => setValue("status", val as VendorInput["status"])}
               required
             >
-              <SelectTrigger className="w-full text-xs rounded-xl border border-[#D6DED2] bg-white hover:bg-[#F7F8F3]/50 focus:ring-2 focus:ring-[#8FAF9A]/20 h-9 px-3 transition-premium">
+              <SelectTrigger className="w-full text-xs rounded-xl border border-input bg-card hover:bg-muted/50 focus:ring-2 focus:ring-ring/20 h-9 px-3 transition-premium">
                 <SelectValue placeholder="Pilih status">
                   {(() => {
                     const val = watch("status");
@@ -172,18 +173,18 @@ export function VendorForm({
                   })()}
                 </SelectValue>
               </SelectTrigger>
-              <SelectContent className="border-[#D6DED2] rounded-xl bg-white/95 backdrop-blur-md">
+              <SelectContent className="border-input rounded-xl bg-popover backdrop-blur-md">
                 <SelectItem value="active" className="text-xs">{t("vendor_form.status_active")}</SelectItem>
                 <SelectItem value="inactive" className="text-xs">{t("vendor_form.status_inactive")}</SelectItem>
               </SelectContent>
             </Select>
-          </div>
+          </FormFieldGroup>
 
-          <DialogFooter className="pt-4 gap-2 border-t border-[#D6DED2] mt-2">
-            <Button variant="outline" type="button" onClick={() => setOpen(false)} className="rounded-xl border-[#D6DED2] text-xs h-9 hover:bg-[#F7F8F3]/50">
+          <DialogFooter className="pt-4 gap-2 border-t border-input mt-2">
+            <Button variant="outline" type="button" onClick={() => setOpen(false)} className="rounded-xl border-input text-xs h-9 hover:bg-muted/50">
               {t("action.cancel")}
             </Button>
-            <Button type="submit" disabled={isPending} className="bg-[#4F6F52] hover:bg-[#3D563F] text-white active:scale-95 shadow-[0_4px_14px_rgba(79,111,82,0.25)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 h-9 rounded-xl font-bold text-xs px-4 gap-2">
+            <Button type="submit" disabled={isPending} className="bg-primary hover:bg-primary/90 text-primary-foreground active:scale-95 btn-premium h-9 rounded-xl font-bold text-xs px-4 gap-2">
               {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
               {isPending ? t("vendor_form.saving") : t("vendor_form.save")}
             </Button>
@@ -202,18 +203,18 @@ export function VendorForm({
         router.refresh();
       }}
     >
-      <DialogContent className="sm:max-w-md rounded-2xl border border-[#D6DED2] p-0 overflow-hidden font-sans">
-        <div className="bg-gradient-to-r from-[#DDE8D8]/70 via-white/80 to-transparent p-6 border-b border-[#D6DED2]">
+      <DialogContent className="sm:max-w-md rounded-2xl border border-border p-0 overflow-hidden font-sans">
+        <div className="bg-gradient-to-r from-[#DDE8D8]/70 via-white/80 to-transparent p-6 border-b border-border">
           <DialogHeader>
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
                 <CheckCircle2 className="h-5 w-5" />
               </div>
               <div>
-                <DialogTitle className="text-lg font-black text-[#243028]">
+                <DialogTitle className="text-lg font-black text-foreground">
                   Akun Vendor Berhasil Dibuat
                 </DialogTitle>
-                <p className="text-xs text-[#66736A] mt-0.5">
+                <p className="text-xs text-muted-foreground mt-0.5">
                   Password hanya tampil satu kali. Salin sekarang.
                 </p>
               </div>
@@ -222,20 +223,20 @@ export function VendorForm({
         </div>
 
         <div className="p-6 space-y-4">
-          <div className="space-y-3 p-4 bg-[#F7F8F3] rounded-xl border border-[#D6DED2]">
+          <div className="space-y-3 p-4 bg-muted/30 rounded-xl border border-border">
             <div>
-              <p className="text-[10px] font-bold text-[#66736A] uppercase tracking-wider mb-1">
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">
                 Email Login
               </p>
-              <p className="font-mono text-sm font-semibold text-[#243028]">
+              <p className="font-mono text-sm font-semibold text-foreground">
                 {credential?.email}
               </p>
             </div>
-            <div className="border-t border-[#D6DED2]/50 pt-3">
-              <p className="text-[10px] font-bold text-[#66736A] uppercase tracking-wider mb-1 flex items-center gap-1">
+            <div className="border-t border-border/50 pt-3">
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1">
                 <KeyRound className="h-3 w-3" /> Password Sementara
               </p>
-              <p className="font-mono text-sm font-bold text-[#243028] tracking-wider">
+              <p className="font-mono text-sm font-bold text-foreground tracking-wider">
                 {credential?.tempPassword}
               </p>
             </div>
@@ -250,7 +251,7 @@ export function VendorForm({
 
           <Button
             onClick={handleCopy}
-            className="w-full bg-[#4F6F52] hover:bg-[#3D563F] text-white rounded-xl text-xs font-bold h-9 gap-2"
+            className="w-full bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl text-xs font-bold h-9 gap-2"
           >
             {copied ? (
               <>

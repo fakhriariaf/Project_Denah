@@ -99,11 +99,11 @@ export function TransactionsTab({
   const { t } = useI18n();
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       <div className="lg:col-span-2 space-y-6">
-        <Card className="bg-white border-[#D6DED2]">
+        <Card className="bg-card border-input">
           <CardHeader>
-            <CardTitle className="text-lg text-[#243028]">{t("finance.ledger_title")}</CardTitle>
+            <CardTitle className="text-lg text-foreground">{t("finance.ledger_title")}</CardTitle>
             <CardDescription className="text-xs">{t("finance.ledger_desc")}</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
@@ -124,12 +124,12 @@ export function TransactionsTab({
                   <TableRow>
                     <TableCell colSpan={7} className="py-12 text-center">
                       <div className="flex flex-col items-center gap-3">
-                        <div className="h-16 w-16 rounded-full bg-[#DDE8D8]/50 flex items-center justify-center mx-auto">
-                          <CircleDollarSign className="h-8 w-8 text-[#4F6F52]" />
+                        <div className="h-16 w-16 rounded-full bg-secondary/50 flex items-center justify-center mx-auto">
+                          <CircleDollarSign className="h-8 w-8 text-primary" />
                         </div>
                         <div>
-                          <p className="font-semibold text-[#243028] text-sm">{t("finance.ledger_empty")}</p>
-                          <p className="text-xs text-[#66736A] mt-1">{t("finance.ledger_empty_desc")}</p>
+                          <p className="font-semibold text-foreground text-sm">{t("finance.ledger_empty")}</p>
+                          <p className="text-xs text-muted-foreground mt-1">{t("finance.ledger_empty_desc")}</p>
                         </div>
                       </div>
                     </TableCell>
@@ -137,22 +137,22 @@ export function TransactionsTab({
                 ) : (
                   filteredTransactions.map((trx) => (
                     <TableRow key={trx.id}>
-                      <TableCell className="font-mono text-xs font-semibold text-[#243028]">
+                      <TableCell className="font-mono text-xs font-semibold text-foreground">
                         {trx.transactionNumber}
                       </TableCell>
-                      <TableCell className="font-mono text-xs text-[#66736A]">
-                        {trx.invoiceNumber || "—"}
+                      <TableCell className="font-mono text-xs text-muted-foreground">
+                        {trx.invoiceNumber || "â€”"}
                       </TableCell>
-                      <TableCell className="text-xs text-[#243028]">
+                      <TableCell className="text-xs text-foreground">
                         {trx.description}
                       </TableCell>
                       <TableCell className="text-xs">
                         <Badge
                           className={
                             trx.type === "income"
-                              ? "bg-[#DDE8D8] text-[#4F6F52]"
+                              ? "bg-secondary text-primary"
                               : trx.approvalStatus === "approved"
-                              ? "bg-[#DDE8D8] text-[#4F6F52]"
+                              ? "bg-secondary text-primary"
                               : trx.approvalStatus === "rejected" || trx.approvalStatus === "insufficient_balance"
                               ? "bg-rose-50 text-rose-700"
                               : "bg-amber-50 text-amber-700 border-amber-200"
@@ -169,13 +169,13 @@ export function TransactionsTab({
                             : "Keluar - Pending"}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-xs text-[#243028] font-medium">
-                        {trx.resolvedApproverName || "—"}
+                      <TableCell className="text-xs text-foreground font-medium">
+                        {trx.resolvedApproverName || "â€”"}
                       </TableCell>
-                      <TableCell className="text-xs text-[#66736A]">
+                      <TableCell className="text-xs text-muted-foreground">
                         {trx.accountName}
                       </TableCell>
-                      <TableCell className="text-right font-mono font-semibold tabular-nums text-xs text-[#243028]">
+                      <TableCell className="text-right font-mono font-semibold tabular-nums text-xs text-foreground">
                         Rp {trx.amount.toLocaleString("id-ID")}
                       </TableCell>
                     </TableRow>
@@ -189,10 +189,10 @@ export function TransactionsTab({
 
       {/* Right sidebar: Cash Request submit form & balances */}
       <div className="space-y-6">
-        <Card className="bg-white/70 backdrop-blur-md border border-[#D6DED2]/80 shadow-sage hover:shadow-sage-lg transition-premium rounded-3xl overflow-hidden">
+        <Card className="bg-white/70 backdrop-blur-md border border-border/80 shadow-sage hover:shadow-sage-lg transition-premium rounded-3xl overflow-hidden">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base font-bold text-[#243028]">{t("finance.balance_title")}</CardTitle>
-            <CardDescription className="text-xs text-[#66736A] font-medium">{t("finance.balance_desc")}</CardDescription>
+            <CardTitle className="text-base font-bold text-foreground">{t("finance.balance_title")}</CardTitle>
+            <CardDescription className="text-xs text-muted-foreground font-medium">{t("finance.balance_desc")}</CardDescription>
           </CardHeader>
           <CardContent className="p-4 pt-0 space-y-3 font-sans">
             {accounts.filter(a => a.status === "active").map(acc => {
@@ -200,17 +200,17 @@ export function TransactionsTab({
               return (
                 <div
                   key={acc.id}
-                  className="flex justify-between items-center p-3.5 bg-gradient-to-r from-white to-[#F7F8F3] border border-[#D6DED2] rounded-2xl hover:border-[#8FAF9A] hover:shadow-sage transition-premium duration-300 group"
+                  className="flex justify-between items-center p-3.5 bg-gradient-to-r from-white to-[#F7F8F3] border border-border rounded-2xl hover:border-primary/50 hover:shadow-sage transition-premium duration-300 group"
                 >
                   <div className="flex items-center gap-3">
                     <div className={`h-2 w-2 rounded-full ${acc.currentBalance > 0 ? "bg-[#8FAF9A]" : "bg-rose-400"} group-hover:scale-150 transition-premium`} />
                     <div>
-                      <p className="text-xs font-bold text-[#243028]">{acc.name}</p>
-                      <p className="text-[10px] text-[#66736A] font-mono uppercase tracking-wider mt-0.5">{acc.code}</p>
+                      <p className="text-xs font-bold text-foreground">{acc.name}</p>
+                      <p className="text-[10px] text-muted-foreground font-mono uppercase tracking-wider mt-0.5">{acc.code}</p>
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-0.5">
-                    <span className={`font-mono font-extrabold text-xs tabular-nums ${acc.currentBalance < 0 ? "text-rose-600" : "text-[#4F6F52]"}`}>
+                    <span className={`font-mono font-extrabold text-xs tabular-nums ${acc.currentBalance < 0 ? "text-rose-600" : "text-primary"}`}>
                       Rp {acc.currentBalance.toLocaleString("id-ID")}
                     </span>
                     {diff !== 0 && (
@@ -225,14 +225,14 @@ export function TransactionsTab({
           </CardContent>
         </Card>
 
-        <Card className="bg-white border-[#D6DED2] shadow-sage rounded-2xl overflow-hidden hover:shadow-sage-lg transition-premium">
-          <div className="bg-[#4F6F52] h-1 w-full" />
+        <Card className="bg-card border-input shadow-sage rounded-2xl overflow-hidden hover:shadow-sage-lg transition-premium">
+          <div className="bg-primary h-1 w-full" />
           <CardHeader className="pb-3">
-            <CardTitle className="text-base font-bold text-[#243028] flex items-center gap-2">
+            <CardTitle className="text-base font-bold text-foreground flex items-center gap-2">
               <TrendingDown className="h-4.5 w-4.5 text-[#D77A7A]" />
               {t("finance.expense_title")}
             </CardTitle>
-            <CardDescription className="text-xs text-[#66736A] font-medium">
+            <CardDescription className="text-xs text-muted-foreground font-medium">
               {t("finance.expense_desc")}
             </CardDescription>
           </CardHeader>
@@ -246,18 +246,18 @@ export function TransactionsTab({
             <form onSubmit={onCreateExpenseSubmit} className="space-y-4">
               {/* Project Selector field */}
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-[#243028] uppercase tracking-wider block">{t("finance.expense_lbl_project")}</label>
+                <label className="text-xs font-bold text-foreground uppercase tracking-wider block">{t("finance.expense_lbl_project")}</label>
                 <Select
                   value={expenseForm.projectId}
                   onValueChange={(val) => setExpenseForm(f => ({ ...f, projectId: val || "" }))}
                   items={projects.map(p => ({ label: p.name, value: p.id }))}
                 >
-                  <SelectTrigger className="bg-[#F7F8F3] border-[#D6DED2] rounded-xl focus:ring-[#4F6F52] font-semibold text-xs h-9.5 text-[#243028]">
+                  <SelectTrigger className="bg-muted/30 border-border rounded-xl focus:ring-ring font-semibold text-xs h-9.5 text-foreground">
                     <SelectValue placeholder={t("finance.expense_lbl_project")}>
                       {expenseForm.projectId ? projects.find(p => p.id === expenseForm.projectId)?.name : undefined}
                     </SelectValue>
                   </SelectTrigger>
-                  <SelectContent className="border-[#D6DED2] rounded-xl">
+                  <SelectContent className="border-border rounded-xl">
                     {projects.map(p => (
                       <SelectItem key={p.id} value={p.id} className="text-xs font-medium">{p.name}</SelectItem>
                     ))}
@@ -268,18 +268,18 @@ export function TransactionsTab({
               {/* Cash Account & Category Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-[#243028] uppercase tracking-wider block">{t("finance.expense_lbl_account")}</label>
+                  <label className="text-xs font-bold text-foreground uppercase tracking-wider block">{t("finance.expense_lbl_account")}</label>
                   <Select
                     value={expenseForm.accountId}
                     onValueChange={(val) => setExpenseForm(f => ({ ...f, accountId: val || "" }))}
                     items={accounts.map(a => ({ label: a.name, value: a.id }))}
                   >
-                    <SelectTrigger className="bg-[#F7F8F3] border-[#D6DED2] rounded-xl focus:ring-[#4F6F52] font-semibold text-xs h-9.5 text-[#243028]">
+                    <SelectTrigger className="bg-muted/30 border-border rounded-xl focus:ring-ring font-semibold text-xs h-9.5 text-foreground">
                       <SelectValue placeholder={t("finance.expense_lbl_account")}>
                         {expenseForm.accountId ? accounts.find(a => a.id === expenseForm.accountId)?.name : undefined}
                       </SelectValue>
                     </SelectTrigger>
-                    <SelectContent className="border-[#D6DED2] rounded-xl">
+                    <SelectContent className="border-border rounded-xl">
                       {accounts.map(a => (
                         <SelectItem key={a.id} value={a.id} className="text-xs font-medium">{a.name}</SelectItem>
                       ))}
@@ -288,18 +288,18 @@ export function TransactionsTab({
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-[#243028] uppercase tracking-wider block">{t("finance.expense_lbl_category")}</label>
+                  <label className="text-xs font-bold text-foreground uppercase tracking-wider block">{t("finance.expense_lbl_category")}</label>
                   <Select
                     value={expenseForm.categoryId}
                     onValueChange={(val) => setExpenseForm(f => ({ ...f, categoryId: val || "" }))}
                     items={categories.filter(c => c.type === "expense").map(c => ({ label: c.name, value: c.id }))}
                   >
-                    <SelectTrigger className="bg-[#F7F8F3] border-[#D6DED2] rounded-xl focus:ring-[#4F6F52] font-semibold text-xs h-9.5 text-[#243028]">
+                    <SelectTrigger className="bg-muted/30 border-border rounded-xl focus:ring-ring font-semibold text-xs h-9.5 text-foreground">
                       <SelectValue placeholder={t("finance.expense_lbl_category")}>
                         {expenseForm.categoryId ? categories.find(c => c.id === expenseForm.categoryId)?.name : undefined}
                       </SelectValue>
                     </SelectTrigger>
-                    <SelectContent className="border-[#D6DED2] rounded-xl">
+                    <SelectContent className="border-border rounded-xl">
                       {categories.filter(c => c.type === "expense").map(c => (
                         <SelectItem key={c.id} value={c.id} className="text-xs font-medium">{c.name}</SelectItem>
                       ))}
@@ -311,19 +311,19 @@ export function TransactionsTab({
               {/* Amount & Method Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-[#243028] uppercase tracking-wider block">{t("finance.expense_lbl_amount")}</label>
+                  <label className="text-xs font-bold text-foreground uppercase tracking-wider block">{t("finance.expense_lbl_amount")}</label>
                   <Input
                     type="number"
                     placeholder="Rp 0"
                     value={expenseForm.amount}
                     onChange={(e) => setExpenseForm(f => ({ ...f, amount: e.target.value }))}
-                    className="bg-[#F7F8F3] border-[#D6DED2] rounded-xl focus-visible:ring-[#4F6F52] font-mono font-bold text-xs h-9.5 text-[#243028]"
+                    className="bg-muted/30 border-border rounded-xl focus-visible:ring-ring font-mono font-bold text-xs h-9.5 text-foreground"
                     required
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-[#243028] uppercase tracking-wider block">{t("finance.expense_lbl_method")}</label>
+                  <label className="text-xs font-bold text-foreground uppercase tracking-wider block">{t("finance.expense_lbl_method")}</label>
                   <Select
                     value={expenseForm.paymentMethod}
                     onValueChange={(val: any) => setExpenseForm(f => ({ ...f, paymentMethod: val }))}
@@ -333,14 +333,14 @@ export function TransactionsTab({
                       { label: t("finance.payment_method_giro"), value: "giro" },
                     ]}
                   >
-                    <SelectTrigger className="bg-[#F7F8F3] border-[#D6DED2] rounded-xl focus:ring-[#4F6F52] font-semibold text-xs h-9.5 text-[#243028]">
+                    <SelectTrigger className="bg-muted/30 border-border rounded-xl focus:ring-ring font-semibold text-xs h-9.5 text-foreground">
                       <SelectValue placeholder={t("finance.expense_lbl_method")}>
                         {expenseForm.paymentMethod === "transfer" && t("finance.payment_method_transfer")}
                         {expenseForm.paymentMethod === "cash" && t("finance.payment_method_cash")}
                         {expenseForm.paymentMethod === "giro" && t("finance.payment_method_giro")}
                       </SelectValue>
                     </SelectTrigger>
-                    <SelectContent className="border-[#D6DED2] rounded-xl">
+                    <SelectContent className="border-border rounded-xl">
                       <SelectItem value="transfer" className="text-xs font-medium">{t("finance.payment_method_transfer")}</SelectItem>
                       <SelectItem value="cash" className="text-xs font-medium">{t("finance.payment_method_cash")}</SelectItem>
                       <SelectItem value="giro" className="text-xs font-medium">{t("finance.payment_method_giro")}</SelectItem>
@@ -351,9 +351,9 @@ export function TransactionsTab({
 
               {/* Dynamic Readable Amount Live Preview Card */}
               {expenseForm.amount && !isNaN(Number(expenseForm.amount)) && (
-                <div className="p-3 bg-[#DDE8D8]/50 border border-[#8FAF9A]/30 rounded-xl space-y-0.5 animate-in slide-in-from-top-1 duration-200">
-                  <span className="text-[9px] font-bold text-[#66736A] uppercase tracking-wider block">{t("finance.invoice_format_rupiah")}</span>
-                  <span className="font-mono font-extrabold text-sm text-[#4F6F52] tracking-tight tabular-nums">
+                <div className="p-3 bg-secondary/50 border border-primary/30 rounded-xl space-y-0.5 animate-in slide-in-from-top-1 duration-200">
+                  <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider block">{t("finance.invoice_format_rupiah")}</span>
+                  <span className="font-mono font-extrabold text-sm text-primary tracking-tight tabular-nums">
                     Rp {Number(expenseForm.amount).toLocaleString("id-ID")}
                   </span>
                 </div>
@@ -361,19 +361,19 @@ export function TransactionsTab({
 
               {/* Description Input */}
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-[#243028] uppercase tracking-wider block">{t("finance.expense_lbl_notes")}</label>
+                <label className="text-xs font-bold text-foreground uppercase tracking-wider block">{t("finance.expense_lbl_notes")}</label>
                 <Input
                   placeholder={t("finance.expense_notes_ph")}
                   value={expenseForm.description}
                   onChange={(e) => setExpenseForm(f => ({ ...f, description: e.target.value }))}
-                  className="bg-[#F7F8F3] border-[#D6DED2] rounded-xl focus-visible:ring-[#4F6F52] font-medium text-xs h-9.5 text-[#243028]"
+                  className="bg-muted/30 border-border rounded-xl focus-visible:ring-ring font-medium text-xs h-9.5 text-foreground"
                   required
                 />
               </div>
 
               <Button
                 type="submit"
-                className="w-full bg-[#4F6F52] hover:bg-[#3D563F] text-white text-xs font-bold h-10 rounded-xl shadow-sage hover:shadow-sage-lg hover:-translate-y-0.5 transition-premium"
+                className="w-full bg-primary hover:bg-primary/90 text-white text-xs font-bold h-10 rounded-xl shadow-sage hover:shadow-sage-lg hover:-translate-y-0.5 transition-premium"
                 disabled={isSubmitting}
               >
                 {isSubmitting ? t("finance.submitting") : t("finance.expense_btn_submit")}

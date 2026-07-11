@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useState, useEffect } from "react";
 import { 
@@ -196,7 +196,7 @@ export function CustomerComplaintResolveDialog({
                 value={resolutionStatus} 
                 onValueChange={(val: any) => setResolutionStatus(val)}
               >
-                <SelectTrigger className="w-full! h-10 border-[#D6DED2] bg-white rounded-xl focus:ring-[#4F6F52] focus:border-[#4F6F52] text-sm text-[#243028]">
+                <SelectTrigger className="w-full! h-10 border-[#D6DED2] bg-white rounded-xl focus:ring-ring focus:border-[#4F6F52] text-sm text-[#243028]">
                   <SelectValue placeholder="Pilih status">
                     {resolutionStatus === "resolved" && "Selesai (Resolved)"}
                     {resolutionStatus === "waiting_customer_confirmation" && "Menunggu Konfirmasi Konsumen"}
@@ -240,7 +240,7 @@ export function CustomerComplaintResolveDialog({
                 value={repairAction} 
                 onValueChange={(val: any) => setRepairAction(val)}
               >
-                <SelectTrigger className="w-full! h-10 border-[#D6DED2] bg-white rounded-xl focus:ring-[#4F6F52] focus:border-[#4F6F52] text-sm text-[#243028]">
+                <SelectTrigger className="w-full! h-10 border-[#D6DED2] bg-white rounded-xl focus:ring-ring focus:border-[#4F6F52] text-sm text-[#243028]">
                   <SelectValue placeholder="Pilih tindakan">
                     {repairAction === "no_physical_repair" && "Tidak Ada Perbaikan Fisik"}
                     {repairAction === "minor_repair" && "Perbaikan Ringan (Minor)"}
@@ -294,7 +294,7 @@ export function CustomerComplaintResolveDialog({
                 placeholder="Tuliskan catatan teknis detail, temuan tim di unit, investigasi plafon/dinding, atau instruksi internal..."
                 value={developerNote}
                 onChange={(e) => setDeveloperNote(e.target.value)}
-                className="min-h-[85px] border-[#D6DED2] rounded-xl focus:ring-[#4F6F52] focus:border-[#4F6F52] text-sm"
+                className="min-h-[85px] border-[#D6DED2] rounded-xl focus:ring-ring focus:border-[#4F6F52] text-sm"
               />
             </div>
 
@@ -305,7 +305,7 @@ export function CustomerComplaintResolveDialog({
                 placeholder="Tuliskan pesan penjelasan resmi yang akan ditampilkan ke konsumen/user terkait status perbaikan..."
                 value={customerMessage}
                 onChange={(e) => setCustomerMessage(e.target.value)}
-                className="min-h-[60px] border-[#D6DED2] rounded-xl focus:ring-[#4F6F52] focus:border-[#4F6F52] text-sm"
+                className="min-h-[60px] border-[#D6DED2] rounded-xl focus:ring-ring focus:border-[#4F6F52] text-sm"
               />
             </div>
           </div>

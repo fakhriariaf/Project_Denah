@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+﻿import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Public Siteplan - Denah Property",
@@ -11,9 +11,9 @@ export default function PublicLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen flex flex-col bg-[#F7F8F3] dark:bg-background text-[#243028] dark:text-foreground">
+    <div className="min-h-screen flex flex-col bg-[#F7F8F3] text-[#243028]">
       {/* Header */}
-      <header className="sticky top-0 z-50 w-full border-b border-[#D6DED2] dark:border-border bg-white/80 dark:bg-card/80 backdrop-blur-md">
+      <header className="sticky top-0 z-50 w-full border-b border-[#D6DED2] bg-white/80 backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-[#DDE8D8] flex items-center justify-center text-[#4F6F52]">
@@ -50,8 +50,8 @@ export default function PublicLayout({
       </main>
 
       {/* Footer */}
-      <footer className="w-full border-t border-[#D6DED2] dark:border-border bg-white dark:bg-card py-6 mt-auto">
-        <div className="max-w-7xl mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-[#66736A] dark:text-muted-foreground">
+      <footer className="w-full border-t border-[#D6DED2] bg-white py-6 mt-auto">
+        <div className="max-w-7xl mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-[#66736A]">
           <div>
             &copy; {new Date().getFullYear()} Denah Property. All rights reserved.
           </div>

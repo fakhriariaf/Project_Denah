@@ -163,33 +163,33 @@ export default function KprDetailViewSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="w-full sm:max-w-4xl bg-[#F7F8F3] border-l border-[#D6DED2] p-0 overflow-hidden flex flex-col h-full z-[100] sm:rounded-l-3xl shadow-[0_8px_30px_rgba(79,111,82,0.18)]"
+        className="w-full sm:max-w-4xl bg-muted/30 border-l border-border p-0 overflow-hidden flex flex-col h-full z-[100] sm:rounded-l-3xl shadow-[0_8px_30px_rgba(79,111,82,0.18)]"
       >
         {/* Sleek Header */}
-        <div className="bg-white p-6 border-b border-[#D6DED2] shrink-0 shadow-sm rounded-tl-3xl">
+        <div className="bg-card p-6 border-b border-border shrink-0 shadow-sm rounded-tl-3xl">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-start gap-4">
-              <div className="h-12 w-12 rounded-2xl bg-[#4F6F52] text-white flex items-center justify-center shadow-[0_4px_12px_rgba(79,111,82,0.3)] shrink-0">
+              <div className="h-12 w-12 rounded-2xl bg-primary text-white flex items-center justify-center shadow-[0_4px_12px_rgba(79,111,82,0.3)] shrink-0">
                 <ClipboardList className="h-6 w-6 text-white" />
               </div>
               <div className="min-w-0 space-y-1">
-                <span className="text-[9px] font-black text-[#8FAF9A] uppercase tracking-widest block">
+                <span className="text-[9px] font-black text-primary/70 uppercase tracking-widest block">
                   Detail Lengkap Proses KPR
                 </span>
-                <SheetTitle className="text-lg font-black text-[#243028] tracking-tight truncate">
+                <SheetTitle className="text-lg font-black text-foreground tracking-tight truncate">
                   {kpr.customerName}
                 </SheetTitle>
                 <div className="flex flex-wrap items-center gap-2 mt-0.5">
-                  <span className="text-xs text-[#66736A] font-semibold">
+                  <span className="text-xs text-muted-foreground font-semibold">
                     Unit:{" "}
-                    <span className="font-mono font-bold text-[#4F6F52] bg-[#DDE8D8] px-2 py-0.5 rounded border border-[#8FAF9A]/30">
+                    <span className="font-mono font-bold text-primary bg-secondary px-2 py-0.5 rounded border border-primary/30">
                       {kpr.unitCode}
                     </span>
                   </span>
-                  <span className="text-[10px] text-[#A8B0AA]">•</span>
-                  <span className="text-xs text-[#66736A] font-bold">{kpr.projectName}</span>
+                  <span className="text-[10px] text-muted-foreground/70">•</span>
+                  <span className="text-xs text-muted-foreground font-bold">{kpr.projectName}</span>
                   {kpr.isReadyStock && (
-                    <Badge className="bg-[#4F6F52]/10 text-[#4F6F52] hover:bg-[#4F6F52]/20 border border-[#8FAF9A]/30 font-extrabold text-[9px] px-2 py-0.5 rounded-full shrink-0">
+                    <Badge className="bg-primary/10 text-primary hover:bg-primary/20 border border-primary/30 font-extrabold text-[9px] px-2 py-0.5 rounded-full shrink-0">
                       🏡 Ready Stock
                     </Badge>
                   )}
@@ -203,13 +203,13 @@ export default function KprDetailViewSheet({
                 {getKprStatusBadge(kpr.status)}
                 {getBiCheckStatusBadge(kpr.biCheckStatus)}
               </div>
-              <span className="text-[9px] font-mono text-[#66736A]/50">
+              <span className="text-[9px] font-mono text-muted-foreground/50">
                 Booking Ref: #{kpr.bookingNumber}
               </span>
             </div>
           </div>
           
-          <div className="mt-4 pt-4 border-t border-[#D6DED2]/50 overflow-hidden">
+          <div className="mt-4 pt-4 border-t border-border/50 overflow-hidden">
             <KprMilestoneTracker 
               data={{
                 unitStatus: kpr.unitStatus,
@@ -226,25 +226,25 @@ export default function KprDetailViewSheet({
         {/* Scrollable Tabs Body */}
         <div className="flex-1 overflow-y-auto">
           <Tabs defaultValue="overview" className="w-full flex flex-col h-full">
-            <div className="bg-white border-b border-[#D6DED2] px-6 py-2 shrink-0">
-              <TabsList className="bg-[#F7F8F3] border border-[#D6DED2]/60 p-1 rounded-xl flex gap-1 h-9 max-w-fit">
+            <div className="bg-card border-b border-border px-6 py-2 shrink-0">
+              <TabsList className="bg-muted/30 border border-border/60 p-1 rounded-xl flex gap-1 h-9 max-w-fit">
                 <TabsTrigger
                   value="overview"
-                  className="rounded-lg px-4 py-1.5 text-xs font-bold gap-1.5 data-[state=active]:bg-white data-[state=active]:text-[#4F6F52] data-[state=active]:shadow-sm transition-all"
+                  className="rounded-lg px-4 py-1.5 text-xs font-bold gap-1.5 data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-sm transition-all"
                 >
                   <Bookmark className="h-3.5 w-3.5" />
                   Ringkasan &amp; Unit
                 </TabsTrigger>
                 <TabsTrigger
                   value="submissions"
-                  className="rounded-lg px-4 py-1.5 text-xs font-bold gap-1.5 data-[state=active]:bg-white data-[state=active]:text-[#4F6F52] data-[state=active]:shadow-sm transition-all"
+                  className="rounded-lg px-4 py-1.5 text-xs font-bold gap-1.5 data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-sm transition-all"
                 >
                   <Building className="h-3.5 w-3.5" />
                   Pengajuan Bank ({submissions.length})
                 </TabsTrigger>
                 <TabsTrigger
                   value="documents"
-                  className="rounded-lg px-4 py-1.5 text-xs font-bold gap-1.5 data-[state=active]:bg-white data-[state=active]:text-[#4F6F52] data-[state=active]:shadow-sm transition-all"
+                  className="rounded-lg px-4 py-1.5 text-xs font-bold gap-1.5 data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-sm transition-all"
                 >
                   <FileText className="h-3.5 w-3.5" />
                   Berkas Konsumen ({documents.length})
@@ -255,33 +255,33 @@ export default function KprDetailViewSheet({
             {/* TAB CONTENT 1: OVERVIEW */}
             <TabsContent value="overview" className="p-6 space-y-6 focus-visible:outline-none focus-visible:ring-0 mt-0">
               {/* 1. Customer Personal Profile Card */}
-              <div className="bg-white rounded-3xl p-5 border border-[#D6DED2] shadow-sm space-y-4">
-                <h4 className="text-xs font-black text-[#243028] uppercase tracking-wider flex items-center gap-2 border-b border-[#D6DED2]/40 pb-3">
-                  <User className="h-4.5 w-4.5 text-[#4F6F52]" />
+              <div className="bg-card rounded-3xl p-5 border border-border shadow-sm space-y-4">
+                <h4 className="text-xs font-black text-foreground uppercase tracking-wider flex items-center gap-2 border-b border-border/40 pb-3">
+                  <User className="h-4.5 w-4.5 text-primary" />
                   Profil &amp; Kontak Konsumen
                 </h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <span className="text-[10px] font-bold text-[#66736A] uppercase tracking-wider block">Nama Lengkap</span>
-                    <p className="text-sm font-extrabold text-[#243028]">{kpr.customerName}</p>
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Nama Lengkap</span>
+                    <p className="text-sm font-extrabold text-foreground">{kpr.customerName}</p>
                   </div>
                   <div className="space-y-1.5">
-                    <span className="text-[10px] font-bold text-[#66736A] uppercase tracking-wider block">Nomor Telepon</span>
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Nomor Telepon</span>
                     <a
                       href={`https://wa.me/${kpr.customerPhone.replace(/[^0-9]/g, "")}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-xs font-bold text-[#4F6F52] hover:underline flex items-center gap-1.5 font-mono"
+                      className="text-xs font-bold text-primary hover:underline flex items-center gap-1.5 font-mono"
                     >
                       <Phone className="h-3.5 w-3.5" /> {kpr.customerPhone} (WhatsApp)
                     </a>
                   </div>
                   <div className="space-y-1.5">
-                    <span className="text-[10px] font-bold text-[#66736A] uppercase tracking-wider block">PIC Pemasaran</span>
-                    <p className="text-xs font-semibold text-[#243028]">{kpr.marketingName || "—"}</p>
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">PIC Pemasaran</span>
+                    <p className="text-xs font-semibold text-foreground">{kpr.marketingName || "—"}</p>
                   </div>
                   <div className="space-y-1.5">
-                    <span className="text-[10px] font-bold text-[#66736A] uppercase tracking-wider block">Dokumen Checklist KPR</span>
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Dokumen Checklist KPR</span>
                     <Badge variant="outline" className={`font-mono text-[9px] px-2 py-0.5 rounded font-black ${
                       kpr.documentStatus === "complete" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200"
                     }`}>
@@ -289,7 +289,7 @@ export default function KprDetailViewSheet({
                     </Badge>
                   </div>
                   <div className="space-y-1.5">
-                    <span className="text-[10px] font-bold text-[#66736A] uppercase tracking-wider block">Status Verifikasi Berkas</span>
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Status Verifikasi Berkas</span>
                     {(() => {
                       const unverified = documents.some(d => d.status !== "verified");
                       return unverified ? (
@@ -311,39 +311,39 @@ export default function KprDetailViewSheet({
               </div>
 
               {/* 2. Unit Specs & Price Information */}
-              <div className="bg-white rounded-3xl p-5 border border-[#D6DED2] shadow-sm space-y-4">
-                <h4 className="text-xs font-black text-[#243028] uppercase tracking-wider flex items-center gap-2 border-b border-[#D6DED2]/40 pb-3">
-                  <Building2 className="h-4.5 w-4.5 text-[#4F6F52]" />
+              <div className="bg-card rounded-3xl p-5 border border-border shadow-sm space-y-4">
+                <h4 className="text-xs font-black text-foreground uppercase tracking-wider flex items-center gap-2 border-b border-border/40 pb-3">
+                  <Building2 className="h-4.5 w-4.5 text-primary" />
                   Spesifikasi Fisik &amp; Finansial Unit
                 </h4>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="bg-[#F7F8F3]/60 p-3 rounded-2xl border border-[#D6DED2]/50">
-                    <span className="text-[9px] text-[#66736A] font-bold uppercase tracking-wider block mb-1">Luas Tanah</span>
+                  <div className="bg-muted/30/60 p-3 rounded-2xl border border-border/50">
+                    <span className="text-[9px] text-muted-foreground font-bold uppercase tracking-wider block mb-1">Luas Tanah</span>
                     <p className="font-mono font-extrabold text-xs">{kpr.landArea || 84} m²</p>
                   </div>
-                  <div className="bg-[#F7F8F3]/60 p-3 rounded-2xl border border-[#D6DED2]/50">
-                    <span className="text-[9px] text-[#66736A] font-bold uppercase tracking-wider block mb-1">Luas Bangunan</span>
+                  <div className="bg-muted/30/60 p-3 rounded-2xl border border-border/50">
+                    <span className="text-[9px] text-muted-foreground font-bold uppercase tracking-wider block mb-1">Luas Bangunan</span>
                     <p className="font-mono font-extrabold text-xs">{kpr.buildingArea || 50} m²</p>
                   </div>
-                  <div className="bg-[#F7F8F3]/60 p-3 rounded-2xl border border-[#D6DED2]/50">
-                    <span className="text-[9px] text-[#66736A] font-bold uppercase tracking-wider block mb-1">Tipe Desain</span>
+                  <div className="bg-muted/30/60 p-3 rounded-2xl border border-border/50">
+                    <span className="text-[9px] text-muted-foreground font-bold uppercase tracking-wider block mb-1">Tipe Desain</span>
                     <p className="font-extrabold text-xs">{kpr.typeName || "Tipe Standar"}</p>
                   </div>
-                  <div className="bg-[#F7F8F3]/60 p-3 rounded-2xl border border-[#D6DED2]/50">
-                    <span className="text-[9px] text-[#66736A] font-bold uppercase tracking-wider block mb-1">Jalur Peta</span>
+                  <div className="bg-muted/30/60 p-3 rounded-2xl border border-border/50">
+                    <span className="text-[9px] text-muted-foreground font-bold uppercase tracking-wider block mb-1">Jalur Peta</span>
                     <p className="font-extrabold text-xs uppercase">{kpr.cluster || "Blok A"}</p>
                   </div>
 
-                  <div className="col-span-2 bg-[#F7F8F3] p-3 rounded-2xl border border-[#D6DED2] flex items-center justify-between">
+                  <div className="col-span-2 bg-muted/30 p-3 rounded-2xl border border-border flex items-center justify-between">
                     <div>
-                      <span className="text-[9px] text-[#66736A] font-bold uppercase tracking-wider block mb-0.5">Total Harga Unit</span>
-                      <p className="text-sm font-extrabold text-[#4F6F52]">{formatCurrency(kpr.price || 420000000)}</p>
+                      <span className="text-[9px] text-muted-foreground font-bold uppercase tracking-wider block mb-0.5">Total Harga Unit</span>
+                      <p className="text-sm font-extrabold text-primary">{formatCurrency(kpr.price || 420000000)}</p>
                     </div>
                   </div>
-                  <div className="col-span-2 bg-[#4F6F52]/5 p-3 rounded-2xl border border-[#4F6F52]/20 flex items-center justify-between">
+                  <div className="col-span-2 bg-primary/5 p-3 rounded-2xl border border-[#4F6F52]/20 flex items-center justify-between">
                     <div>
-                      <span className="text-[9px] text-[#4F6F52] font-black uppercase tracking-wider block mb-0.5">Plafond KPR Disetujui</span>
-                      <p className="text-sm font-black text-[#4F6F52]">
+                      <span className="text-[9px] text-primary font-black uppercase tracking-wider block mb-0.5">Plafond KPR Disetujui</span>
+                      <p className="text-sm font-black text-primary">
                         {(() => {
                           const approvedSub = submissions.find(s => s.status === "approved");
                           return approvedSub?.plafondAmount ? formatCurrency(approvedSub.plafondAmount) : "Belum Disetujui Bank";
@@ -355,9 +355,9 @@ export default function KprDetailViewSheet({
               </div>
 
               {/* 3. Bank Verification Notes History */}
-              <div className="bg-white rounded-3xl p-5 border border-[#D6DED2] shadow-sm space-y-4">
-                <h4 className="text-xs font-black text-[#243028] uppercase tracking-wider flex items-center gap-2 border-b border-[#D6DED2]/40 pb-3">
-                  <ClipboardList className="h-4.5 w-4.5 text-[#4F6F52]" />
+              <div className="bg-card rounded-3xl p-5 border border-border shadow-sm space-y-4">
+                <h4 className="text-xs font-black text-foreground uppercase tracking-wider flex items-center gap-2 border-b border-border/40 pb-3">
+                  <ClipboardList className="h-4.5 w-4.5 text-primary" />
                   Catatan Progres Tahapan Analisis Bank
                 </h4>
                 <div className="space-y-3.5">
@@ -372,12 +372,12 @@ export default function KprDetailViewSheet({
                     const note = parsedNotes[step.key];
                     return (
                       <div key={step.key} className="flex gap-4 text-xs">
-                        <div className="w-40 shrink-0 font-extrabold text-[#66736A] flex items-center gap-1.5">
-                          <span className={`h-2 w-2 rounded-full shrink-0 ${kpr.status === step.key ? "bg-[#4F6F52] animate-pulse" : "bg-[#A8B0AA]"}`} />
+                        <div className="w-40 shrink-0 font-extrabold text-muted-foreground flex items-center gap-1.5">
+                          <span className={`h-2 w-2 rounded-full shrink-0 ${kpr.status === step.key ? "bg-primary animate-pulse" : "bg-[#A8B0AA]"}`} />
                           <span>{step.label}</span>
                         </div>
-                        <div className="flex-1 bg-[#F7F8F3]/50 p-2.5 rounded-xl border border-[#D6DED2]/30 min-h-[38px] flex items-center">
-                          <p className={`leading-relaxed ${note ? "text-[#243028] font-bold" : "text-[#66736A]/40 font-semibold"}`}>
+                        <div className="flex-1 bg-muted/30/50 p-2.5 rounded-xl border border-border/30 min-h-[38px] flex items-center">
+                          <p className={`leading-relaxed ${note ? "text-foreground font-bold" : "text-muted-foreground/40 font-semibold"}`}>
                             {note || "Tidak ada catatan progres khusus."}
                           </p>
                         </div>
@@ -394,7 +394,7 @@ export default function KprDetailViewSheet({
                     ? "border-emerald-200 bg-emerald-50/60"
                     : "border-orange-200 bg-orange-50/60"
                 }`}>
-                  <h4 className="text-xs font-black text-[#243028] uppercase tracking-wider flex items-center gap-2 border-b border-[#D6DED2]/40 pb-3">
+                  <h4 className="text-xs font-black text-foreground uppercase tracking-wider flex items-center gap-2 border-b border-border/40 pb-3">
                     {kpr.unitStatus === "construction_done" ? (
                       <HardHat className={`h-4 w-4 text-emerald-600`} />
                     ) : (
@@ -406,7 +406,7 @@ export default function KprDetailViewSheet({
                   </h4>
 
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-[#66736A]">Progress Konstruksi</span>
+                    <span className="text-xs font-semibold text-muted-foreground">Progress Konstruksi</span>
                     <span className={`text-lg font-black font-mono ${
                       kpr.unitStatus === "construction_done" ? "text-emerald-700" : "text-orange-700"
                     }`}>
@@ -465,20 +465,20 @@ export default function KprDetailViewSheet({
 
             {/* TAB CONTENT 2: SUBMISSIONS */}
             <TabsContent value="submissions" className="p-6 focus-visible:outline-none focus-visible:ring-0 mt-0">
-              <div className="bg-white rounded-3xl p-5 border border-[#D6DED2] shadow-sm space-y-4">
-                <div className="flex justify-between items-center border-b border-[#D6DED2]/40 pb-3">
-                  <h4 className="text-xs font-black text-[#243028] uppercase tracking-wider flex items-center gap-2">
-                    <Building2 className="h-4.5 w-4.5 text-[#4F6F52]" />
+              <div className="bg-card rounded-3xl p-5 border border-border shadow-sm space-y-4">
+                <div className="flex justify-between items-center border-b border-border/40 pb-3">
+                  <h4 className="text-xs font-black text-foreground uppercase tracking-wider flex items-center gap-2">
+                    <Building2 className="h-4.5 w-4.5 text-primary" />
                     Status Pengajuan Bank Rekanan
                   </h4>
-                  <Badge variant="outline" className="font-mono bg-[#F7F8F3] text-[#243028] border border-[#D6DED2] text-[10px] px-2 py-0.5 rounded-md">
+                  <Badge variant="outline" className="font-mono bg-muted/30 text-foreground border border-border text-[10px] px-2 py-0.5 rounded-md">
                     Total: {submissions.length} Pengajuan
                   </Badge>
                 </div>
 
                 {submissions.length === 0 ? (
-                  <div className="py-16 text-center text-[#66736A]/60 flex flex-col justify-center items-center gap-2">
-                    <Building2 className="h-10 w-10 text-[#A8B0AA] opacity-50 animate-pulse" />
+                  <div className="py-16 text-center text-muted-foreground/60 flex flex-col justify-center items-center gap-2">
+                    <Building2 className="h-10 w-10 text-muted-foreground/70 opacity-50 animate-pulse" />
                     <p className="font-bold text-xs">Belum Ada Pengajuan ke Bank Rekanan</p>
                     <p className="text-[10px] leading-relaxed max-w-[280px]">
                       Berkas KPR belum pernah diajukan ke bank rekanan manapun di database saat ini.
@@ -489,15 +489,15 @@ export default function KprDetailViewSheet({
                     {submissions.map((sub) => {
                       const bp = bankPartners.find(b => b.id === sub.bankPartnerId);
                       return (
-                        <div key={sub.id} className="p-4 bg-[#F7F8F3]/60 border border-[#D6DED2] rounded-2xl flex flex-col sm:flex-row justify-between gap-4 transition-all hover:bg-[#F7F8F3] hover:shadow-sm">
+                        <div key={sub.id} className="p-4 bg-muted/30/60 border border-border rounded-2xl flex flex-col sm:flex-row justify-between gap-4 transition-all hover:bg-muted/30 hover:shadow-sm">
                           <div className="space-y-2">
                             <div className="flex items-center gap-2">
-                              <span className="h-8 w-8 rounded-xl bg-white border border-[#D6DED2] text-[#4F6F52] flex items-center justify-center shrink-0">
+                              <span className="h-8 w-8 rounded-xl bg-card border border-border text-primary flex items-center justify-center shrink-0">
                                 🏦
                               </span>
                               <div>
-                                <h5 className="font-extrabold text-xs text-[#243028]">{bp?.name || "Bank Rekanan"}</h5>
-                                <p className="text-[9px] text-[#66736A] font-bold mt-0.5 flex items-center gap-1 font-mono">
+                                <h5 className="font-extrabold text-xs text-foreground">{bp?.name || "Bank Rekanan"}</h5>
+                                <p className="text-[9px] text-muted-foreground font-bold mt-0.5 flex items-center gap-1 font-mono">
                                   <Calendar className="h-3 w-3" /> Tanggal Pengajuan: {new Date(sub.submissionDate).toLocaleDateString("id-ID")}
                                 </p>
                               </div>
@@ -505,14 +505,14 @@ export default function KprDetailViewSheet({
 
                             <div className="grid grid-cols-2 gap-4 pt-1">
                               <div>
-                                <span className="text-[8px] text-[#66736A] font-bold uppercase block">Plafond</span>
-                                <span className="font-mono text-xs font-extrabold text-[#243028]">
+                                <span className="text-[8px] text-muted-foreground font-bold uppercase block">Plafond</span>
+                                <span className="font-mono text-xs font-extrabold text-foreground">
                                   {sub.plafondAmount ? formatCurrency(sub.plafondAmount) : "—"}
                                 </span>
                               </div>
                               <div>
-                                <span className="text-[8px] text-[#66736A] font-bold uppercase block">Tenor</span>
-                                <span className="font-mono text-xs font-extrabold text-[#243028]">
+                                <span className="text-[8px] text-muted-foreground font-bold uppercase block">Tenor</span>
+                                <span className="font-mono text-xs font-extrabold text-foreground">
                                   {sub.tenorYear ? `${sub.tenorYear} Tahun` : "—"}
                                 </span>
                               </div>
@@ -532,20 +532,20 @@ export default function KprDetailViewSheet({
 
             {/* TAB CONTENT 3: DOCUMENTS */}
             <TabsContent value="documents" className="p-6 focus-visible:outline-none focus-visible:ring-0 mt-0">
-              <div className="bg-white rounded-3xl p-5 border border-[#D6DED2] shadow-sm space-y-4">
-                <div className="flex justify-between items-center border-b border-[#D6DED2]/40 pb-3">
-                  <h4 className="text-xs font-black text-[#243028] uppercase tracking-wider flex items-center gap-2">
-                    <FileText className="h-4.5 w-4.5 text-[#4F6F52]" />
+              <div className="bg-card rounded-3xl p-5 border border-border shadow-sm space-y-4">
+                <div className="flex justify-between items-center border-b border-border/40 pb-3">
+                  <h4 className="text-xs font-black text-foreground uppercase tracking-wider flex items-center gap-2">
+                    <FileText className="h-4.5 w-4.5 text-primary" />
                     Berkas Administrasi Konsumen
                   </h4>
-                  <Badge variant="outline" className="font-mono bg-[#F7F8F3] text-[#243028] border border-[#D6DED2] text-[10px] px-2 py-0.5 rounded-md">
+                  <Badge variant="outline" className="font-mono bg-muted/30 text-foreground border border-border text-[10px] px-2 py-0.5 rounded-md">
                     Total: {documents.length} Berkas
                   </Badge>
                 </div>
 
                 {documents.length === 0 ? (
-                  <div className="py-16 text-center text-[#66736A]/60 flex flex-col justify-center items-center gap-2">
-                    <FileText className="h-10 w-10 text-[#A8B0AA] opacity-50 animate-pulse" />
+                  <div className="py-16 text-center text-muted-foreground/60 flex flex-col justify-center items-center gap-2">
+                    <FileText className="h-10 w-10 text-muted-foreground/70 opacity-50 animate-pulse" />
                     <p className="font-bold text-xs">Belum Ada Dokumen Terunggah</p>
                     <p className="text-[10px] leading-relaxed max-w-[280px]">
                       Konsumen belum mengunggah berkas-berkas persyaratan seperti KTP, NPWP, Slip Gaji, atau Kartu Keluarga.
@@ -565,7 +565,7 @@ export default function KprDetailViewSheet({
                       };
 
                       return (
-                        <div key={doc.id} className="p-3 bg-[#F7F8F3]/60 border border-[#D6DED2] rounded-2xl flex items-center justify-between text-xs transition-all hover:bg-[#F7F8F3]">
+                        <div key={doc.id} className="p-3 bg-muted/30/60 border border-border rounded-2xl flex items-center justify-between text-xs transition-all hover:bg-muted/30">
                           <div className="flex items-center gap-3 min-w-0 flex-1 mr-2">
                             <div className={`p-2 rounded-xl shrink-0 ${
                               doc.status === "verified" 
@@ -578,7 +578,7 @@ export default function KprDetailViewSheet({
                             </div>
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2">
-                                <p className="font-extrabold text-[#243028] text-[11px] truncate">
+                                <p className="font-extrabold text-foreground text-[11px] truncate">
                                   {docLabels[doc.documentType] || doc.documentType.toUpperCase()}
                                 </p>
                                 {doc.status === "verified" ? (
@@ -595,7 +595,7 @@ export default function KprDetailViewSheet({
                                   </Badge>
                                 )}
                               </div>
-                              <p className="text-[9px] text-[#66736A] font-mono truncate max-w-[170px] mt-0.5">
+                              <p className="text-[9px] text-muted-foreground font-mono truncate max-w-[170px] mt-0.5">
                                 {doc.fileName || "file_berkas.pdf"}
                               </p>
                               {doc.status === "rejected" && doc.notes && (
@@ -614,7 +614,7 @@ export default function KprDetailViewSheet({
                               href={doc.fileUrl || "#"}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="h-8 w-8 bg-slate-50 hover:bg-[#DDE8D8]/50 border border-[#D6DED2]/50 text-[#4F6F52] flex items-center justify-center transition-all shadow-sm rounded-xl"
+                              className="h-8 w-8 bg-slate-50 hover:bg-secondary/50 border border-border/50 text-primary flex items-center justify-center transition-all shadow-sm rounded-xl"
                               title="Lihat Berkas"
                             >
                               <ExternalLink className="h-3.5 w-3.5" />
