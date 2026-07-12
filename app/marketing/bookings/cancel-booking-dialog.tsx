@@ -72,7 +72,7 @@ export default function CancelBookingDialog({ booking }: Props) {
         </Button>
       } />
       <DialogContent className="sm:max-w-md rounded-3xl bg-white/98 backdrop-blur-md border border-border shadow-[0_8px_30px_rgb(143,175,154,0.15)] p-0 overflow-hidden font-sans">
-        {/* Rose-themed header â€” cancel action */}
+        {/* Rose-themed header — cancel action */}
         <div className="bg-gradient-to-r from-rose-50/80 via-white/90 to-transparent p-5 border-b border-rose-100/60">
           <DialogHeader>
             <div className="flex items-center gap-3">

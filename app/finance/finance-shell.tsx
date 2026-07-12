@@ -389,7 +389,7 @@ export default function FinanceShell({
         verificationNotes
       );
       if (res.success) {
-        // Sprint 3: Structured feedback ï¿½ tampilkan info handover jika triggered
+        // Sprint 3: Structured feedback — tampilkan info handover jika triggered
         if (isApproved && res.handoverTriggered) {
           toast.success(t("finance.payment_verified"), { description: t("finance.handover_triggered") });
         } else if (isApproved) {

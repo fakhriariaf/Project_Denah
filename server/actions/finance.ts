@@ -37,6 +37,51 @@ import {
 } from "../validators/finance";
 
 // ==========================================
+// FINANCE PAGINATION TYPES & HELPERS
+// ==========================================
+
+/**
+ * Pagination parameters for finance service functions.
+ * Default page size: 50.
+ */
+export type FinancePaginationParams = {
+  page: number;
+  pageSize?: number;
+};
+
+/**
+ * Paginated response shape for finance queries.
+ * Wraps data with nested pagination metadata.
+ */
+export interface FinancePaginatedResponse<T> {
+  data: T[];
+  pagination: {
+    totalCount: number;
+    page: number;
+    pageSize: number;
+    totalPages: number;
+  };
+}
+
+/** Default page size for finance paginated queries */
+const FINANCE_DEFAULT_PAGE_SIZE = 50;
+
+/**
+ * Convert a flat PaginatedResult into the nested FinancePaginatedResponse shape.
+ */
+function toFinancePaginatedResponse<T>(result: PaginatedResult<T>): FinancePaginatedResponse<T> {
+  return {
+    data: result.data,
+    pagination: {
+      totalCount: result.totalCount,
+      page: result.page,
+      pageSize: result.pageSize,
+      totalPages: result.totalPages,
+    },
+  };
+}
+
+// ==========================================
 // UTILITY: Compute Real Account Balance
 // ==========================================
 /**
@@ -82,10 +127,84 @@ export async function computeCurrentBalance(accountId: string): Promise<number> 
 // 1. INVOICES SERVICE LAYER
 // ==========================================
 
-export async function getInvoices(projectId?: string) {
+/** Row shape returned by getInvoices queries */
+export type InvoiceRow = {
+  invoice: typeof invoices.$inferSelect;
+  project: typeof projects.$inferSelect;
+  unit: typeof units.$inferSelect | null;
+  customer: typeof customers.$inferSelect | null;
+  booking: typeof bookings.$inferSelect | null;
+};
+
+// Overload signatures
+export async function getInvoices(projectId?: string): Promise<InvoiceRow[]>;
+export async function getInvoices(
+  projectId: string | undefined,
+  pagination: FinancePaginationParams
+): Promise<FinancePaginatedResponse<InvoiceRow>>;
+
+// Implementation
+export async function getInvoices(
+  projectId?: string,
+  pagination?: FinancePaginationParams
+): Promise<InvoiceRow[] | FinancePaginatedResponse<InvoiceRow>> {
   await requireAuth();
 
-  const query = db
+  // Legacy path: no pagination — return flat array (backward compatible)
+  if (!pagination) {
+    const query = db
+      .select({
+        invoice: invoices,
+        project: projects,
+        unit: units,
+        customer: customers,
+        booking: bookings,
+      })
+      .from(invoices)
+      .innerJoin(projects, eq(invoices.projectId, projects.id))
+      .leftJoin(units, eq(invoices.unitId, units.id))
+      .leftJoin(customers, eq(invoices.customerId, customers.id))
+      .leftJoin(bookings, eq(invoices.bookingId, bookings.id))
+      .orderBy(desc(invoices.createdAt));
+
+    if (projectId) {
+      return query.where(eq(invoices.projectId, projectId));
+    }
+
+    return query;
+  }
+
+  // Paginated path: return { data, pagination } shape
+  const pageSize = pagination.pageSize ?? FINANCE_DEFAULT_PAGE_SIZE;
+
+  // Build WHERE condition
+  const whereCondition = projectId
+    ? eq(invoices.projectId, projectId)
+    : undefined;
+
+  // Count total records
+  const countQuery = db
+    .select({ totalCount: count() })
+    .from(invoices)
+    .innerJoin(projects, eq(invoices.projectId, projects.id));
+
+  const [countResult] = whereCondition
+    ? await countQuery.where(whereCondition)
+    : await countQuery;
+
+  const totalCount = countResult?.totalCount ?? 0;
+
+  // Validate and normalize pagination params
+  const validatedParams = validatePaginationParams(
+    { page: pagination.page, pageSize },
+    totalCount
+  );
+
+  const { limit, offset } = calculateOffset(validatedParams);
+  const totalPages = totalCount === 0 ? 0 : Math.ceil(totalCount / validatedParams.pageSize);
+
+  // Fetch paginated data
+  const dataQuery = db
     .select({
       invoice: invoices,
       project: projects,
@@ -98,13 +217,21 @@ export async function getInvoices(projectId?: string) {
     .leftJoin(units, eq(invoices.unitId, units.id))
     .leftJoin(customers, eq(invoices.customerId, customers.id))
     .leftJoin(bookings, eq(invoices.bookingId, bookings.id))
-    .orderBy(desc(invoices.createdAt));
+    .orderBy(desc(invoices.createdAt))
+    .limit(limit)
+    .offset(offset);
 
-  if (projectId) {
-    return query.where(eq(invoices.projectId, projectId));
-  }
+  const data: InvoiceRow[] = whereCondition
+    ? await dataQuery.where(whereCondition)
+    : await dataQuery;
 
-  return query;
+  return toFinancePaginatedResponse({
+    data,
+    totalCount,
+    page: validatedParams.page,
+    pageSize: validatedParams.pageSize,
+    totalPages,
+  });
 }
 
 export async function getInvoice(invoiceId: string) {
@@ -180,10 +307,84 @@ export async function createInvoice(data: unknown) {
 // 2. PAYMENTS SERVICE LAYER
 // ==========================================
 
-export async function getPayments(projectId?: string) {
+/** Row shape returned by getPayments queries */
+export type PaymentRow = {
+  payment: typeof payments.$inferSelect;
+  invoice: typeof invoices.$inferSelect | null;
+  project: typeof projects.$inferSelect;
+  unit: typeof units.$inferSelect | null;
+  customer: typeof customers.$inferSelect | null;
+};
+
+// Overload signatures
+export async function getPayments(projectId?: string): Promise<PaymentRow[]>;
+export async function getPayments(
+  projectId: string | undefined,
+  pagination: FinancePaginationParams
+): Promise<FinancePaginatedResponse<PaymentRow>>;
+
+// Implementation
+export async function getPayments(
+  projectId?: string,
+  pagination?: FinancePaginationParams
+): Promise<PaymentRow[] | FinancePaginatedResponse<PaymentRow>> {
   await requireAuth();
 
-  const query = db
+  // Legacy path: no pagination — return flat array (backward compatible)
+  if (!pagination) {
+    const query = db
+      .select({
+        payment: payments,
+        invoice: invoices,
+        project: projects,
+        unit: units,
+        customer: customers,
+      })
+      .from(payments)
+      .innerJoin(projects, eq(payments.projectId, projects.id))
+      .leftJoin(invoices, eq(payments.invoiceId, invoices.id))
+      .leftJoin(units, eq(payments.unitId, units.id))
+      .leftJoin(customers, eq(payments.customerId, customers.id))
+      .orderBy(desc(payments.createdAt));
+
+    if (projectId) {
+      return query.where(eq(payments.projectId, projectId));
+    }
+
+    return query;
+  }
+
+  // Paginated path: return { data, pagination } shape
+  const pageSize = pagination.pageSize ?? FINANCE_DEFAULT_PAGE_SIZE;
+
+  // Build WHERE condition
+  const whereCondition = projectId
+    ? eq(payments.projectId, projectId)
+    : undefined;
+
+  // Count total records
+  const countQuery = db
+    .select({ totalCount: count() })
+    .from(payments)
+    .innerJoin(projects, eq(payments.projectId, projects.id));
+
+  const [countResult] = whereCondition
+    ? await countQuery.where(whereCondition)
+    : await countQuery;
+
+  const totalCount = countResult?.totalCount ?? 0;
+
+  // Validate and normalize pagination params
+  const validatedParams = validatePaginationParams(
+    { page: pagination.page, pageSize },
+    totalCount
+  );
+
+  const { limit, offset } = calculateOffset(validatedParams);
+  const totalPages = totalCount === 0 ? 0 : Math.ceil(totalCount / validatedParams.pageSize);
+
+  // Fetch paginated data
+  const dataQuery = db
     .select({
       payment: payments,
       invoice: invoices,
@@ -196,13 +397,21 @@ export async function getPayments(projectId?: string) {
     .leftJoin(invoices, eq(payments.invoiceId, invoices.id))
     .leftJoin(units, eq(payments.unitId, units.id))
     .leftJoin(customers, eq(payments.customerId, customers.id))
-    .orderBy(desc(payments.createdAt));
+    .orderBy(desc(payments.createdAt))
+    .limit(limit)
+    .offset(offset);
 
-  if (projectId) {
-    return query.where(eq(payments.projectId, projectId));
-  }
+  const data: PaymentRow[] = whereCondition
+    ? await dataQuery.where(whereCondition)
+    : await dataQuery;
 
-  return query;
+  return toFinancePaginatedResponse({
+    data,
+    totalCount,
+    page: validatedParams.page,
+    pageSize: validatedParams.pageSize,
+    totalPages,
+  });
 }
 
 export async function createPayment(data: unknown) {

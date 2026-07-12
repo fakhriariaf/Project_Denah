@@ -884,7 +884,7 @@ export function VendorDashboardShell({ data, userName }: VendorDashboardShellPro
                                   <SelectValue placeholder="Pilih item pekerjaan...">
                                     {progWorkItemId ? (() => {
                                       const selectedItem = progWorkItems.find(item => item.id === progWorkItemId);
-                                      return selectedItem ? `${selectedItem.name} â€” Bobot ${selectedItem.weight}% (Progres: ${selectedItem.currentProgress}%)` : progWorkItemId;
+                                      return selectedItem ? `${selectedItem.name} — Bobot ${selectedItem.weight}% (Progres: ${selectedItem.currentProgress}%)` : progWorkItemId;
                                     })() : undefined}
                                   </SelectValue>
                                 </SelectTrigger>
@@ -917,8 +917,8 @@ export function VendorDashboardShell({ data, userName }: VendorDashboardShellPro
                                           : "bg-[#DDE8D8] text-[#4F6F52] border border-[#8FAF9A]/25"
                                       }`}>
                                         {isOverLimit 
-                                          ? `âš ï¸ Melebihi Batas! (${currentProgressPct}% + ${progPctAdded}% = ${currentProgressPct + progPctAdded}%)` 
-                                          : `${currentProgressPct}% â†’ ${newTotalProgress}%`}
+                                          ? `⚠️ Melebihi Batas! (${currentProgressPct}% + ${progPctAdded}% = ${currentProgressPct + progPctAdded}%)`
+                                          : `${currentProgressPct}% → ${newTotalProgress}%`}
                                       </span>
                                     </div>
                                     

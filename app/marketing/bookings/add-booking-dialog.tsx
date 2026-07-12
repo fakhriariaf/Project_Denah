@@ -51,7 +51,7 @@ export default function AddBookingDialog({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  // Form state â€” rupiah fields stored as raw integer, displayed with formatting
+  // Form state — rupiah fields stored as raw integer, displayed with formatting
   const [projectId, setProjectId] = useState(initialProjectId);
   const [unitId, setUnitId] = useState(initialUnitId);
   const [customerId, setCustomerId] = useState("");
@@ -143,7 +143,7 @@ export default function AddBookingDialog({
     }
   };
 
-  // Format display only â€” raw value stored separately
+  // Format display only — raw value stored separately
   const formatRupiahDisplay = (val: number) =>
     val.toLocaleString("id-ID");
 

@@ -100,12 +100,12 @@ export function AddToWaitingListDialog({ projects, customers }: Props) {
                   <SelectValue placeholder={t("waiting_dialog.customer_ph")}>
                     {customerVal ? (() => {
                       const c = customers.find(cust => cust.id === customerVal);
-                      return c ? `${c.name}${c.phone ? ` â€” ${c.phone}` : ""}` : undefined;
+                      return c ? `${c.name}${c.phone ? ` — ${c.phone}` : ""}` : undefined;
                     })() : undefined}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent className="rounded-xl border-border bg-popover backdrop-blur-md max-h-52">
-                  {customers.map(c => <SelectItem key={c.id} value={c.id}>{c.name}{c.phone ? ` â€” ${c.phone}` : ""}</SelectItem>)}
+                  {customers.map(c => <SelectItem key={c.id} value={c.id}>{c.name}{c.phone ? ` — ${c.phone}` : ""}</SelectItem>)}
                 </SelectContent>
               </Select>
               {form.formState.errors.customerId && <p className="text-xs text-rose-500">{String(form.formState.errors.customerId?.message)}</p>}

@@ -1,4 +1,4 @@
-﻿"use server";
+"use server";
 
 import { db } from "@/db";
 import { auditLogs } from "@/db/schema/system";
@@ -142,7 +142,7 @@ export async function getAuditLogsPaginated(
 
   try {
     const conditions = [];
-    // BUG 6 FIX: Store cursor condition explicitly â€” don't rely on array index for removal
+    // BUG 6 FIX: Store cursor condition explicitly — don't rely on array index for removal
     let cursorCondition: ReturnType<typeof lt> | null = null;
 
     // Apply cursor filter: records with createdAt strictly less than cursor (descending order)

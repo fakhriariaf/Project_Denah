@@ -39,6 +39,31 @@ export function MessageList({
   const [newMessageCount, setNewMessageCount] = useState(0)
   const prevMessageCountRef = useRef(messages.length)
 
+  // Accessibility: track the latest incoming message for the aria-live region.
+  // We use a ref to remember the last announced message id so we only update
+  // the live region when a genuinely new incoming message arrives, not on every
+  // poll cycle with unchanged data.
+  const lastAnnouncedIdRef = useRef<string | null>(null)
+  const [announcedMessage, setAnnouncedMessage] = useState<{
+    senderName: string
+    content: string
+  } | null>(null)
+
+  useEffect(() => {
+    // Find the latest incoming (not own) message
+    const latestIncoming = [...messages]
+      .reverse()
+      .find((m) => !m.isOwn && m.status !== "pending" && m.status !== "failed")
+
+    if (latestIncoming && latestIncoming.id !== lastAnnouncedIdRef.current) {
+      lastAnnouncedIdRef.current = latestIncoming.id
+      setAnnouncedMessage({
+        senderName: latestIncoming.senderName,
+        content: latestIncoming.content,
+      })
+    }
+  }, [messages])
+
   // Track new messages arriving while user is scrolled up
   useEffect(() => {
     const prevCount = prevMessageCountRef.current
@@ -182,6 +207,20 @@ export function MessageList({
         visible={!isAtBottom && newMessageCount > 0}
         onClick={handlePillClick}
       />
+
+      {/* Accessibility: screen-reader-only live region for latest incoming message */}
+      <div
+        aria-live="polite"
+        aria-atomic="true"
+        className="sr-only"
+        role="log"
+      >
+        {announcedMessage ? (
+          <span>
+            {announcedMessage.senderName}: {announcedMessage.content}
+          </span>
+        ) : null}
+      </div>
     </div>
   )
 }

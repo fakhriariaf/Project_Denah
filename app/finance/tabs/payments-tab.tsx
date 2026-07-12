@@ -341,7 +341,7 @@ export function PaymentsTab({
                   <div>
                     <p className="font-mono text-xs font-bold text-foreground">{pay.paymentNumber}</p>
                     <p className="text-[11px] text-muted-foreground mt-1">
-                      Customer: <span className="font-semibold text-foreground">{pay.customerName || "â€”"}</span>
+                      Customer: <span className="font-semibold text-foreground">{pay.customerName || "—"}</span>
                     </p>
                   </div>
                   <Badge className="bg-[#FFF2C2] text-[#9A7D21] border border-[#E9C46A]/30 text-[10px] rounded-full px-2 py-0.5">
@@ -462,7 +462,7 @@ export function PaymentsTab({
 
               <div className="bg-amber-50/80 border border-amber-200/50 rounded-2xl p-4 text-[11px] text-[#8A6D1D] leading-relaxed space-y-2">
                 <p className="font-extrabold flex items-center gap-1.5 uppercase tracking-wider text-[10px] text-[#8A6D1D]">
-                  âš ï¸ {t("finance.verify_warning_title")}
+                  ⚠️ {t("finance.verify_warning_title")}
                 </p>
                 <ul className="list-disc list-inside space-y-1 font-semibold pl-1">
                   <li><strong>{t("finance.verify_btn_approve")}:</strong> {t("finance.verify_warning_approve")}</li>

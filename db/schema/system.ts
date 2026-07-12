@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, timestamp, boolean, integer, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean, integer, jsonb, index } from "drizzle-orm/pg-core";
 import { user } from "./auth";
 
 export const auditLogs = pgTable("audit_logs", {
@@ -17,7 +17,9 @@ export const auditLogs = pgTable("audit_logs", {
   responseCode: integer("response_code").default(200),
   durationMs: integer("duration_ms"),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
-});
+}, (table) => ({
+  createdAtIdx: index("idx_audit_logs_created_at").on(table.createdAt),
+}));
 
 export const notifications = pgTable("notifications", {
   id: text("id").primaryKey(),
@@ -29,7 +31,10 @@ export const notifications = pgTable("notifications", {
   entityType: text("entity_type"),
   isRead: boolean("is_read").default(false).notNull(),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
-});
+}, (table) => ({
+  userReadIdx: index("idx_notifications_user_read").on(table.userId, table.isRead),
+  entityIdx: index("idx_notifications_entity").on(table.entityId, table.entityType),
+}));
 
 export const attachments = pgTable("attachments", {
   id: text("id").primaryKey(),

@@ -30,7 +30,7 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
+      lang="id"
       className={`${roboto.variable} ${robotoMono.variable} h-full antialiased`}
       data-scroll-behavior="smooth"
       suppressHydrationWarning
