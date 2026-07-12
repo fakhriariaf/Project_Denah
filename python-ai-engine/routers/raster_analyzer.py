@@ -1,13 +1,27 @@
 import cv2
 import numpy as np
-import easyocr
 import re
 import base64
+import os
 from typing import Dict, Any
 
-# Inisialisasi OCR Engine (Hanya meload sekali ke memory GPU/CPU)
-# GPU=False agar aman berjalan di semua server secara default
-reader = easyocr.Reader(['en', 'id'], gpu=False)
+# Lazy-loaded OCR reader — not loaded at module import time.
+# This saves ~800MB RAM on startup when raster AI is disabled.
+_reader = None
+
+def get_reader():
+    """Lazy-load EasyOCR reader on first use. Optionally release after request."""
+    global _reader
+    if _reader is None:
+        import easyocr
+        _reader = easyocr.Reader(['en', 'id'], gpu=False)
+    return _reader
+
+def release_reader():
+    """Release OCR reader to free memory after request (if env var set)."""
+    global _reader
+    if os.getenv("AI_RELEASE_OCR_AFTER_REQUEST", "false").lower() == "true":
+        _reader = None
 
 def is_valid_kavling_number(text: str) -> bool:
     """Mengecek apakah hasil OCR sesuai format penamaan kavling"""
@@ -109,7 +123,7 @@ def analyze_raster_content(image_bytes: bytes) -> Dict[str, Any]:
                 roi = gray[crop_y1:crop_y2, crop_x1:crop_x2]
                 
                 # Ekstrak teks
-                ocr_results = reader.readtext(roi)
+                ocr_results = get_reader().readtext(roi)
                 
                 assigned_label = None
                 status = "belum_ada_nomor"
@@ -158,6 +172,9 @@ def analyze_raster_content(image_bytes: bytes) -> Dict[str, Any]:
     # 6. Encode image hasil modifikasi ke Base64 PNG
     _, buffer = cv2.imencode('.png', original_image)
     encoded_png = base64.b64encode(buffer).decode('utf-8')
+    
+    # Release OCR reader if configured (free memory after request)
+    release_reader()
     
     return {
         "kavlings": results,

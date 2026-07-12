@@ -1,10 +1,12 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from routers.svg_analyzer import analyze_svg_content
-from routers.raster_analyzer import analyze_raster_content
 import uvicorn
 import os
 import secrets
+
+# Low-memory mode: only import raster analyzer if enabled
+ENABLE_RASTER_AI = os.getenv("ENABLE_RASTER_AI", "false").lower() == "true"
 
 app = FastAPI(
     title="Housing Siteplan Analysis AI Engine",
@@ -15,8 +17,6 @@ app = FastAPI(
 # Enable CORS for Next.js frontend communication
 app.add_middleware(
     CORSMiddleware,
-    # SECURITY FIX: Restrict CORS to frontend URL only — was allow_origins=["*"]
-    # Set FRONTEND_URL env var in production (e.g. https://your-domain.com)
     allow_origins=[os.getenv("FRONTEND_URL", "http://localhost:3000")],
     allow_credentials=True,
     allow_methods=["*"],
@@ -34,25 +34,25 @@ def verify_api_key(x_api_key: str | None = Header(default=None)):
 
 @app.get("/")
 def read_root():
-    return {"status": "online", "message": "Siteplan AI Engine is running"}
+    raster_status = "enabled" if ENABLE_RASTER_AI else "disabled (low-memory mode)"
+    return {
+        "status": "online",
+        "message": "Siteplan AI Engine is running",
+        "raster_ai": raster_status
+    }
 
 @app.post("/api/v1/analyze-siteplan", dependencies=[Depends(verify_api_key)])
 async def analyze_siteplan(file: UploadFile = File(...)):
     if not file.filename:
         raise HTTPException(status_code=400, detail="No file uploaded")
     
-    # Check file extension
     ext = file.filename.split('.')[-1].lower()
-    
-    # Read file content
     content = await file.read()
     
     if ext == 'svg':
         try:
-            # Jalankan logika SVG Analysis
             result = analyze_svg_content(content)
             
-            # Hitung statistik untuk summary
             kavlings = result["kavlings"]
             total = len(kavlings)
             sudah_ada = sum(1 for k in kavlings if k["status"] == "sudah_ada_nomor")
@@ -84,15 +84,22 @@ async def analyze_siteplan(file: UploadFile = File(...)):
             raise HTTPException(status_code=500, detail=f"Error analyzing SVG: {str(e)}")
     
     elif ext == 'pdf':
-        # TODO: Implement PDF Parsing logic
         return {"status": "success", "message": f"Received PDF file: {file.filename}", "data": []}
         
     elif ext in ['png', 'jpg', 'jpeg']:
+        # Low-memory mode: reject raster analysis when disabled
+        if not ENABLE_RASTER_AI:
+            raise HTTPException(
+                status_code=503,
+                detail="Raster image analysis is disabled (low-memory mode). Only SVG files are supported. Upload an SVG siteplan or contact admin to enable raster AI."
+            )
+        
         try:
-            # Jalankan logika Raster Analysis (OpenCV + OCR)
+            # Lazy import — only load heavy modules when actually needed
+            from routers.raster_analyzer import analyze_raster_content
+            
             result = analyze_raster_content(content)
             
-            # Hitung statistik
             kavlings = result["kavlings"]
             total = len(kavlings)
             sudah_ada = sum(1 for k in kavlings if k["status"] == "sudah_ada_nomor")
