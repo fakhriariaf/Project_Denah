@@ -1,5 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
+import { timingSafeEqual } from "crypto";
 import { checkOverdueSpks } from "@/server/actions/production";
+
+/**
+ * Verifies the cron authorization token using timing-safe comparison.
+ * Uses strict Bearer parsing via regex to avoid accepting malformed headers.
+ */
+function verifyCronToken(authHeader: string | null, expectedSecret: string): boolean {
+  const match = authHeader?.match(/^Bearer\s+(.+)$/i);
+  if (!match) return false;
+
+  const token = match[1];
+  const tokenBuf = Buffer.from(token, "utf-8");
+  const secretBuf = Buffer.from(expectedSecret, "utf-8");
+
+  if (tokenBuf.length !== secretBuf.length) return false;
+
+  return timingSafeEqual(tokenBuf, secretBuf);
+}
 
 export async function GET(request: NextRequest) {
   return handleCron(request);
@@ -20,8 +38,7 @@ async function handleCron(request: NextRequest) {
     );
   }
 
-  const expectedAuth = `Bearer ${cronSecret}`;
-  if (!authHeader || authHeader !== expectedAuth) {
+  if (!verifyCronToken(authHeader, cronSecret)) {
     return NextResponse.json(
       { error: "Unauthorized access: Invalid or missing authorization token." },
       { status: 401 }

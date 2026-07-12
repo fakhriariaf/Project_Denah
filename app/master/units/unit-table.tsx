@@ -225,7 +225,7 @@ export function UnitTable({
                       </td>
                     )}
                     <td className="py-4 px-6 font-semibold text-foreground">
-                      {projectName || "â€”"}
+                      {projectName || "—"}
                     </td>
                     <td className="py-4 px-6">
                       <span className="font-mono bg-secondary/60 text-primary px-2 py-0.5 rounded text-[11px] font-bold border border-primary/20">
@@ -233,7 +233,7 @@ export function UnitTable({
                       </span>
                     </td>
                     <td className="py-4 px-6 text-muted-foreground font-medium">
-                      {u.typeName || "â€”"}
+                      {u.typeName || "—"}
                     </td>
                     <td className="py-4 px-6 text-right font-mono text-foreground tabular-nums">
                       {u.landArea} / {u.buildingArea}

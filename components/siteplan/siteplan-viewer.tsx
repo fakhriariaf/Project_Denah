@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -226,7 +226,7 @@ function getPhysicalReadiness(unit: ShapeWithUnit["unit"], selectedSpkBast: unkn
 
   if (unitStockType === "building_for_ready_stock") {
     const progressDone = unit.constructionProgress === 100;
-    // attachments table has no 'status' column â€” existence of a BAST vendor attachment
+    // attachments table has no 'status' column — existence of a BAST vendor attachment
     // combined with progress=100 is sufficient signal that the vendor submitted BAST.
     const bastVendorUploaded = !!selectedSpkBast;
 
@@ -241,7 +241,7 @@ function getPhysicalReadiness(unit: ShapeWithUnit["unit"], selectedSpkBast: unkn
 
   if (unitStockType === "available") {
     // Indent unit that is "available" (not yet booked or construction started)
-    // No physical building yet â€” physical check gate applies after construction completes
+    // No physical building yet — physical check gate applies after construction completes
     return {
       ready: false,
       reason: "Unit belum melewati tahap pembangunan fisik.",
@@ -602,7 +602,7 @@ export function SiteplanViewer({
   const handleCompleteConstructionWithBast = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!bastUnit || !bastSpk || !bastPdfFile) {
-      setErrorMessage("âš ï¸ Silakan pilih file PDF Berita Acara Serah Terima (BAST) terlebih dahulu.");
+      setErrorMessage("⚠️ Silakan pilih file PDF Berita Acara Serah Terima (BAST) terlebih dahulu.");
       return;
     }
 
@@ -880,7 +880,7 @@ export function SiteplanViewer({
     ? (activeBooking
       ? getUnitStatusLabel(unit.status, isReady)
       : getUnbookedStatusLabel(unit.status, isReady))
-    : "â€”";
+    : "—";
 
   // Generate Timeline Data based on current status
   const getTimelineSteps = ({
@@ -900,7 +900,7 @@ export function SiteplanViewer({
       const isReadyVal = !!unit.isReadyStock;
       const isBuilding = unit.status === "construction" || unit.status === "overdue";
 
-      // "Sedang Dibangun untuk Ready Stock" â€” internal construction, no buyer yet
+      // "Sedang Dibangun untuk Ready Stock" — internal construction, no buyer yet
       if (isReadyVal && isBuilding) {
         return [
           { key: "building_rs",     label: "Sedang Dibangun untuk Ready Stock", desc: `Konstruksi internal berjalan (${unit.constructionProgress ?? 0}%)`, done: false, active: true },
@@ -914,20 +914,20 @@ export function SiteplanViewer({
         ];
       }
 
-      // "Tersedia - Ready Stock" â€” unit already done, waiting buyer
+      // "Tersedia - Ready Stock" — unit already done, waiting buyer
       if (isReadyVal) {
         return [
-          { key: "available",       label: "Tersedia - Ready Stock",   desc: "Unit Ready Stock siap dipasarkan â€” fisik sudah selesai", done: true, active: true },
+          { key: "available",       label: "Tersedia - Ready Stock",   desc: "Unit Ready Stock siap dipasarkan — fisik sudah selesai", done: true, active: true },
           { key: "waiting_booking", label: "Menunggu Booking Konsumen", desc: "Menunggu minat calon konsumen", done: false, active: false },
           { key: "booking",         label: "Booking / Penjualan",       desc: "Pendaftaran transaksi konsumen", done: false, active: false },
           { key: "payment",         label: "Pembayaran sesuai skema",   desc: "Cash, Cash Bertahap, atau KPR", done: false, active: false },
-          { key: "handover_waiting",label: "Menunggu Serah Terima",     desc: "Finansial selesai divalidasi â€” fisik sudah siap", done: false, active: false },
+          { key: "handover_waiting",label: "Menunggu Serah Terima",     desc: "Finansial selesai divalidasi — fisik sudah siap", done: false, active: false },
           { key: "bast_developer",  label: "BAST Developer ke Konsumen",desc: "Penandatanganan berita acara serah terima", done: false, active: false },
           { key: "handover_done",   label: "Serah Terima Selesai",      desc: "Kunci fisik unit diserahkan", done: false, active: false },
         ];
       }
 
-      // "Tersedia" â€” indent unit, belum ada buyer, belum dibangun
+      // "Tersedia" — indent unit, belum ada buyer, belum dibangun
       return [
         { key: "available",       label: "Tersedia",                           desc: "Unit siap dipasarkan", done: true, active: true },
         { key: "waiting_booking", label: "Menunggu Booking Konsumen",          desc: "Menunggu minat calon konsumen", done: false, active: false },
@@ -1367,7 +1367,7 @@ export function SiteplanViewer({
                     fill="#8B3443"
                     className="font-black animate-bounce select-none pointer-events-none"
                   >
-                    âš ï¸
+                    ⚠️
                   </text>
                 )}
 
@@ -1439,11 +1439,11 @@ export function SiteplanViewer({
                   {t("siteplan_viewer.lot")} {hoveredShape.unit.code}
                 </span>
                 <span className="text-[9px] text-[#66736A] font-black uppercase">
-                  {hoveredShape.unit.cluster || "â€”"}
+                  {hoveredShape.unit.cluster || "—"}
                 </span>
               </div>
               <p className="text-[10px] text-[#66736A] font-bold leading-none">
-                {t("siteplan_viewer.type")} {hoveredShape.unit.typeName || "â€”"}
+                {t("siteplan_viewer.type")} {hoveredShape.unit.typeName || "—"}
               </p>
               <div className="pt-1">
                 <span
@@ -1616,10 +1616,10 @@ export function SiteplanViewer({
                   const eligibility = getHandoverEligibility(unit, activeBooking, invoices, kprProcess, selectedSpkBast);
 
                   const schemeReason =
-                    activeBooking.paymentScheme === "kpr" ? "KPR â€” Realisasi Dana" :
-                    activeBooking.paymentScheme === "cash" ? "Cash â€” Invoice Lunas" :
-                    activeBooking.paymentScheme === "installment" ? "Installment â€” Invoice Lunas" :
-                    "â€”";
+                    activeBooking.paymentScheme === "kpr" ? "KPR — Realisasi Dana" :
+                    activeBooking.paymentScheme === "cash" ? "Cash — Invoice Lunas" :
+                    activeBooking.paymentScheme === "installment" ? "Installment — Invoice Lunas" :
+                    "—";
 
                   if (unit.status !== "menunggu_serah_terima" && !isHandoverDone) {
                     return null;
@@ -1695,7 +1695,7 @@ export function SiteplanViewer({
                               Cetak BAST Konsumen
                             </Button>
                             <p className="text-[10px] text-rose-600 font-bold bg-rose-50 border border-rose-100 rounded-xl p-2 text-center leading-normal">
-                              âš ï¸ {eligibility.reason}
+                              ⚠️ {eligibility.reason}
                             </p>
                           </div>
                         )}
@@ -1955,7 +1955,7 @@ export function SiteplanViewer({
                             : "Cash Keras";
                         paymentProgress = activeBooking.status === "akad" || activeBooking.status === "completed" ? 100 : 25;
                       } else {
-                        // Customer data not found â€” show placeholder, not fake data
+                        // Customer data not found — show placeholder, not fake data
                         buyerName = "Data konsumen tidak tersedia";
                         buyerPhone = "-";
                         buyerScheme = activeBooking.paymentScheme === "kpr" ? "KPR"
@@ -2105,7 +2105,7 @@ export function SiteplanViewer({
                             <p className="text-[9px] text-[#66736A] font-bold uppercase mb-1 flex items-center gap-1">
                               <Ruler className="h-3 w-3 text-[#4F6F52]" /> {t("siteplan_viewer.land_area")}
                             </p>
-                            <p className="font-mono font-extrabold text-[13px]">{unit.landArea} mÂ²</p>
+                            <p className="font-mono font-extrabold text-[13px]">{unit.landArea} m²</p>
                           </div>
                           <span className="text-[9px] font-black text-[#8FAF9A] font-mono bg-white px-1.5 py-0.5 rounded border border-[#D6DED2]/30">LT</span>
                         </div>
@@ -2115,7 +2115,7 @@ export function SiteplanViewer({
                             <p className="text-[9px] text-[#66736A] font-bold uppercase mb-1 flex items-center gap-1">
                               <Building2 className="h-3 w-3 text-[#4F6F52]" /> {t("siteplan_viewer.build_area")}
                             </p>
-                            <p className="font-mono font-extrabold text-[13px]">{unit.buildingArea} mÂ²</p>
+                            <p className="font-mono font-extrabold text-[13px]">{unit.buildingArea} m²</p>
                           </div>
                           <span className="text-[9px] font-black text-purple-400 font-mono bg-white px-1.5 py-0.5 rounded border border-[#D6DED2]/30">LB</span>
                         </div>
@@ -2259,7 +2259,7 @@ export function SiteplanViewer({
                             </div>
                           )}
 
-                          {/* Photo Gallery â€” Real data from SPK progress logs */}
+                          {/* Photo Gallery — Real data from SPK progress logs */}
                           <div className="pt-1.5 space-y-2">
                             <p className={`text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 ${
                               (unit.constructionProgress || 0) >= 100 ? "text-[#4F6F52]" : "text-[#66736A]"

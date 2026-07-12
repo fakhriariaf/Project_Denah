@@ -1,4 +1,4 @@
-﻿import { db } from "@/db"
+import { db } from "@/db"
 import { financeCategories } from "@/db/schema/master"
 import { requireAuth, getSessionRole } from "@/server/permissions"
 import { redirect } from "next/navigation"
@@ -52,7 +52,7 @@ export default async function CategoriesPage({
 
   return (
     <div className="flex flex-col gap-6">
-      {/* â”€â”€ PREMIUM HEADER â”€â”€ */}
+      {/* ── PREMIUM HEADER ── */}
       <div className="relative rounded-2xl overflow-hidden bg-gradient-to-r from-[#DDE8D8]/70 via-white/95 to-[#DDE8D8]/40 border border-[#D6DED2] shadow-sage p-6">
         <div className="absolute -top-6 -right-6 h-28 w-28 rounded-full bg-[#8FAF9A]/10 blur-2xl pointer-events-none" />
         <div className="absolute bottom-0 left-1/3 h-20 w-20 rounded-full bg-[#4F6F52]/8 blur-xl pointer-events-none" />

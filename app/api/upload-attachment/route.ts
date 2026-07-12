@@ -4,12 +4,37 @@ import { join } from "path";
 import { auth } from "@/server/auth";
 import { headers } from "next/headers";
 
+/**
+ * Production storage guard.
+ * In production, Supabase Storage must be configured. Never fall back to local filesystem.
+ * In development, returns null to allow local filesystem fallback.
+ */
+function checkProductionStorage(): NextResponse | null {
+  if (process.env.NODE_ENV !== "production") return null;
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    return NextResponse.json(
+      { error: "Storage not configured" },
+      { status: 503 }
+    );
+  }
+
+  return null;
+}
+
 export async function POST(req: NextRequest) {
   // Auth check
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  // Production storage guard: block uploads if storage is not configured
+  const storageGuard = checkProductionStorage();
+  if (storageGuard) return storageGuard;
 
   try {
     const formData = await req.formData();
@@ -95,7 +120,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ url: publicUrl, filename, size: file.size });
     }
 
-    // Fallback: Save to public/uploads/attachments/ for local development
+    // Fallback: Save to public/uploads/attachments/ for local development only
     const uploadDir = join(process.cwd(), "public", "uploads", "attachments");
     await mkdir(uploadDir, { recursive: true });
     await writeFile(join(uploadDir, filename), buffer);

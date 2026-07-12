@@ -64,7 +64,7 @@ export default function EditBookingDialog({
     return d.toISOString().split("T")[0];
   };
 
-  // Form state â€” rupiah fields stored as raw integer, displayed with formatting
+  // Form state — rupiah fields stored as raw integer, displayed with formatting
   const [marketingId, setMarketingId] = useState(booking.marketingId);
   const [bookingDate, setBookingDate] = useState(formatInitialDate(booking.bookingDate));
   const [bookingFeeRaw, setBookingFeeRaw] = useState(booking.bookingFee);
@@ -126,7 +126,7 @@ export default function EditBookingDialog({
     }
   };
 
-  // Format display only â€” raw value stored separately
+  // Format display only — raw value stored separately
   const formatRupiahDisplay = (val: number) =>
     val.toLocaleString("id-ID");
 
@@ -187,7 +187,7 @@ export default function EditBookingDialog({
               <div className="space-y-1">
                 <Label className="text-xs font-semibold text-muted-foreground">{t("booking_form.project")}</Label>
                 <Input
-                  value={booking.projectName || "â€”"}
+                  value={booking.projectName || "—"}
                   disabled
                   readOnly
                   className="w-full h-10 rounded-xl border border-border bg-muted/30/60 px-3 text-sm font-semibold text-foreground disabled:opacity-75 disabled:cursor-not-allowed"
@@ -197,7 +197,7 @@ export default function EditBookingDialog({
               <div className="space-y-1">
                 <Label className="text-xs font-semibold text-muted-foreground">{t("booking_form.unit_locked")}</Label>
                 <Input
-                  value={booking.unitCode || "â€”"}
+                  value={booking.unitCode || "—"}
                   disabled
                   readOnly
                   className="w-full h-10 rounded-xl border border-border bg-muted/30/60 px-3 text-sm font-semibold text-foreground font-mono disabled:opacity-75 disabled:cursor-not-allowed"
@@ -217,7 +217,7 @@ export default function EditBookingDialog({
               <div className="space-y-1">
                 <Label className="text-xs font-semibold text-muted-foreground">{t("booking_form.customer_locked")}</Label>
                 <Input
-                  value={booking.customerName || "â€”"}
+                  value={booking.customerName || "—"}
                   disabled
                   readOnly
                   className="w-full h-10 rounded-xl border border-border bg-muted/30/60 px-3 text-sm font-semibold text-foreground disabled:opacity-75 disabled:cursor-not-allowed"

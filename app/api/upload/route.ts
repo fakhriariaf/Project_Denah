@@ -5,6 +5,27 @@ import { auth } from "@/server/auth";
 import { headers } from "next/headers";
 import { applyRateLimit } from "@/server/middleware/apply-rate-limit";
 
+/**
+ * Production storage guard.
+ * In production, Supabase Storage must be configured. If not, return HTTP 503.
+ * In development, allow local filesystem fallback.
+ */
+function checkProductionStorage(): NextResponse | null {
+  if (process.env.NODE_ENV !== "production") return null;
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    return NextResponse.json(
+      { error: "Storage not configured" },
+      { status: 503 }
+    );
+  }
+
+  return null;
+}
+
 export async function POST(req: NextRequest) {
   // Auth check
   const session = await auth.api.getSession({ headers: await headers() });
@@ -19,6 +40,10 @@ export async function POST(req: NextRequest) {
     const msg = err instanceof Error ? err.message : "Rate limit exceeded";
     return NextResponse.json({ error: msg }, { status: 429 });
   }
+
+  // Production storage guard: block uploads if Supabase Storage is not configured
+  const storageGuard = checkProductionStorage();
+  if (storageGuard) return storageGuard;
 
   try {
     const formData = await req.formData();

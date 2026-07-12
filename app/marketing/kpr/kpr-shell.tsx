@@ -245,7 +245,7 @@ export function KprShell({
 
     const TERMINAL_COLUMNS = ["realisasi", "physical_waiting", "handover_waiting", "bast_developer", "handover_done"];
     if (TERMINAL_COLUMNS.includes(targetStatus)) {
-      alert("Tahapan ini tidak dapat diubah dengan geser kartu.\n\nâ€¢ Realisasi Dana â†’ gunakan Form Realisasi di 'Kelola Berkas KPR'\nâ€¢ Cek Fisik / Serah Terima â†’ dikelola otomatis oleh sistem");
+      alert("Tahapan ini tidak dapat diubah dengan geser kartu.\n\n• Realisasi Dana → gunakan Form Realisasi di 'Kelola Berkas KPR'\n• Cek Fisik / Serah Terima → dikelola otomatis oleh sistem");
       setDraggingId(null);
       return;
     }
@@ -253,8 +253,8 @@ export function KprShell({
     const targetCard = initialKpr.find(k => k.id === id);
     if (!targetCard || targetCard.status === targetStatus) return;
 
-    // Check for unverified files â€” only mandatory KPR docs (KTP, NPWP, Slip Gaji, KK)
-    // Supporting docs (BAST, SPJB, kpr_doc) are uploaded AFTER akad/realisasi â€” do NOT gate here
+    // Check for unverified files — only mandatory KPR docs (KTP, NPWP, Slip Gaji, KK)
+    // Supporting docs (BAST, SPJB, kpr_doc) are uploaded AFTER akad/realisasi — do NOT gate here
     const MANDATORY_DOC_TYPES = ["ktp", "npwp", "slip_gaji", "kk"];
     const allClientDocs = documents.filter(d => d.customerId === targetCard.customerId);
     const mandatoryClientDocs = allClientDocs.filter(d => MANDATORY_DOC_TYPES.includes(d.documentType));
@@ -307,7 +307,7 @@ export function KprShell({
       }
     }
 
-    // Guard: approved is a one-way gate â€” cannot go backward
+    // Guard: approved is a one-way gate — cannot go backward
     const BACKWARD_FROM_APPROVED = ["bi_checking", "pemberkasan", "proses_bank", "offering"];
     if (targetCard.status === "approved" && BACKWARD_FROM_APPROVED.includes(targetStatus)) {
       alert(
@@ -319,7 +319,7 @@ export function KprShell({
       return;
     }
 
-    // Guard: realisasi is a terminal gate â€” RULE 7: cannot go backward at all
+    // Guard: realisasi is a terminal gate — RULE 7: cannot go backward at all
     const BACKWARD_FROM_REALISASI = ["bi_checking", "pemberkasan", "proses_bank", "offering", "approved", "akad"];
     if (targetCard.status === "realisasi" && BACKWARD_FROM_REALISASI.includes(targetStatus)) {
       alert(
@@ -409,7 +409,7 @@ export function KprShell({
 
   return (
     <div className="space-y-6">
-      {/* â”€â”€ PREMIUM HEADER â”€â”€ */}
+      {/* ── PREMIUM HEADER ── */}
       <div className="relative rounded-2xl overflow-hidden bg-gradient-to-r from-[#DDE8D8]/70 via-white/95 to-[#DDE8D8]/40 border border-border shadow-sage p-6">
         <div className="absolute -top-6 -right-6 h-28 w-28 rounded-full bg-[#8FAF9A]/10 blur-2xl pointer-events-none" />
         <div className="absolute bottom-0 left-1/3 h-20 w-20 rounded-full bg-primary/8 blur-xl pointer-events-none" />
@@ -450,7 +450,7 @@ export function KprShell({
         </div>
       </div>
 
-      {/* â”€â”€ KPI METRICS BAR (Opsi B) â”€â”€ */}
+      {/* ── KPI METRICS BAR (Opsi B) ── */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         {/* KPI 1: Active KPR */}
         <Card className="border-border bg-card rounded-2xl shadow-sm hover:shadow-md transition-all">
@@ -505,7 +505,7 @@ export function KprShell({
         </Card>
       </div>
 
-      {/* â”€â”€ ADVANCED CONTROLS & FILTER BAR (Opsi C) â”€â”€ */}
+      {/* ── ADVANCED CONTROLS & FILTER BAR (Opsi C) ── */}
       <div className="flex flex-col sm:flex-row gap-3 bg-card p-3.5 rounded-2xl border border-border shadow-sm">
         {/* Real-time search */}
         <div className="relative flex-1">
@@ -549,7 +549,7 @@ export function KprShell({
         </div>
       </div>
 
-      {/* â”€â”€ PIPELINE KANBAN BOARD â”€â”€ */}
+      {/* ── PIPELINE KANBAN BOARD ── */}
       <div className="flex gap-4 overflow-x-auto pb-6 items-start scrollbar-thin scrollbar-thumb-[#8FAF9A]/30 scrollbar-track-[#F7F8F3] w-full">
         {COLUMNS.map((col) => {
           const colCards = filteredKpr.filter((k) => getCardKanbanColumn(k) === col.id);

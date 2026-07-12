@@ -15,7 +15,7 @@ interface SearchInputProps {
 /**
  * Reusable search input that resolves its placeholder via the i18n store.
  * Must be used instead of <Translate render={...}> inside Server Components,
- * because functions cannot be serialised across the Serverâ†’Client boundary.
+ * because functions cannot be serialised across the Server→Client boundary.
  */
 export function SearchInput({
   i18nKey,

@@ -117,7 +117,7 @@ export function UnitFilters({ projects, statusMap }: UnitFiltersProps) {
           )}
         </div>
 
-        {/* Status Pills Filter â€” colored dot indicators sesuai e2e_simulation_table */}
+        {/* Status Pills Filter — colored dot indicators sesuai e2e_simulation_table */}
         <div className="flex flex-wrap gap-2 pt-3 border-t border-border/40">
           {/* "Semua" pill */}
           <button

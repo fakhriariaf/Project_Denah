@@ -141,7 +141,7 @@ export function TransactionsTab({
                         {trx.transactionNumber}
                       </TableCell>
                       <TableCell className="font-mono text-xs text-muted-foreground">
-                        {trx.invoiceNumber || "â€”"}
+                        {trx.invoiceNumber || "—"}
                       </TableCell>
                       <TableCell className="text-xs text-foreground">
                         {trx.description}
@@ -170,7 +170,7 @@ export function TransactionsTab({
                         </Badge>
                       </TableCell>
                       <TableCell className="text-xs text-foreground font-medium">
-                        {trx.resolvedApproverName || "â€”"}
+                        {trx.resolvedApproverName || "—"}
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
                         {trx.accountName}

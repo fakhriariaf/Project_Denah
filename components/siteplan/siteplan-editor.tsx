@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useRef, useTransition, useMemo, useEffect } from "react";
 import { coordsToPolygonPoints, getStatusColor } from "@/lib/siteplan-utils";
@@ -166,8 +166,8 @@ export function SiteplanEditor({
       let blobToSend = blob;
       let finalExt = ext;
 
-      // SVG â†’ kirim langsung ke Python SVG analyzer (koordinat EXACT dari elemen SVG)
-      // Jauh lebih presisi dibanding rasterisasi â†’ OpenCV
+      // SVG → kirim langsung ke Python SVG analyzer (koordinat EXACT dari elemen SVG)
+      // Jauh lebih presisi dibanding rasterisasi → OpenCV
       // Python SVG analyzer membaca polygon/rect element native SVG
       if (ext === 'svg') {
         blobToSend = blob;
@@ -178,9 +178,8 @@ export function SiteplanEditor({
 
       setScanStatus(t("siteplan_editor.processing_ai"));
 
-      // Call Python FastAPI AI Engine (configurable via env var for production)
-      const aiBaseUrl = process.env.NEXT_PUBLIC_AI_ENGINE_URL || "http://127.0.0.1:8000";
-      const aiResponse = await fetch(`${aiBaseUrl}/api/v1/analyze-siteplan`, {
+      // Call AI Engine through server-side proxy (secrets stay server-only)
+      const aiResponse = await fetch("/api/ai/analyze-siteplan", {
         method: "POST",
         body: formData,
       });
@@ -195,20 +194,20 @@ export function SiteplanEditor({
         const origWidth = aiData.meta?.original_width || width;
         const origHeight = aiData.meta?.original_height || height;
 
-        // â”€â”€ PERBAIKAN PRESISI â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── PERBAIKAN PRESISI ──────────────────────────────────────────────────────
         // SVG viewer menggunakan preserveAspectRatio="xMidYMid meet"
         // sehingga gambar di-scale uniform (scale terkecil) dan mungkin ada offset
-        // jika aspek rasio gambar â‰  aspek rasio viewBox
+        // jika aspek rasio gambar ≠ aspek rasio viewBox
         const effectiveScale = Math.min(width / origWidth, height / origHeight);
         const offsetX = (width - origWidth * effectiveScale) / 2;
         const offsetY = (height - origHeight * effectiveScale) / 2;
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ──────────────────────────────────────────────────────────────────────────
 
         const newShapes: ExistingShape[] = aiData.data.map((item: any, index: number) => {
           let coords: Point[];
 
           if (item.polygon_points && item.polygon_points.length >= 3) {
-            // âœ… Gunakan titik polygon ASLI dari Python (lebih presisi)
+            // ✅ Gunakan titik polygon ASLI dari Python (lebih presisi)
             coords = (item.polygon_points as { x: number, y: number }[]).map(pt => ({
               x: Math.round(pt.x * effectiveScale + offsetX),
               y: Math.round(pt.y * effectiveScale + offsetY),
@@ -454,7 +453,7 @@ export function SiteplanEditor({
   return (
     <div className="flex flex-col gap-5">
 
-      {/* â”€â”€ PREMIUM INTEGRATED TOOLBAR â”€â”€ */}
+      {/* ── PREMIUM INTEGRATED TOOLBAR ── */}
       <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-[#D6DED2] bg-white p-3.5 shadow-sage">
 
         {/* View Mode Button */}
@@ -593,7 +592,7 @@ export function SiteplanEditor({
         )}
       </div>
 
-      {/* â”€â”€ TWO-COLUMN INTERACTIVE EDITOR GRID â”€â”€ */}
+      {/* ── TWO-COLUMN INTERACTIVE EDITOR GRID ── */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
 
         {/* LEFT COLUMN: SVG Canvas (col-span-8) */}
@@ -994,7 +993,7 @@ export function SiteplanEditor({
 
       </div>
 
-      {/* â”€â”€ DESIGN STANDARD DOCUMENTATION / HELP FOOTER â”€â”€ */}
+      {/* ── DESIGN STANDARD DOCUMENTATION / HELP FOOTER ── */}
       <div className="flex items-center gap-3 rounded-2xl border border-[#DDE8D8] bg-[#DDE8D8]/20 px-4 py-3.5 text-xs text-[#4F6F52] shadow-sm font-semibold leading-relaxed">
         <Info className="h-4.5 w-4.5 shrink-0 text-[#4F6F52]" />
         {mode === "draw" ? (

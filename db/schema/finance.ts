@@ -22,7 +22,9 @@ export const invoices = pgTable("invoices", {
   notes: text("notes"),
   createdAt: defaultCreatedAt(),
   updatedAt: defaultUpdatedAt(),
-});
+}, (table) => ({
+  projectCreatedIdx: index("idx_invoices_project_created").on(table.projectId, table.createdAt),
+}));
 
 export const payments = pgTable("payments", {
   id: text("id").primaryKey(),
@@ -39,7 +41,10 @@ export const payments = pgTable("payments", {
   verifiedBy: text("verified_by").references(() => user.id, { onDelete: "set null" }),
   verifiedAt: timestamp("verified_at", { mode: "date" }),
   createdAt: defaultCreatedAt(),
-});
+}, (table) => ({
+  projectCreatedIdx: index("idx_payments_project_created").on(table.projectId, table.createdAt),
+  invoiceStatusIdx: index("idx_payments_invoice_status").on(table.invoiceId, table.status),
+}));
 
 export const transactions = pgTable("transactions", {
   id: text("id").primaryKey(),

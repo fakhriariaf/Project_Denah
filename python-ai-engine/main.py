@@ -1,9 +1,10 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from routers.svg_analyzer import analyze_svg_content
 from routers.raster_analyzer import analyze_raster_content
 import uvicorn
 import os
+import secrets
 
 app = FastAPI(
     title="Housing Siteplan Analysis AI Engine",
@@ -22,11 +23,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+def verify_api_key(x_api_key: str | None = Header(default=None)):
+    """Validate X-API-Key header against AI_ENGINE_API_KEY env var."""
+    expected = os.getenv("AI_ENGINE_API_KEY")
+    if not expected:
+        raise HTTPException(status_code=500, detail="AI engine API key is not configured")
+    if not x_api_key or not secrets.compare_digest(x_api_key, expected):
+        raise HTTPException(status_code=401, detail="Invalid or missing API key")
+
+
 @app.get("/")
 def read_root():
     return {"status": "online", "message": "Siteplan AI Engine is running"}
 
-@app.post("/api/v1/analyze-siteplan")
+@app.post("/api/v1/analyze-siteplan", dependencies=[Depends(verify_api_key)])
 async def analyze_siteplan(file: UploadFile = File(...)):
     if not file.filename:
         raise HTTPException(status_code=400, detail="No file uploaded")

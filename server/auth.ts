@@ -4,6 +4,23 @@ import { db, schema } from "@/db";
 import { user as userTable } from "@/db/schema/auth";
 import { eq } from "drizzle-orm";
 
+export function validateBetterAuthSecret(): void {
+  const secret = process.env.BETTER_AUTH_SECRET;
+  const isProduction = process.env.NODE_ENV === "production";
+
+  if (!secret || secret.length < 32) {
+    const message = `BETTER_AUTH_SECRET must be at least 32 characters. Current length: ${secret?.length ?? 0}.`;
+
+    if (isProduction) {
+      throw new Error(message);
+    }
+
+    console.warn(`[auth] WARNING: ${message} Continuing outside production.`);
+  }
+}
+
+validateBetterAuthSecret();
+
 export const auth = betterAuth({
   baseURL: process.env.BETTER_AUTH_URL,
   database: drizzleAdapter(db, {
