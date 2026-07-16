@@ -12,6 +12,7 @@ import { deleteCustomer } from "@/server/actions/master";
 import { User, Phone, Mail, MapPin, Search, Layers, Clipboard, ShieldCheck, HelpCircle, Check, Info } from "lucide-react";
 import type { CustomerInput } from "@/server/validators/master";
 import { useI18n } from "@/lib/i18n";
+import { getLeadSourceLabel } from "@/lib/label-helpers";
 
 interface Customer {
   id: string;
@@ -214,7 +215,7 @@ export function CustomersShell({
                             <TableCell className="font-mono text-xs text-primary py-4">{c.phone}</TableCell>
                             <TableCell className="text-xs font-bold text-amber-700 py-4 font-mono">{c.unitCode || "-"}</TableCell>
                             <TableCell className="text-xs text-muted-foreground py-4 capitalize">
-                              {c.source ? c.source.replace("_", " ") : "-"}
+                              {c.source ? getLeadSourceLabel(c.source) : "-"}
                             </TableCell>
                             <TableCell className="py-4">
                               <Badge variant="outline" className={`text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-full ${st?.className}`}>
@@ -331,7 +332,7 @@ export function CustomersShell({
                     <div>
                       <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider block">{t("cust.source_title")}</span>
                       <span className="text-xs text-primary font-extrabold capitalize mt-0.5 block">
-                        {selectedCustomer.source ? selectedCustomer.source.replace("_", " ") : "-"}
+                        {selectedCustomer.source ? getLeadSourceLabel(selectedCustomer.source) : "-"}
                       </span>
                     </div>
                     <div>

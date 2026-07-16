@@ -98,23 +98,23 @@ export function ProjectsShell({
         {/* Left Pane (Table): 65% width equivalent */}
         <div className="lg:col-span-2 space-y-4">
           <Card className="border-[#D6DED2]/80 shadow-sage bg-white rounded-2xl overflow-hidden">
-            <CardHeader className="pb-3 border-b border-[#D6DED2]/30">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div>
+            <CardHeader className="pb-4 border-b border-[#D6DED2]/30">
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(260px,1fr)_minmax(360px,420px)] xl:items-start">
+                <div className="min-w-0">
                   <CardTitle className="text-lg font-bold">{t("proj.list_title")}</CardTitle>
                   <CardDescription className="text-xs">
                     {t("proj.list_desc")}
                   </CardDescription>
                 </div>
                 {/* Inline Filters */}
-                <div className="flex flex-wrap gap-2 items-center">
+                <div className="flex w-full flex-col gap-2">
                   <Input
                     placeholder={t("proj.search_placeholder")}
-                    className="h-8 max-w-[200px] text-xs bg-[#F7F8F3]/50 border-[#D6DED2] rounded-xl focus:bg-white transition-premium"
+                    className="h-9 w-full text-xs bg-[#F7F8F3]/50 border-[#D6DED2] rounded-2xl focus:bg-white transition-premium"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
-                  <div className="flex gap-1 bg-[#F7F8F3] p-1 rounded-xl border border-[#D6DED2]/50">
+                  <div className="flex w-fit flex-wrap gap-1 bg-[#F7F8F3] p-1 rounded-2xl border border-[#D6DED2]/50">
                     {(["", "active", "inactive", "completed"] as const).map((s) => (
                       <button
                         key={s}

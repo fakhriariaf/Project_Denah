@@ -100,7 +100,7 @@ export function FinanceAccountForm({ id, initialData, isEditOnly = false }: Prop
       ) : (
         <Button
           onClick={() => setOpen(true)}
-          className="btn-premium bg-primary hover:bg-primary/90 text-primary-foreground gap-2"
+          className="btn-premium bg-[#4F6F52] hover:bg-[#3D563F] text-white gap-2"
         >
           <PlusCircle className="h-4 w-4" />
           {t("account_form.add_btn")}
