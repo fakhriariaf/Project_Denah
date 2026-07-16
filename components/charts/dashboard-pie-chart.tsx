@@ -13,7 +13,9 @@ const PIE_COLORS = ["#8FAF9A", "#FFF2C2", "#DCECF7", "#FBE4C9", "#F3D1D1", "#E9D
 const STATUS_COLOR_MAP: Record<string, string> = {
   "Belum Siap": "#AAB5AF",
   "Tersedia": "#8FAF9A",
+  "Tersedia (Indent)": "#8FAF9A",
   "Tersedia - Ready Stock": "#3F5941",
+  "Tersedia Siap Huni": "#3F5941",
   "Booking": "#E9C46A",
   "Proses KPR": "#8FB8D8",
   "Pending Bayar": "#FBE4C9",
@@ -21,6 +23,7 @@ const STATUS_COLOR_MAP: Record<string, string> = {
   "Proses Bangun": "#B8A4D9",
   "Proses Bangun - Ready Stock": "#4B286D",
   "Bangun - Ready Stock": "#4B286D",
+  "Sedang Dibangun untuk Ready Stock": "#4B286D",
   "Selesai Bangun": "#7AA874",
   "Overdue": "#E8A0A8",
   "Batal": "#A8B0AA",
