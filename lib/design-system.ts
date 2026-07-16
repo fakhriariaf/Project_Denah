@@ -39,7 +39,7 @@ export const denahDesignTokens = {
 
 export const unitStatusColorMap = {
   available: {
-    label: "Tersedia",
+    label: "Tersedia (Indent)",
     bg: "#DDE8D8",
     text: "#4F6F52",
   },
@@ -64,12 +64,12 @@ export const unitStatusColorMap = {
     text: "#8A3030",
   },
   construction: {
-    label: "Proses Bangun",
+    label: "Pembangunan Unit Konsumen",
     bg: "#E9DDF7",
     text: "#5D4382",
   },
   construction_done: {
-    label: "Bangunan Selesai",
+    label: "Selesai Bangun - Siap Akad/Serah Terima",
     bg: "#D4EEE7",
     text: "#3F7568",
   },

@@ -9,6 +9,9 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
+const primaryActionClass =
+  "btn-premium bg-[#4F6F52] text-white hover:bg-[#3D563F]";
+
 const meta = {
   title: "Components/Card",
   component: Card,
@@ -30,7 +33,7 @@ export const Default: Story = {
       </CardContent>
       <CardFooter className="justify-end gap-2">
         <Button variant="outline" size="sm">Detail</Button>
-        <Button size="sm">Kelola</Button>
+        <Button size="sm" className={primaryActionClass}>Kelola</Button>
       </CardFooter>
     </Card>
   ),
