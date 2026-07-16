@@ -52,7 +52,7 @@ export function ComplaintsTab({
         </div>
         <Button
           onClick={onNewComplaint}
-          className="bg-primary hover:bg-primary text-primary-foreground font-semibold text-xs"
+          className="btn-premium bg-[#4F6F52] hover:bg-[#3D563F] text-white font-semibold text-xs"
         >
           <Plus className="mr-1.5 h-3.5 w-3.5" />
           {t("production.btn_new_complaint")}

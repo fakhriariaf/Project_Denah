@@ -220,7 +220,7 @@ function getPhysicalReadiness(unit: ShapeWithUnit["unit"], selectedSpkBast: unkn
   if (isReadyStockType) {
     return {
       ready: true,
-      reason: "Unit sudah Ready Stock.",
+      reason: "Unit sudah Tersedia Siap Huni.",
     };
   }
 
@@ -642,7 +642,7 @@ export function SiteplanViewer({
       // 3. Complete construction with the attachment ID
       const res = await completeConstruction(bastUnit.id, attachmentRes.attachmentId);
       if (res.success) {
-        alert(`Unit "${bastUnit.code}" berhasil dinyatakan selesai pembangunan dan status berubah menjadi Tersedia - Ready Stock!`);
+        alert(`Unit "${bastUnit.code}" berhasil dinyatakan selesai pembangunan dan status berubah menjadi Tersedia Siap Huni!`);
         setBastDialogOpen(false);
         setBastUnit(null);
         setBastSpk(null);
@@ -865,13 +865,13 @@ export function SiteplanViewer({
   const isReady = unit ? !!unit.isReadyStock : false;
   const getUnbookedStatusLabel = (status: string, isReadyStock: boolean) => {
     if (status === "available") {
-      return isReadyStock ? "Tersedia - Ready Stock" : "Tersedia";
+      return isReadyStock ? "Tersedia Siap Huni" : "Tersedia (Indent)";
     }
     if (status === "construction" || status === "overdue") {
-      return isReadyStock ? "Sedang Dibangun untuk Ready Stock" : "Proses Bangun";
+      return isReadyStock ? "Sedang Dibangun untuk Ready Stock" : "Pembangunan Unit Konsumen";
     }
     if (status === "construction_done") {
-      return isReadyStock ? "Tersedia - Ready Stock" : "Selesai Bangun";
+      return isReadyStock ? "Tersedia Siap Huni" : "Selesai Bangun";
     }
     return getUnitStatusLabel(status, isReadyStock);
   };
@@ -914,10 +914,10 @@ export function SiteplanViewer({
         ];
       }
 
-      // "Tersedia - Ready Stock" — unit already done, waiting buyer
+      // "Tersedia Siap Huni" — unit already done, waiting buyer
       if (isReadyVal) {
         return [
-          { key: "available",       label: "Tersedia - Ready Stock",   desc: "Unit Ready Stock siap dipasarkan — fisik sudah selesai", done: true, active: true },
+          { key: "available",       label: "Tersedia Siap Huni",   desc: "Unit siap huni siap dipasarkan — fisik sudah selesai", done: true, active: true },
           { key: "waiting_booking", label: "Menunggu Booking Konsumen", desc: "Menunggu minat calon konsumen", done: false, active: false },
           { key: "booking",         label: "Booking / Penjualan",       desc: "Pendaftaran transaksi konsumen", done: false, active: false },
           { key: "payment",         label: "Pembayaran sesuai skema",   desc: "Cash, Cash Bertahap, atau KPR", done: false, active: false },
@@ -983,7 +983,7 @@ export function SiteplanViewer({
 
       if (isReadyStockUnit) {
         const steps = [
-          { key: "available", label: "Tersedia - Ready Stock", desc: "Unit Ready Stock siap dipasarkan", done: true, active: false },
+          { key: "available", label: "Tersedia Siap Huni", desc: "Unit siap huni siap dipasarkan", done: true, active: false },
           { key: "booking_fee", label: "Booking Fee", desc: "Pembayaran booking fee awal", done: bfPaid, active: !bfPaid },
           { key: "cash_payment", label: "Pelunasan Cash", desc: "Pelunasan sisa pembayaran unit", done: isCashPaid, active: bfPaid && !isCashPaid },
           { key: "akad_ppjb", label: "Akad / PPJB", desc: "Penandatanganan Akad / PPJB", done: isCashPaid, active: isCashPaid && !isHandoverWaiting && !isHandoverComplete },
@@ -1031,7 +1031,7 @@ export function SiteplanViewer({
 
       if (isReadyStockUnit) {
         const steps = [
-          { key: "available", label: "Tersedia - Ready Stock", desc: "Unit Ready Stock siap dipasarkan", done: true, active: false },
+          { key: "available", label: "Tersedia Siap Huni", desc: "Unit siap huni siap dipasarkan", done: true, active: false },
           { key: "booking_fee", label: "Booking Fee", desc: "Pembayaran booking fee awal", done: bfPaid, active: !bfPaid },
           { key: "dp_payment", label: "DP / Termin Awal", desc: "Pembayaran uang muka / termin ke-1", done: dpPaid, active: bfPaid && !dpPaid },
           { key: "installment_payment", label: "Pembayaran Termin Berjalan", desc: "Pelunasan cicilan termin berjalan", done: allInvoicesPaid, active: dpPaid && !allInvoicesPaid },
@@ -1091,7 +1091,7 @@ export function SiteplanViewer({
       const kprPemberkasan3 = kprStatus === "pemberkasan" || kprProsesBank;
 
       const steps = [
-        { key: "available",        label: "Tersedia - Ready Stock",      desc: "Unit Ready Stock siap dipasarkan",                    done: true,                                    active: false },
+        { key: "available",        label: "Tersedia Siap Huni",      desc: "Unit siap huni siap dipasarkan",                    done: true,                                    active: false },
         { key: "booking_fee",      label: "Booking Fee",                 desc: "Pembayaran booking fee awal",                        done: bfPaid,                                  active: !bfPaid },
         { key: "bi_checking",      label: "BI Checking",                 desc: "Pemeriksaan BI/SLIK konsumen",                       done: kprPemberkasan3,                         active: bfPaid && kprBiChecking3 },
         { key: "pemberkasan",      label: "Pemberkasan",                 desc: "Upload & verifikasi dokumen KPR (KTP/NPWP/Slip/KK)", done: kprProsesBank,                           active: bfPaid && kprStatus === "pemberkasan" },
@@ -1735,7 +1735,7 @@ export function SiteplanViewer({
                     )}
 
                     {/* Mulai Pembangunan Fisik Action Card */}
-                    {activeBooking && (unit.status === "booking" || unit.status === "kpr_process") && (() => {
+                    {activeBooking && !unit.isReadyStock && (unit.status === "booking" || unit.status === "kpr_process") && (() => {
                       const kprProcess = kprProcesses?.find(k => k.bookingId === activeBooking.id);
                       const bfInvoice = invoices?.find(i => i.bookingId === activeBooking.id && i.type === "booking_fee");
                       const dpInvoice = invoices?.find(i => i.bookingId === activeBooking.id && i.type === "dp");
@@ -1817,11 +1817,11 @@ export function SiteplanViewer({
                             <p className="text-xs font-medium text-[#66736A] leading-relaxed">
                               {isIndentUnit ? (
                                 <>
-                                  Pembangunan unit ini telah rampung 100%. Sebagai Developer, Anda dapat memverifikasi selesainya pembangunan fisik lapangan secara resmi. Karena unit ini telah terikat dengan konsumen, status unit akan tetap terikat dan tidak menjadi <span className="text-[#4F6F52] font-black">Tersedia (Ready Stock)</span>.
+                                  Pembangunan unit ini telah rampung 100%. Sebagai Developer, Anda dapat memverifikasi selesainya pembangunan fisik lapangan secara resmi. Karena unit ini telah terikat dengan konsumen, status unit akan tetap terikat dan tidak menjadi <span className="text-[#4F6F52] font-black">Tersedia Siap Huni</span>.
                                 </>
                               ) : (
                                 <>
-                                  Pembangunan unit ini telah rampung 100%. Sebagai Developer, Anda dapat memverifikasi selesainya pembangunan fisik lapangan secara resmi agar status unit kembali menjadi <span className="text-[#4F6F52] font-black">Tersedia (Ready Stock)</span>.
+                                  Pembangunan unit ini telah rampung 100%. Sebagai Developer, Anda dapat memverifikasi selesainya pembangunan fisik lapangan secara resmi agar status unit kembali menjadi <span className="text-[#4F6F52] font-black">Tersedia Siap Huni</span>.
                                 </>
                               )}
                             </p>
@@ -1899,7 +1899,7 @@ export function SiteplanViewer({
                             if (isReadyStockUnit) {
                               return (
                                 <p>
-                                  Unit Ready Stock dan belum terjual.<br />
+                                  Unit siap huni dan belum terjual.<br />
                                   <span className="font-bold text-[#4F6F52]">BAST Konsumen akan aktif setelah ada booking dan syarat pembayaran terpenuhi.</span>
                                 </p>
                               );
@@ -1908,7 +1908,7 @@ export function SiteplanViewer({
                               return (
                                 <p>
                                   Unit sedang dibangun untuk stok developer.<br />
-                                  <span className="font-bold text-purple-600">Setelah progress 100% dan BAST Vendor ke Developer disetujui, unit akan menjadi Ready Stock.</span>
+                                  <span className="font-bold text-purple-600">Setelah progress 100% dan BAST Vendor ke Developer disetujui, unit akan menjadi Tersedia Siap Huni.</span>
                                 </p>
                               );
                             }
@@ -2810,7 +2810,7 @@ export function SiteplanViewer({
                 ) : (
                   <>
                     <CheckCircle2 className="h-4 w-4 text-white" />
-                    Selesai &amp; Jadikan Ready Stock
+                    Selesai &amp; Jadikan Siap Huni
                   </>
                 )}
               </Button>

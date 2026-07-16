@@ -62,6 +62,12 @@ import {
 } from "@/components/charts";
 import { useI18n } from "@/lib/i18n";
 import { Translate } from "@/components/translate";
+import {
+  getUnitStatusLabel,
+  getBookingStatusLabel,
+  getSpkStatusLabel,
+  getComplaintStatusLabel,
+} from "@/lib/label-helpers";
 
 interface ReportsShellProps {
   projects: Array<{ id: string; name: string; code: string }>;
@@ -623,11 +629,11 @@ export default function ReportsShell({
                         <SelectValue placeholder={t("reports.filter_all_status")}>
                           {statusFilter === "all" && t("reports.filter_all_status")}
                           {statusFilter === "belum_siap" && "Belum Siap"}
-                          {statusFilter === "available" && "Tersedia"}
+                          {statusFilter === "available" && "Tersedia (Indent)"}
                           {statusFilter === "booking" && "Booking"}
                           {statusFilter === "kpr_process" && "Proses KPR"}
                           {statusFilter === "sold" && "Terjual"}
-                          {statusFilter === "construction" && "Proses Bangun"}
+                          {statusFilter === "construction" && "Pembangunan Unit Konsumen"}
                           {statusFilter === "construction_done" && "Selesai Bangun"}
                           {statusFilter === "overdue" && "Overdue"}
                         </SelectValue>
@@ -635,11 +641,11 @@ export default function ReportsShell({
                       <SelectContent>
                         <SelectItem value="all" className="text-xs">{t("reports.filter_all_status")}</SelectItem>
                         <SelectItem value="belum_siap" className="text-xs">Belum Siap</SelectItem>
-                        <SelectItem value="available" className="text-xs">Tersedia</SelectItem>
+                        <SelectItem value="available" className="text-xs">Tersedia (Indent)</SelectItem>
                         <SelectItem value="booking" className="text-xs">Booking</SelectItem>
                         <SelectItem value="kpr_process" className="text-xs">Proses KPR</SelectItem>
                         <SelectItem value="sold" className="text-xs">Terjual</SelectItem>
-                        <SelectItem value="construction" className="text-xs">Proses Bangun</SelectItem>
+                        <SelectItem value="construction" className="text-xs">Pembangunan Unit Konsumen</SelectItem>
                         <SelectItem value="construction_done" className="text-xs">Selesai Bangun</SelectItem>
                         <SelectItem value="overdue" className="text-xs">Overdue</SelectItem>
                       </SelectContent>
@@ -698,7 +704,7 @@ export default function ReportsShell({
                                   : "bg-[#F7F8F3] text-[#66736A] border-[#D6DED2] hover:bg-[#F7F8F3] text-[10px]"
                               }
                             >
-                              {item.status}
+                              {getUnitStatusLabel(item.status)}
                             </Badge>
                           </TableCell>
                         </TableRow>
@@ -800,7 +806,7 @@ export default function ReportsShell({
                                   : "bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-50 text-[10px]"
                               }
                             >
-                              {item.status}
+                              {getBookingStatusLabel(item.status)}
                             </Badge>
                           </TableCell>
                         </TableRow>
@@ -916,7 +922,7 @@ export default function ReportsShell({
                                   : "bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-50 text-[10px]"
                               }
                             >
-                              {item.status}
+                              {getSpkStatusLabel(item.status)}
                             </Badge>
                           </TableCell>
                         </TableRow>
@@ -1234,18 +1240,6 @@ export default function ReportsShell({
                     </TableHeader>
                     <TableBody>
                       {(() => {
-                        const statusLabels: Record<string, string> = {
-                          open: "Open",
-                          in_progress: "In Progress",
-                          in_review: "In Review",
-                          need_revision: "Need Revision",
-                          approved_extension: "Approved Extension",
-                          follow_up_required: "Follow Up Required",
-                          waiting_customer_confirmation: "Waiting Confirmation",
-                          resolved: "Resolved",
-                          rejected: "Rejected",
-                          closed: "Closed",
-                        };
                         const entries = Object.entries(complaintData.statusBreakdown as Record<string, number>)
                           .filter(([, cnt]) => cnt > 0)
                           .sort(([, a], [, b]) => b - a);
@@ -1280,7 +1274,7 @@ export default function ReportsShell({
                                     : "bg-[#F7F8F3] text-[#66736A] border-[#D6DED2] hover:bg-[#F7F8F3] text-[10px]"
                                 }
                               >
-                                {statusLabels[status] || status}
+                                {getComplaintStatusLabel(status)}
                               </Badge>
                             </TableCell>
                             <TableCell className="text-right font-mono font-bold text-xs text-[#4F6F52] tabular-nums py-3">
