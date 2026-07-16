@@ -37,48 +37,45 @@ import {
   Receipt,
 } from "lucide-react";
 import { formatRupiah, formatDate } from "@/lib/format-utils";
+import {
+  getInvoiceStatusLabel,
+  getPaymentMethodLabel,
+  getPaymentStatusLabel,
+  invoiceScheduleLabel,
+} from "@/lib/label-helpers";
+import { computeInvoicePaymentSummary } from "@/lib/finance-invoice-summary";
+import { FinanceTimeline } from "@/components/finance/finance-timeline";
+import { FinanceDocLink } from "@/components/finance/finance-doc-link";
 
 export const revalidate = 0;
 
-const TYPE_LABELS: Record<string, string> = {
-  booking_fee: "Biaya Pemesanan (Booking Fee)",
-  dp: "Uang Muka / Down Payment (DP)",
-  installment: "Cicilan Bertahap",
-  other: "Lain-Lain",
-};
-
-const METHOD_LABELS: Record<string, string> = {
-  cash: "Tunai",
-  transfer: "Transfer Bank",
-  giro: "Giro / Bilyet",
-  other: "Lainnya",
-};
-
 function getStatusBadge(status: string) {
+  const label = getInvoiceStatusLabel(status);
   switch (status) {
     case "paid":
-      return <Badge className="bg-green-100 text-green-800 border-green-300">Lunas</Badge>;
+      return <Badge className="bg-green-100 text-green-800 border-green-300">{label}</Badge>;
     case "partial":
-      return <Badge className="bg-amber-100 text-amber-800 border-amber-300">Sebagian</Badge>;
+      return <Badge className="bg-amber-100 text-amber-800 border-amber-300">{label}</Badge>;
     case "unpaid":
-      return <Badge className="bg-red-100 text-red-800 border-red-300">Belum Bayar</Badge>;
+      return <Badge className="bg-red-100 text-red-800 border-red-300">{label}</Badge>;
     case "cancelled":
-      return <Badge className="bg-gray-100 text-gray-700 border-gray-300">Dibatalkan</Badge>;
+      return <Badge className="bg-gray-100 text-gray-700 border-gray-300">{label}</Badge>;
     default:
-      return <Badge variant="outline">{status}</Badge>;
+      return <Badge variant="outline">{label}</Badge>;
   }
 }
 
 function getPaymentStatusBadge(status: string) {
+  const label = getPaymentStatusLabel(status);
   switch (status) {
     case "verified":
-      return <Badge className="bg-green-100 text-green-800 border-green-300">Terverifikasi</Badge>;
+      return <Badge className="bg-green-100 text-green-800 border-green-300">{label}</Badge>;
     case "pending":
-      return <Badge className="bg-amber-100 text-amber-800 border-amber-300">Pending</Badge>;
+      return <Badge className="bg-amber-100 text-amber-800 border-amber-300">{label}</Badge>;
     case "rejected":
-      return <Badge className="bg-red-100 text-red-800 border-red-300">Ditolak</Badge>;
+      return <Badge className="bg-red-100 text-red-800 border-red-300">{label}</Badge>;
     default:
-      return <Badge variant="outline">{status}</Badge>;
+      return <Badge variant="outline">{label}</Badge>;
   }
 }
 
@@ -113,6 +110,9 @@ export default async function InvoiceDetailPage({
       status: invoices.status,
       notes: invoices.notes,
       createdAt: invoices.createdAt,
+      scheduleKind: invoices.scheduleKind,
+      scheduleSequence: invoices.scheduleSequence,
+      scheduleLabel: invoices.scheduleLabel,
       projectName: projects.name,
       customerName: customers.name,
       unitCode: units.code,
@@ -148,11 +148,11 @@ export default async function InvoiceDetailPage({
     .where(eq(payments.invoiceId, id))
     .orderBy(desc(payments.paymentDate));
 
-  // Calculate totals
-  const totalPaid = paymentsList
-    .filter((p) => p.status === "verified")
-    .reduce((sum, p) => sum + p.amount, 0);
-  const remainingBalance = Math.max(0, invoice.amount - totalPaid);
+  // Calculate totals (verified payments only; remaining balance never negative)
+  const { totalPaid, remainingBalance } = computeInvoicePaymentSummary(
+    invoice.amount,
+    paymentsList,
+  );
 
   return (
     <div className="space-y-6 p-6">
@@ -177,7 +177,7 @@ export default async function InvoiceDetailPage({
               </Button>
             </Link>
             <Link href={`/finance/invoices/${id}/print`} target="_blank">
-              <Button size="sm" className="gap-1 bg-primary hover:bg-[#3d5940] text-white">
+              <Button size="sm" className="gap-1 bg-primary hover:bg-primary/90 text-primary-foreground">
                 <Printer className="h-4 w-4" />
                 Cetak Invoice
               </Button>
@@ -209,14 +209,19 @@ export default async function InvoiceDetailPage({
                   <Receipt className="h-4 w-4 text-primary/70 mt-0.5 shrink-0" />
                   <div>
                     <p className="text-xs text-muted-foreground font-medium">Jenis Tagihan</p>
-                    <p className="text-sm font-semibold text-foreground">{TYPE_LABELS[invoice.type] || invoice.type}</p>
+                    <p className="text-sm font-semibold text-foreground">{invoiceScheduleLabel({
+                      type: invoice.type,
+                      scheduleKind: invoice.scheduleKind ?? null,
+                      scheduleSequence: invoice.scheduleSequence ?? null,
+                      scheduleLabel: invoice.scheduleLabel ?? null,
+                    })}</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3">
                   <CreditCard className="h-4 w-4 text-primary/70 mt-0.5 shrink-0" />
                   <div>
                     <p className="text-xs text-muted-foreground font-medium">Jumlah Tagihan</p>
-                    <p className="text-sm font-bold text-foreground">{formatRupiah(invoice.amount)}</p>
+                    <p className="text-sm font-bold text-foreground font-mono tabular-nums">{formatRupiah(invoice.amount)}</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3">
@@ -282,13 +287,13 @@ export default async function InvoiceDetailPage({
           <CardContent className="space-y-4">
             <div className="flex justify-between items-center">
               <span className="text-sm text-muted-foreground">Total Tagihan</span>
-              <span className="text-sm font-bold font-mono text-foreground">
+              <span className="text-sm font-bold font-mono tabular-nums text-foreground">
                 {formatRupiah(invoice.amount)}
               </span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-sm text-muted-foreground">Sudah Dibayar</span>
-              <span className="text-sm font-bold font-mono text-green-700">
+              <span className="text-sm font-bold font-mono tabular-nums text-green-700">
                 {formatRupiah(totalPaid)}
               </span>
             </div>
@@ -296,7 +301,7 @@ export default async function InvoiceDetailPage({
               <div className="flex justify-between items-center">
                 <span className="text-sm font-semibold text-foreground">Sisa Tagihan</span>
                 <span
-                  className={`text-base font-black font-mono ${
+                  className={`text-base font-black font-mono tabular-nums ${
                     remainingBalance > 0 ? "text-red-700" : "text-green-700"
                   }`}
                 >
@@ -362,17 +367,22 @@ export default async function InvoiceDetailPage({
                 <TableBody>
                   {paymentsList.map((payment) => (
                     <TableRow key={payment.id}>
-                      <TableCell className="font-mono font-medium text-foreground">
-                        {payment.paymentNumber}
+                      <TableCell className="font-mono font-medium">
+                        <FinanceDocLink
+                          href={`/finance/payments/${payment.id}`}
+                          className="font-medium"
+                        >
+                          {payment.paymentNumber}
+                        </FinanceDocLink>
                       </TableCell>
-                      <TableCell className="font-mono font-semibold text-foreground">
+                      <TableCell className="font-mono font-semibold tabular-nums text-foreground">
                         {formatRupiah(payment.amount)}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {formatDate(payment.paymentDate)}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        {METHOD_LABELS[payment.paymentMethod] || payment.paymentMethod}
+                        {getPaymentMethodLabel(payment.paymentMethod)}
                       </TableCell>
                       <TableCell>
                         {payment.proofFileUrl ? (
@@ -397,6 +407,9 @@ export default async function InvoiceDetailPage({
           )}
         </CardContent>
       </Card>
+
+      {/* Timeline */}
+      <FinanceTimeline entityType="invoice" entityId={id} />
     </div>
   );
 }

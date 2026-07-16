@@ -1,6 +1,11 @@
 "use client";
 
 import React from "react";
+import {
+  getInvoiceTypeLabel,
+  getPaymentMethodLabel,
+  getInvoiceStatusLabel,
+} from "@/lib/label-helpers";
 
 interface InvoiceData {
   id: string;
@@ -25,7 +30,7 @@ interface PaymentRow {
   paymentDate: Date;
   paymentMethod: "cash" | "transfer" | "giro" | "other";
   proofFileUrl?: string | null;
-  status: "pending" | "verified" | "rejected";
+  status: "pending" | "verified" | "rejected" | "voided";
   verifiedAt: Date | null;
 }
 
@@ -36,25 +41,15 @@ interface Props {
   onClose: () => void;
 }
 
-const TYPE_LABELS: Record<string, string> = {
-  booking_fee: "Biaya Pemesanan (Booking Fee)",
-  dp: "Uang Muka / Down Payment (DP)",
-  installment: "Cicilan Bertahap",
-  other: "Lain-Lain",
-};
-
-const METHOD_LABELS: Record<string, string> = {
-  cash: "Tunai",
-  transfer: "Transfer Bank",
-  giro: "Giro / Bilyet",
-  other: "Lainnya",
-};
-
-const STATUS_CONFIG = {
-  paid:      { label: "LUNAS",       bg: "#C8EFE0", color: "#1A5240", border: "#2E7A5E" },
-  partial:   { label: "SEBAGIAN",    bg: "#FBE4C9", color: "#7A3D0E", border: "#D47A2E" },
-  unpaid:    { label: "BELUM LUNAS", bg: "#FFD6D6", color: "#8B1A1A", border: "#C0392B" },
-  cancelled: { label: "DIBATALKAN",  bg: "#E7E9E7", color: "#3D4840", border: "#7A8880" },
+// User-facing labels come from the centralized helpers in lib/label-helpers.ts
+// (getInvoiceTypeLabel / getPaymentMethodLabel / getInvoiceStatusLabel) so no
+// raw enum value can leak. STATUS_COLORS carries ONLY the visual status colors
+// for the printed badge; the label text is derived from getInvoiceStatusLabel.
+const STATUS_COLORS = {
+  paid:      { bg: "#C8EFE0", color: "#1A5240", border: "#2E7A5E" },
+  partial:   { bg: "#FBE4C9", color: "#7A3D0E", border: "#D47A2E" },
+  unpaid:    { bg: "#FFD6D6", color: "#8B1A1A", border: "#C0392B" },
+  cancelled: { bg: "#E7E9E7", color: "#3D4840", border: "#7A8880" },
 };
 
 function formatRupiah(val: number) {
@@ -75,7 +70,9 @@ function formatDate(d: Date | null | string | undefined) {
 }
 
 export function InvoicePrintModal({ invoice, payments, companyName = "PT Denah Property Indonesia", onClose }: Props) {
-  const statusConf = STATUS_CONFIG[invoice.status] ?? STATUS_CONFIG.unpaid;
+  const statusConf = STATUS_COLORS[invoice.status] ?? STATUS_COLORS.unpaid;
+  // Label via centralized helper (uppercased for the printed badge style).
+  const statusLabel = getInvoiceStatusLabel(invoice.status).toUpperCase();
 
   const verifiedPayments = payments.filter(
     (p) => p.invoiceId === invoice.id && p.status === "verified"
@@ -217,7 +214,7 @@ export function InvoicePrintModal({ invoice, payments, companyName = "PT Denah P
                     letterSpacing: 1,
                     border: `2px solid ${statusConf.border}`,
                   }}>
-                    {statusConf.label}
+                    {statusLabel}
                   </div>
                 </div>
               </div>
@@ -241,7 +238,7 @@ export function InvoicePrintModal({ invoice, payments, companyName = "PT Denah P
                       ["Nomor Invoice", invoice.invoiceNumber],
                       ["Tanggal Terbit", formatDate(invoice.createdAt)],
                       ["Jatuh Tempo", formatDate(invoice.dueDate)],
-                      ["Jenis Tagihan", TYPE_LABELS[invoice.type]],
+                      ["Jenis Tagihan", getInvoiceTypeLabel(invoice.type)],
                     ].map(([label, val]) => (
                       <tr key={label}>
                         <td style={{ color: "#66736A", padding: "2px 0", width: 100 }}>{label}</td>
@@ -266,7 +263,7 @@ export function InvoicePrintModal({ invoice, payments, companyName = "PT Denah P
                 <tbody>
                   <tr>
                     <td style={{ padding: "12px", border: "1px solid #D6DED2", fontWeight: 600, color: "#243028" }}>
-                      {TYPE_LABELS[invoice.type]}
+                      {getInvoiceTypeLabel(invoice.type)}
                       {invoice.notes && <div style={{ fontSize: 10, color: "#66736A", fontWeight: 400, marginTop: 2 }}>{invoice.notes}</div>}
                     </td>
                     <td style={{ padding: "12px", border: "1px solid #D6DED2", color: "#66736A" }}>
@@ -316,7 +313,7 @@ export function InvoicePrintModal({ invoice, payments, companyName = "PT Denah P
                       <tr key={p.id}>
                         <td style={{ padding: "7px 10px", border: "1px solid #D6DED2", fontFamily: "monospace", fontWeight: 600, color: "#243028" }}>{p.paymentNumber}</td>
                         <td style={{ padding: "7px 10px", border: "1px solid #D6DED2", color: "#66736A" }}>{formatDate(p.paymentDate)}</td>
-                        <td style={{ padding: "7px 10px", border: "1px solid #D6DED2", color: "#66736A" }}>{METHOD_LABELS[p.paymentMethod]}</td>
+                        <td style={{ padding: "7px 10px", border: "1px solid #D6DED2", color: "#66736A" }}>{getPaymentMethodLabel(p.paymentMethod)}</td>
                         <td style={{ padding: "7px 10px", border: "1px solid #D6DED2", textAlign: "right", fontFamily: "monospace", fontWeight: 600, color: "#2E7A5E" }}>{formatRupiah(p.amount)}</td>
                       </tr>
                     ))}

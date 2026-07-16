@@ -29,6 +29,27 @@
       "when": 1783835335044,
       "tag": "0003_awesome_jane_foster",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1783954951300,
+      "tag": "0004_keen_shaman",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1784034554812,
+      "tag": "0005_military_hobgoblin",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1784120000000,
+      "tag": "0006_finance_hardening_schedule",
+      "breakpoints": true
     }
   ]
 }

@@ -32,6 +32,8 @@ import {
   Plus,
   Eye,
 } from "lucide-react";
+import { FinanceDocLink } from "@/components/finance/finance-doc-link";
+import { getPaymentMethodLabel } from "@/lib/label-helpers";
 import type { PaginatedResult } from "@/lib/pagination";
 
 type PaymentListItem = {
@@ -45,9 +47,11 @@ type PaymentListItem = {
   paymentMethod: "cash" | "transfer" | "giro" | "other";
   proofAttachmentId: string | null;
   proofFileUrl?: string | null;
-  status: "pending" | "verified" | "rejected";
+  proofUploadedBy?: string | null;
+  status: "pending" | "verified" | "rejected" | "voided";
   verifiedBy: string | null;
   verifiedAt: Date | null;
+  uploadedBy: string | null;
   createdAt: Date;
   projectName: string;
   customerName: string | null;
@@ -98,9 +102,11 @@ interface PaymentsTabProps {
     paymentMethod: "cash" | "transfer" | "giro" | "other";
     proofAttachmentId: string | null;
     proofFileUrl?: string | null;
-    status: "pending" | "verified" | "rejected";
+    proofUploadedBy?: string | null;
+    status: "pending" | "verified" | "rejected" | "voided";
     verifiedBy: string | null;
     verifiedAt: Date | null;
+    uploadedBy: string | null;
     createdAt: Date;
     projectName: string;
     customerName: string | null;
@@ -134,6 +140,8 @@ interface PaymentsTabProps {
   setVerificationAccount: (account: string) => void;
   verificationNotes: string;
   setVerificationNotes: (notes: string) => void;
+  currentUserId: string;
+  canSelfVerify: boolean;
   errorMsg: string | null;
   isSubmitting: boolean;
   isSuperAdmin: boolean;
@@ -160,6 +168,8 @@ export function PaymentsTab({
   setVerificationAccount,
   verificationNotes,
   setVerificationNotes,
+  currentUserId,
+  canSelfVerify,
   errorMsg,
   isSubmitting,
   isSuperAdmin,
@@ -168,6 +178,10 @@ export function PaymentsTab({
   onDeletePaymentSubmit,
 }: PaymentsTabProps) {
   const { t } = useI18n();
+  const isOwnUpload =
+    !canSelfVerify &&
+    (selectedPayment?.uploadedBy === currentUserId ||
+      (!selectedPayment?.uploadedBy && selectedPayment?.proofUploadedBy === currentUserId));
 
   return (
     <div className="space-y-6">
@@ -180,7 +194,7 @@ export function PaymentsTab({
           </div>
           <Dialog open={paymentOpen} onOpenChange={setPaymentOpen}>
             <DialogTrigger nativeButton={true} render={
-              <Button className="bg-[#8FAF9A] hover:bg-primary text-white flex items-center gap-1.5 text-xs px-2.5 h-8.5 rounded-xl btn-premium">
+              <Button className="btn-premium bg-[#4F6F52] hover:bg-[#3D563F] text-white flex items-center gap-1.5 text-xs px-2.5 h-8.5 rounded-xl">
                 <Plus className="h-3.5 w-3.5" /> {t("finance.payment_btn_new")}
               </Button>
             } />
@@ -318,7 +332,7 @@ export function PaymentsTab({
                   <Button
                     type="submit"
                     className="w-full bg-primary hover:bg-primary/90 text-white text-xs font-bold h-10 rounded-xl shadow-sage hover:shadow-sage-lg hover:-translate-y-0.5 transition-premium"
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || isOwnUpload}
                   >
                     {isSubmitting ? t("finance.saving") : t("finance.payment_btn_submit")}
                   </Button>
@@ -339,7 +353,14 @@ export function PaymentsTab({
                 <div className="absolute top-0 left-0 w-1 h-full bg-[#E9C46A]" />
                 <div className="flex justify-between items-start pl-1">
                   <div>
-                    <p className="font-mono text-xs font-bold text-foreground">{pay.paymentNumber}</p>
+                    <p className="text-xs font-bold">
+                      <FinanceDocLink
+                        href={`/finance/payments/${pay.id}`}
+                        className="text-xs font-bold"
+                      >
+                        {pay.paymentNumber}
+                      </FinanceDocLink>
+                    </p>
                     <p className="text-[11px] text-muted-foreground mt-1">
                       Customer: <span className="font-semibold text-foreground">{pay.customerName || "—"}</span>
                     </p>
@@ -354,7 +375,7 @@ export function PaymentsTab({
                     Rp {pay.amount.toLocaleString("id-ID")}
                   </span>
                   <span className="text-[10px] text-muted-foreground uppercase font-bold bg-secondary/50 px-2 py-0.5 rounded-md">
-                    {pay.paymentMethod}
+                    {getPaymentMethodLabel(pay.paymentMethod)}
                   </span>
                 </div>
 
@@ -470,12 +491,18 @@ export function PaymentsTab({
                 </ul>
               </div>
 
+              {isOwnUpload && (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50/80 p-3 text-[11px] font-semibold leading-relaxed text-amber-800">
+                  Bukti bayar ini diunggah oleh akun Anda sendiri, sehingga harus diverifikasi oleh user lain yang berwenang.
+                </div>
+              )}
+
               <div className="space-y-3 pt-3">
                 <div className="grid grid-cols-2 gap-3">
                   <Button
                     onClick={() => onVerifyPaymentSubmit(false)}
                     className="bg-card text-[#D77A7A] border border-rose-200 hover:bg-rose-50 font-bold text-xs h-10 rounded-[12px] btn-premium"
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || isOwnUpload}
                   >
                     {t("finance.verify_btn_reject")}
                   </Button>

@@ -1,4 +1,4 @@
-import { requireAuth, getSessionRole } from "@/server/permissions";
+import { requireAuth, getSessionRole, canAccessFinanceModule } from "@/server/permissions";
 import { redirect } from "next/navigation";
 import { getFinancePageData } from "@/server/actions/finance";
 import FinanceShell from "./finance-shell";
@@ -12,13 +12,11 @@ export default async function FinancePage({
 }) {
   const { tab } = searchParams ? await searchParams : { tab: undefined };
 
-  // 1. Authenticate user + RBAC guard
+  // 1. Authenticate user + RBAC guard — uses shared helper (Req 11.1, 11.2)
   const activeUser = await requireAuth();
-  const { isSuperAdmin, isKeuangan, isDireksi, isAdminKantor, isMarketing, isMarketingManager, isPengawas } = await getSessionRole(activeUser.id);
+  const { role, isSuperAdmin } = await getSessionRole(activeUser.id);
 
-  // Only finance-relevant roles may access this page
-  const hasAccess = isSuperAdmin || isKeuangan || isDireksi || isAdminKantor || isMarketing || isMarketingManager || isPengawas;
-  if (!hasAccess) {
+  if (!canAccessFinanceModule(role)) {
     redirect("/unauthorized");
   }
 

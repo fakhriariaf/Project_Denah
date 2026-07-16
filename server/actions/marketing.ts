@@ -1,4 +1,4 @@
-﻿"use server";
+"use server";
 
 import { db } from "@/db";
 import type { PgTransaction } from "drizzle-orm/pg-core";
@@ -26,14 +26,17 @@ import {
   leadSchema, 
   followupSchema, 
   bookingSchema, 
+  bookingUpdateSchema,
   kprProcessSchema,
   kprUpdateSchema,
   bankPartnerSchema, 
   bankSubmissionSchema,
   realizeKprSchema
 } from "../validators/marketing";
+import { getBookingAkadReadiness } from "@/server/services/booking-akad-readiness";
+import { generateInvoiceSchedule, computeInvoiceSchedule, round2, computeOutstanding, validateBookingCancellation } from "@/server/services/booking.service";
 import { requireAnyRole, getSessionRole, getUserRole } from "../permissions";
-import { eq, and, or, sql, inArray, desc, lte, isNotNull, ilike, count } from "drizzle-orm";
+import { eq, and, or, sql, inArray, desc, asc, sum, lte, isNotNull, ilike, count } from "drizzle-orm";
 import { calculateOffset, validatePaginationParams, type PaginatedResult } from "@/lib/pagination";
 import { revalidatePath } from "next/cache";
 import { writeAuditLog, safeWriteBlockedTransitionLog } from "./audit";
@@ -48,7 +51,7 @@ export async function createLead(data: unknown) {
   const id = crypto.randomUUID();
   const targetPicId = parsed.assignedMarketingId || user.id;
 
-  // Duplicate phone guard � block if active lead with same phone already exists
+  // Duplicate phone guard — block if active lead with same phone already exists
   const existingLeadByPhone = await db
     .select({ id: leads.id, name: leads.name, status: leads.status })
     .from(leads)
@@ -404,7 +407,7 @@ export async function createBooking(data: unknown) {
       .where(and(eq(units.id, parsed.unitId), eq(units.status, "available")))
       .returning();
 
-    // If 0 rows were updated, the unit was concurrently booked by another request � abort
+    // If 0 rows were updated, the unit was concurrently booked by another request — abort
     if (updateResult.length === 0) {
       throw new Error("Kavling sudah dipesan oleh pihak lain secara bersamaan. Silakan refresh dan coba lagi.");
     }
@@ -472,40 +475,23 @@ export async function createBooking(data: unknown) {
       }).run();
     }
 
-    // 8. Auto-generate Booking Fee Invoice
-    if (parsed.bookingFee && parsed.bookingFee > 0) {
-      const invoiceNum = `INV-BF-${bookingNumber}`;
-      await tx.insert(invoices).values({
-        id: crypto.randomUUID(),
-        invoiceNumber: invoiceNum,
+    // 8. Auto-generate invoice schedule (BF, DP, and installments if applicable)
+    await generateInvoiceSchedule(
+      tx as unknown as typeof db,
+      {
+        id,
+        bookingFee: parsed.bookingFee,
+        dpAmount: parsed.dpAmount,
+        paymentScheme: parsed.paymentScheme as "cash" | "installment" | "kpr",
+        termin: parsed.termin || null,
+        bookingDate: parsed.bookingDate,
         projectId: parsed.projectId,
         unitId: parsed.unitId,
         customerId: finalCustomerId,
-        bookingId: id,
-        type: "booking_fee",
-        amount: parsed.bookingFee,
-        dueDate: parsed.bookingDate,
-        status: "unpaid",
-      }).run();
-    }
-
-    // 9. Auto-generate DP Invoice (for all payment schemes including KPR)
-    if (parsed.dpAmount && parsed.dpAmount > 0) {
-      const dpDueDate = new Date(parsed.bookingDate);
-      dpDueDate.setDate(dpDueDate.getDate() + 14); // 14 days from booking
-      await tx.insert(invoices).values({
-        id: crypto.randomUUID(),
-        invoiceNumber: `INV-DP-${bookingNumber}`,
-        projectId: parsed.projectId,
-        unitId: parsed.unitId,
-        customerId: finalCustomerId,
-        bookingId: id,
-        type: "dp",
-        amount: parsed.dpAmount,
-        dueDate: dpDueDate,
-        status: "unpaid",
-      }).run();
-    }
+      },
+      { price: targetUnit.price },
+      user.id
+    );
 
     return { id, bookingNumber };
   });
@@ -528,7 +514,7 @@ export async function createBooking(data: unknown) {
 export async function updateBooking(id: string, data: unknown) {
   const user = await requireAnyRole(["Super Admin", "Admin Kantor", "Marketing", "Marketing Manager"]);
   applyRateLimit(user.id);
-  const parsed = bookingSchema.parse(data);
+  const parsed = bookingUpdateSchema.parse(data);
 
   // Run as atomic database transaction
   const result = await db.transaction(async (tx) => {
@@ -541,19 +527,13 @@ export async function updateBooking(id: string, data: unknown) {
       throw new Error("Booking yang sudah dibatalkan tidak dapat diedit.");
     }
 
-    // 2. Query existing invoices to prevent modifying paid invoices
-    const bfInvoice = await tx.select().from(invoices).where(and(eq(invoices.bookingId, id), eq(invoices.type, "booking_fee"))).get();
-    const dpInvoice = await tx.select().from(invoices).where(and(eq(invoices.bookingId, id), eq(invoices.type, "dp"))).get();
-
-    if (bfInvoice && bfInvoice.amount !== parsed.bookingFee && bfInvoice.status !== "unpaid") {
-      throw new Error("Nominal Booking Fee tidak dapat diubah karena tagihan kuitansi terkait sudah terbayar sebagian atau lunas.");
-    }
-    if (dpInvoice && dpInvoice.amount !== parsed.dpAmount && dpInvoice.status !== "unpaid") {
-      throw new Error("Nominal Uang Muka (DP) tidak dapat diubah karena tagihan kuitansi terkait sudah terbayar sebagian atau lunas.");
+    // 2. Query unit for price (needed for schedule computation)
+    const unit = await tx.select().from(units).where(eq(units.id, existingBooking.unitId)).get();
+    if (!unit) {
+      throw new Error("Unit terkait booking tidak ditemukan.");
     }
 
     // 3. If paymentScheme changes, handle KPR processes adjustments
-    const schemeChanged = existingBooking.paymentScheme !== parsed.paymentScheme;
     
     // If it was KPR and changes to non-KPR, we delete the KPR process and submissions (to be clean)
     if (existingBooking.paymentScheme === "kpr" && parsed.paymentScheme !== "kpr") {
@@ -618,74 +598,135 @@ export async function updateBooking(id: string, data: unknown) {
       updatedAt: new Date(),
     }).where(eq(bookings.id, id)).run();
 
-    // 5. Update/Regenerate Invoices dynamically
-    // A. Booking Fee Invoice
-    if (bfInvoice) {
-      if (parsed.bookingFee > 0) {
-        if (bfInvoice.status === "unpaid") {
-          await tx.update(invoices).set({
-            amount: parsed.bookingFee,
-            dueDate: parsed.bookingDate,
-            updatedAt: new Date(),
-          }).where(eq(invoices.id, bfInvoice.id)).run();
-        }
-      } else {
-        // bookingFee is 0, delete the unpaid invoice
-        if (bfInvoice.status === "unpaid") {
-          await tx.delete(invoices).where(eq(invoices.id, bfInvoice.id)).run();
-        }
-      }
-    } else if (parsed.bookingFee > 0) {
-      // Create new booking fee invoice
-      const invoiceNum = `INV-BF-${existingBooking.bookingNumber}`;
-      await tx.insert(invoices).values({
-        id: crypto.randomUUID(),
-        invoiceNumber: invoiceNum,
-        projectId: existingBooking.projectId,
-        unitId: existingBooking.unitId,
-        customerId: existingBooking.customerId,
-        bookingId: id,
-        type: "booking_fee",
-        amount: parsed.bookingFee,
-        dueDate: parsed.bookingDate,
-        status: "unpaid",
-      }).run();
-    }
+    // 5. Invoice Schedule Management (Req 1.8, 1.9, 1.10, 1.11, 1.12, 1.13)
+    const prevScheme = existingBooking.paymentScheme;
+    const newScheme = parsed.paymentScheme || prevScheme;
+    const bookingId = id;
 
-    // B. DP Invoice
-    if (dpInvoice) {
-      if (parsed.dpAmount > 0) {
-        if (dpInvoice.status === "unpaid") {
-          const dpDueDate = new Date(parsed.bookingDate);
-          dpDueDate.setDate(dpDueDate.getDate() + 14); // 14 days from booking
-          await tx.update(invoices).set({
-            amount: parsed.dpAmount,
-            dueDate: dpDueDate,
-            updatedAt: new Date(),
-          }).where(eq(invoices.id, dpInvoice.id)).run();
-        }
-      } else {
-        // dpAmount is 0, delete the unpaid DP invoice
-        if (dpInvoice.status === "unpaid") {
-          await tx.delete(invoices).where(eq(invoices.id, dpInvoice.id)).run();
-        }
-      }
-    } else if (parsed.dpAmount > 0) {
-      // Create new DP invoice
-      const dpDueDate = new Date(parsed.bookingDate);
-      dpDueDate.setDate(dpDueDate.getDate() + 14); // 14 days from booking
-      await tx.insert(invoices).values({
-        id: crypto.randomUUID(),
-        invoiceNumber: `INV-DP-${existingBooking.bookingNumber}`,
+    // CASE 1: cash/installment → kpr (Req 1.8)
+    // Cancel all unpaid installment invoices; keep BF and DP unchanged
+    if ((prevScheme === "cash" || prevScheme === "installment") && newScheme === "kpr") {
+      await tx.update(invoices)
+        .set({ status: "cancelled", updatedAt: new Date() })
+        .where(and(
+          eq(invoices.bookingId, bookingId),
+          eq(invoices.type, "installment"),
+          eq(invoices.status, "unpaid")
+        ));
+    }
+    // CASE 2: kpr → cash/installment (Req 1.9)
+    // Generate new pelunasan/termin invoices; generateInvoiceSchedule skips existing BF/DP
+    else if (prevScheme === "kpr" && (newScheme === "cash" || newScheme === "installment")) {
+      const updatedBookingForSchedule = {
+        id: bookingId,
+        bookingFee: parsed.bookingFee,
+        dpAmount: parsed.dpAmount,
+        paymentScheme: newScheme as "cash" | "installment" | "kpr",
+        termin: newScheme === "installment" ? (parsed.termin || null) : null,
+        bookingDate: parsed.bookingDate,
         projectId: existingBooking.projectId,
         unitId: existingBooking.unitId,
         customerId: existingBooking.customerId,
-        bookingId: id,
-        type: "dp",
-        amount: parsed.dpAmount,
-        dueDate: dpDueDate,
-        status: "unpaid",
-      }).run();
+      };
+      await generateInvoiceSchedule(
+        tx as unknown as typeof db,
+        updatedBookingForSchedule,
+        { price: unit.price },
+        user.id
+      );
+    }
+    // CASE 3: Same scheme OR BF/DP amounts changed (Req 1.11, 1.12, 1.13)
+    else if (newScheme === "cash" || newScheme === "installment") {
+      // Query all existing invoices for this booking
+      const existingInvoices = await tx.select().from(invoices).where(eq(invoices.bookingId, bookingId));
+
+      // Guard: BF paid/partial + nominal change → reject (Req 1.11)
+      const bfChanged = parsed.bookingFee !== existingBooking.bookingFee;
+      if (bfChanged) {
+        const bfInv = existingInvoices.find(
+          i => i.scheduleKind === "booking_fee" && (i.status === "paid" || i.status === "partial")
+        );
+        if (bfInv) {
+          throw new Error("Perubahan nominal Booking Fee membutuhkan proses adjustment terpisah karena invoice sudah terbayar.");
+        }
+      }
+
+      // Guard: DP paid/partial + nominal change → reject (Req 1.11)
+      const dpChanged = parsed.dpAmount !== existingBooking.dpAmount;
+      if (dpChanged) {
+        const dpInv = existingInvoices.find(
+          i => i.scheduleKind === "dp" && (i.status === "paid" || i.status === "partial")
+        );
+        if (dpInv) {
+          throw new Error("Perubahan nominal DP membutuhkan proses adjustment terpisah karena invoice sudah terbayar.");
+        }
+      }
+
+      // Guard: installment paid/partial + schedule amount would change → reject (Req 1.12, 1.13)
+      const paidPartialInstallments = existingInvoices.filter(
+        i => i.scheduleKind === "installment" && (i.status === "paid" || i.status === "partial")
+      );
+      // Also check cash_settlement paid/partial
+      const paidPartialCashSettlement = existingInvoices.filter(
+        i => i.scheduleKind === "cash_settlement" && (i.status === "paid" || i.status === "partial")
+      );
+
+      if (paidPartialInstallments.length > 0 || paidPartialCashSettlement.length > 0) {
+        // Compute new schedule to see if amounts differ
+        const finalTermin = newScheme === "installment" ? (parsed.termin || null) : null;
+        const newComponents = computeInvoiceSchedule(
+          unit.price,
+          parsed.bookingFee,
+          parsed.dpAmount,
+          newScheme as "cash" | "installment",
+          finalTermin,
+          parsed.bookingDate
+        );
+
+        // Check installment components
+        for (const existing of paidPartialInstallments) {
+          const matching = newComponents.find(
+            c => c.kind === "installment" && c.seq === existing.scheduleSequence
+          );
+          if (matching && round2(matching.amount) !== round2(existing.amount)) {
+            throw new Error("Perubahan jadwal cicilan membutuhkan adjustment manual karena terdapat invoice yang sudah terbayar sebagian/lunas.");
+          }
+          // If no matching component found (schedule shrunk), also reject
+          if (!matching) {
+            throw new Error("Perubahan jadwal cicilan membutuhkan adjustment manual karena terdapat invoice yang sudah terbayar sebagian/lunas.");
+          }
+        }
+
+        // Check cash_settlement components
+        for (const existing of paidPartialCashSettlement) {
+          const matching = newComponents.find(c => c.kind === "cash_settlement");
+          if (matching && round2(matching.amount) !== round2(existing.amount)) {
+            throw new Error("Perubahan jadwal cicilan membutuhkan adjustment manual karena terdapat invoice yang sudah terbayar sebagian/lunas.");
+          }
+          if (!matching) {
+            throw new Error("Perubahan jadwal cicilan membutuhkan adjustment manual karena terdapat invoice yang sudah terbayar sebagian/lunas.");
+          }
+        }
+      }
+
+      // Safe to recalculate — call generateInvoiceSchedule (idempotent upsert)
+      const updatedBookingForSchedule = {
+        id: bookingId,
+        bookingFee: parsed.bookingFee,
+        dpAmount: parsed.dpAmount,
+        paymentScheme: newScheme as "cash" | "installment" | "kpr",
+        termin: newScheme === "installment" ? (parsed.termin || null) : null,
+        bookingDate: parsed.bookingDate,
+        projectId: existingBooking.projectId,
+        unitId: existingBooking.unitId,
+        customerId: existingBooking.customerId,
+      };
+      await generateInvoiceSchedule(
+        tx as unknown as typeof db,
+        updatedBookingForSchedule,
+        { price: unit.price },
+        user.id
+      );
     }
 
     // 6. Write Booking status history
@@ -722,89 +763,48 @@ export async function cancelBooking(id: string, reason: string) {
   const user = await requireAnyRole(["Super Admin", "Admin Kantor", "Marketing", "Marketing Manager"]);
   applyRateLimit(user.id);
 
-// BUG 1 FIX: Init projectId = "" to prevent uninitialized variable crash
+  // BUG 1 FIX: Init projectId = "" to prevent uninitialized variable crash
   let projectId = "";
   await db.transaction(async (tx) => {
-    // 1. Fetch booking INSIDE transaction � eliminates stale-read race condition
+    // 1. Fetch booking INSIDE transaction — eliminates stale-read race condition (Req 10.7)
     const booking = await tx.select().from(bookings).where(eq(bookings.id, id)).get();
     if (!booking) throw new Error("Booking tidak ditemukan.");
+
+    // Guard: booking already cancelled → reject (Req 10.6)
     if (booking.status === "cancelled") throw new Error("Booking sudah dibatalkan sebelumnya.");
 
-    // P0 Guard: Check if there are any invoices with status "paid" or "partial" linked to this booking
-    const paidInvoices = await tx
-      .select({ id: invoices.id })
-      .from(invoices)
-      .where(
-        and(
-          eq(invoices.bookingId, id),
-          inArray(invoices.status, ["paid", "partial"])
-        )
-      )
-      .all();
-
-    if (paidInvoices.length > 0) {
+    // P0 Guard: Use validateBookingCancellation service inside transaction (Req 10.1, 10.2, 10.7)
+    const guard = await validateBookingCancellation(id, tx as unknown as typeof db);
+    if (!guard.canCancel) {
       await safeWriteBlockedTransitionLog({
         module: "marketing",
         entityType: "booking",
         entityId: id,
         details: {
-          action: "cancelBooking_blocked_paid_invoice",
+          action: `cancelBooking_blocked_${guard.reason}`,
           bookingId: id,
-          reason: "Booking ini sudah memiliki kuitansi lunas/sebagian. Pembatalan langsung ditolak.",
+          reason: guard.message,
         },
       });
-      throw new Error(
-        "Booking ini sudah memiliki kuitansi pembayaran terverifikasi atau lunas sebagian. Pembatalan langsung tidak diperbolehkan. Silakan buat pengajuan refund atau pembatalan dengan persetujuan Direksi."
-      );
-    }
-
-    // Also check if any payment is "verified"
-    const bookingInvoices = await tx
-      .select({ id: invoices.id })
-      .from(invoices)
-      .where(eq(invoices.bookingId, id))
-      .all();
-    
-    const invoiceIds = bookingInvoices.map(r => r.id);
-    if (invoiceIds.length > 0) {
-      const verifiedPayments = await tx
-        .select({ id: payments.id })
-        .from(payments)
-        .where(
-          and(
-            inArray(payments.invoiceId, invoiceIds),
-            eq(payments.status, "verified")
-          )
-        )
-        .all();
-
-      if (verifiedPayments.length > 0) {
-        await safeWriteBlockedTransitionLog({
-          module: "marketing",
-          entityType: "booking",
-          entityId: id,
-          details: {
-            action: "cancelBooking_blocked_verified_payment",
-            bookingId: id,
-            reason: "Booking ini memiliki pembayaran yang berstatus verified. Pembatalan langsung ditolak.",
-          },
-        });
-        throw new Error(
-          "Booking ini sudah memiliki kuitansi pembayaran terverifikasi. Pembatalan langsung tidak diperbolehkan. Silakan ajukan proses refund atau pembatalan melalui persetujuan Direksi."
-        );
-      }
+      throw new Error(guard.message);
     }
 
     projectId = booking.projectId;
 
-    // 2. Update Booking status to cancelled
+    // 2. Update Booking status to cancelled (Req 10.3)
     await tx.update(bookings).set({
       status: "cancelled",
       cancellationReason: reason,
       updatedAt: new Date(),
     }).where(eq(bookings.id, id)).run();
 
-    // 3. Set Unit state back to available
+    // 3. Cancel all invoices linked to this booking (Req 10.3)
+    await tx.update(invoices).set({
+      status: "cancelled",
+      updatedAt: new Date(),
+    }).where(eq(invoices.bookingId, id));
+
+    // 4. Set Unit state back to available (Req 10.3)
     const unit = await tx.select().from(units).where(eq(units.id, booking.unitId)).get();
     const previousStatus = unit?.status || "booking";
 
@@ -815,13 +815,13 @@ export async function cancelBooking(id: string, reason: string) {
       updatedAt: new Date(),
     }).where(eq(units.id, booking.unitId)).run();
 
-    // 4. Revert Customer status back to prospect (available for future bookings)
+    // 5. Revert Customer status back to prospect (available for future bookings)
     await tx.update(customers).set({
       status: "prospect",
       updatedAt: new Date(),
     }).where(eq(customers.id, booking.customerId)).run();
 
-    // 5. Log status histories
+    // 6. Log status histories
     await tx.insert(unitStatusHistories).values({
       id: crypto.randomUUID(),
       unitId: booking.unitId,
@@ -843,12 +843,13 @@ export async function cancelBooking(id: string, reason: string) {
     }).run();
   });
 
+  // Audit log with action="cancel", module="marketing", entityType="booking" (Req 10.4)
   await writeAuditLog({
-    action: "update",
+    action: "cancel",
     module: "marketing",
     entityId: id,
     entityType: "booking",
-    details: { action: "cancel", reason },
+    details: { action: "cancel", cancellationReason: reason, userId: user.id },
   });
 
   revalidatePath("/marketing/bookings");
@@ -877,7 +878,7 @@ export async function isPhysicalReadyForKprAkad(unit: { id: string }, tx?: DbOrT
   if (isReadyStock) {
     return {
       ready: true,
-      reason: "Unit sudah Ready Stock.",
+      reason: "Unit sudah Tersedia Siap Huni.",
     };
   }
 
@@ -1059,7 +1060,7 @@ export async function validateKprStateTransition(
 
 export async function updateKprProcess(id: string, data: unknown) {
   const user = await requireAnyRole(["Super Admin", "Admin Kantor", "Marketing", "Marketing Manager"]);
-  // Use kprUpdateSchema (no bookingId required � resolved from DB by id)
+  // Use kprUpdateSchema (no bookingId required — resolved from DB by id)
   const parsed = kprUpdateSchema.parse(data);
 
   if (
@@ -1173,7 +1174,7 @@ export async function updateKprProcess(id: string, data: unknown) {
         if (!unitForApproved?.isReadyStock) {
           unitState = "construction";
         }
-        // else: keep unitState = "kpr_process" for ready stock � handover gate handled separately
+        // else: keep unitState = "kpr_process" for ready stock — handover gate handled separately
       }
 
       const currentUnit = await tx.select().from(units).where(eq(units.id, booking.unitId)).get();
@@ -1328,7 +1329,7 @@ export async function updateKprStatusDirect(id: string, newStatus: string, revis
           unitId: booking.unitId,
           previousStatus: prevStatus,
           newStatus: "menunggu_serah_terima",
-          reason: "Dana KPR telah direalisasikan � unit menunggu serah terima fisik kepada konsumen",
+          reason: "Dana KPR telah direalisasikan — unit menunggu serah terima fisik kepada konsumen",
           changedBy: user.id,
           changedAt: new Date(),
         }).run();
@@ -1394,7 +1395,7 @@ export async function updateKprStatusDirect(id: string, newStatus: string, revis
 }
 
 // -----------------------------------------------------------------------------
-// BAST KONSUMEN � APPROVE SERAH TERIMA (RULE 11, 12, 13)
+// BAST KONSUMEN — APPROVE SERAH TERIMA (RULE 11, 12, 13)
 // Role: Super Admin, Admin Kantor, Direksi / Manager
 // -----------------------------------------------------------------------------
 export async function approveBastKonsumen(bookingId: string) {
@@ -1449,7 +1450,7 @@ export async function approveBastKonsumen(bookingId: string) {
   if (!unit) throw new Error("Unit tidak ditemukan.");
 
   // RULE 11: unit harus menunggu_serah_terima
-  // "sold" no longer accepted � unit must go through the proper menunggu_serah_terima gate
+  // "sold" no longer accepted — unit must go through the proper menunggu_serah_terima gate
   // (set by realizeKprFunds for KPR, or triggerMenungguSerahTerima for cash/installment)
   if (unit.status !== "menunggu_serah_terima") {
     throw new Error(
@@ -1734,7 +1735,8 @@ export async function deleteBankSubmission(id: string) {
 export async function uploadPaymentProof(
   bookingId: string,
   data: { fileName: string; fileUrl: string; mimeType?: string; fileSize?: number },
-  paymentType?: "booking_fee" | "dp"
+  paymentType?: "booking_fee" | "dp",
+  invoiceId?: string
 ) {
   const user = await requireAnyRole(["Super Admin", "Admin Kantor", "Marketing", "Marketing Manager"]);
   const [booking] = await db.select().from(bookings).where(eq(bookings.id, bookingId));
@@ -1762,22 +1764,84 @@ export async function uploadPaymentProof(
     details: { bookingId, fileName: data.fileName, paymentType },
   });
 
-  // Find unpaid invoices for this booking matching the specific type
-  const unpaidInvoices = await db
-    .select()
-    .from(invoices)
-    .where(
-      and(
-        eq(invoices.bookingId, bookingId),
-        eq(invoices.status, "unpaid"),
-        eq(invoices.type, paymentType || "booking_fee")
-      )
-    )
-    .orderBy(desc(invoices.createdAt));
+  // ── Req 2.10: Search invoice candidates with status "unpaid" OR "partial" ──
+  let targetInvoice: typeof invoices.$inferSelect | null = null;
 
-  // If there is an unpaid invoice, create a payment record in the payments table linked to that invoice!
-  if (unpaidInvoices.length > 0) {
-    const targetInvoice = unpaidInvoices[0];
+  if (invoiceId) {
+    // ── Req 2.12: Explicit invoiceId takes priority (deterministic target) ──
+    const [explicit] = await db
+      .select()
+      .from(invoices)
+      .where(
+        and(
+          eq(invoices.id, invoiceId),
+          inArray(invoices.status, ["unpaid", "partial"])
+        )
+      )
+      .limit(1);
+
+    if (!explicit) {
+      throw new Error("Invoice target tidak ditemukan atau sudah lunas/dibatalkan.");
+    }
+    targetInvoice = explicit;
+  } else {
+    // ── Req 2.12: Fallback deterministic ordering when invoiceId not provided ──
+    // scheduleKind priority: booking_fee=1, dp=2, cash_settlement=3, installment=4, NULL=5
+    // Then dueDate ASC (earliest first), then id ASC (tiebreaker)
+    const candidates = await db
+      .select()
+      .from(invoices)
+      .where(
+        and(
+          eq(invoices.bookingId, bookingId),
+          inArray(invoices.status, ["unpaid", "partial"]),
+          ...(paymentType ? [eq(invoices.type, paymentType)] : [])
+        )
+      )
+      .orderBy(
+        sql`CASE
+          WHEN ${invoices.scheduleKind} = 'booking_fee' THEN 1
+          WHEN ${invoices.scheduleKind} = 'dp' THEN 2
+          WHEN ${invoices.scheduleKind} = 'cash_settlement' THEN 3
+          WHEN ${invoices.scheduleKind} = 'installment' THEN 4
+          ELSE 5
+        END`,
+        asc(invoices.dueDate),
+        asc(invoices.id)
+      );
+
+    if (candidates.length > 0) {
+      targetInvoice = candidates[0];
+    }
+  }
+
+  // If there is a valid target invoice, create a payment record linked to that invoice
+  if (targetInvoice) {
+    // ── Req 2.11: Outstanding guard — validate payment amount does not exceed outstanding ──
+    const [sumResult] = await db
+      .select({ total: sum(payments.amount) })
+      .from(payments)
+      .where(
+        and(
+          eq(payments.invoiceId, targetInvoice.id),
+          eq(payments.status, "verified")
+        )
+      );
+
+    const paidTotal = Number(sumResult?.total ?? 0);
+    const outstanding = computeOutstanding(targetInvoice.amount, paidTotal);
+
+    // For auto-payment from proof upload, use the invoice amount or outstanding (whichever is smaller)
+    const paymentAmount = Math.min(targetInvoice.amount, outstanding);
+
+    if (paymentAmount <= 0) {
+      // Invoice already fully paid by verified payments — skip creating payment
+      revalidatePath(`/marketing/bookings/${bookingId}`);
+      revalidatePath("/marketing/bookings");
+      revalidatePath("/finance/payments");
+      return { success: true, attachmentId };
+    }
+
     const paymentId = crypto.randomUUID();
     const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
     const rand = crypto.randomUUID().replace(/-/g, "").slice(0, 6).toUpperCase();
@@ -1790,10 +1854,11 @@ export async function uploadPaymentProof(
       projectId: booking.projectId,
       unitId: booking.unitId,
       customerId: booking.customerId,
-      amount: targetInvoice.amount,
+      amount: paymentAmount,
       paymentDate: new Date(),
       paymentMethod: "transfer",
       proofAttachmentId: attachmentId,
+      uploadedBy: user.id,
       status: "pending",
     });
 
@@ -1802,7 +1867,7 @@ export async function uploadPaymentProof(
       roleNames: ["Admin Keuangan", "Super Admin"],
       type: "approval_pending",
       title: "Verifikasi Pembayaran Baru",
-      message: `Pembayaran baru senilai Rp ${targetInvoice.amount.toLocaleString("id-ID")} dari konsumen memerlukan verifikasi keuangan.`,
+      message: `Pembayaran baru senilai Rp ${paymentAmount.toLocaleString("id-ID")} dari konsumen memerlukan verifikasi keuangan.`,
       entityId: paymentId,
       entityType: "payment",
     });
@@ -1818,21 +1883,19 @@ export async function upgradeBookingToAkad(bookingId: string) {
   const user = await requireAnyRole(["Super Admin", "Admin Kantor"]);
   const [booking] = await db.select().from(bookings).where(eq(bookings.id, bookingId));
   if (!booking) throw new Error("Booking tidak ditemukan.");
-  if (booking.status !== "active") throw new Error("Hanya booking aktif yang bisa diproses ke Akad.");
 
   const [unit] = await db.select().from(units).where(eq(units.id, booking.unitId));
   if (!unit) throw new Error("Unit tidak ditemukan.");
-  if (unit.isReadyStock && (unit.constructionProgress || 0) < 100) {
-    throw new Error("Unit Ready Stock belum selesai dibangun (Progress < 100%). Selesaikan pembangunan fisik di modul Produksi sebelum lanjut ke proses Akad Jual Beli.");
+
+  const readiness = await getBookingAkadReadiness(bookingId);
+  if (!readiness.eligible) {
+    throw new Error(readiness.reason);
   }
 
   await db.transaction(async (tx) => {
     await tx.update(bookings).set({ status: "akad", updatedAt: new Date() }).where(eq(bookings.id, bookingId)).run();
-    // Do NOT set unit to "sold" yet � unit stays at current status.
-    // For non-KPR: unit reaches "menunggu_serah_terima" via triggerMenungguSerahTerima
-    // after all invoices paid. For KPR: via realizeKprFunds.
-    // Final "handover_complete" only via approveBastKonsumen.
     await tx.update(units).set({
+      status: "menunggu_serah_terima",
       currentCustomerId: booking.customerId,
       currentBookingId: bookingId,
       updatedAt: new Date()
@@ -1844,6 +1907,15 @@ export async function upgradeBookingToAkad(bookingId: string) {
       previousStatus: "active",
       newStatus: "akad",
       notes: "Proses Akad dimulai",
+      changedBy: user.id,
+      changedAt: new Date(),
+    }).run();
+    await tx.insert(unitStatusHistories).values({
+      id: crypto.randomUUID(),
+      unitId: booking.unitId,
+      previousStatus: unit.status,
+      newStatus: "menunggu_serah_terima",
+      reason: "Akad / PPJB selesai diproses. Unit masuk tahap menunggu serah terima.",
       changedBy: user.id,
       changedAt: new Date(),
     }).run();
@@ -1859,6 +1931,7 @@ export async function upgradeBookingToAkad(bookingId: string) {
 
   revalidatePath(`/marketing/bookings/${bookingId}`);
   revalidatePath("/marketing/bookings");
+  revalidatePath("/siteplan");
   return { success: true };
 }
 
@@ -2251,12 +2324,17 @@ export async function checkAndTransitionToConstruction(tx: DbOrTx, bookingId: st
   if (!unit) return;
 
   // Ready stock units bypass construction phase entirely (BR-22)
-  if (unit.isReadyStock) {
+  if (
+    unit.isReadyStock ||
+    unit.readyStockSource === "legacy_ready_stock" ||
+    unit.readyStockSource === "manual_ready_stock"
+  ) {
     return;
   }
 
-  // If unit is already in construction or sold status, do nothing
-  if (["construction", "construction_done", "sold", "overdue"].includes(unit.status)) {
+  // Only booked units can be promoted into construction. This prevents stale
+  // currentBookingId data from moving ready/handover/terminal units backwards.
+  if (!["booking", "kpr_process"].includes(unit.status)) {
     return;
   }
 
@@ -2264,7 +2342,7 @@ export async function checkAndTransitionToConstruction(tx: DbOrTx, bookingId: st
   const bookingInvoices = await tx.select().from(invoices).where(eq(invoices.bookingId, bookingId)).all();
 
   // Booking fee must exist AND be paid (not absent)
-  // If BF invoice was never created (bookingFee = 0), treat as not paid � require explicit payment
+  // If BF invoice was never created (bookingFee = 0), treat as not paid — require explicit payment
   const bfInvoice = bookingInvoices.find((i) => i.type === "booking_fee");
   const bfPaid = !!bfInvoice && bfInvoice.status === "paid";
 
@@ -2307,8 +2385,8 @@ export async function checkAndTransitionToConstruction(tx: DbOrTx, bookingId: st
     await createNotification({
       userId: userId,
       type: "info",
-      title: "??? Unit Siap Pembangunan Fisik",
-      message: `Unit ${unit.code} telah memenuhi seluruh syarat (Booking Fee & DP Lunas${booking.paymentScheme === "kpr" ? " � KPR Disetujui" : ""}). Status otomatis berubah menjadi Pembangunan Fisik. Silakan terbitkan SPK.`,
+      title: "Unit Siap Pembangunan Konsumen",
+      message: `Unit ${unit.code} telah memenuhi seluruh syarat (Booking Fee & DP Lunas${booking.paymentScheme === "kpr" ? " — KPR Disetujui" : ""}). Status otomatis berubah menjadi Pembangunan Unit Konsumen. Silakan terbitkan SPK.`,
       entityId: unit.projectId,
       entityType: "unit_construction_ready",
     });
@@ -2318,7 +2396,7 @@ export async function checkAndTransitionToConstruction(tx: DbOrTx, bookingId: st
       roleNames: ["Super Admin", "Admin Kantor", "Marketing Manager"],
       type: "info",
       title: "??? Kavling Siap Dibangun",
-      message: `Unit ${unit.code} telah memenuhi seluruh syarat pembangunan (Booking Fee & DP Lunas${booking.paymentScheme === "kpr" ? " � KPR Disetujui" : ""}). Buka Site Plan untuk menerbitkan SPK Konstruksi.`,
+      message: `Unit ${unit.code} telah memenuhi seluruh syarat pembangunan (Booking Fee & DP Lunas${booking.paymentScheme === "kpr" ? " — KPR Disetujui" : ""}). Buka Site Plan untuk menerbitkan SPK Konstruksi.`,
       entityId: unit.projectId,
       entityType: "unit_construction_ready",
     });
@@ -2332,6 +2410,16 @@ export async function startPhysicalConstructionManual(unitId: string) {
     const unit = await tx.select().from(units).where(eq(units.id, unitId)).get();
     if (!unit) throw new Error("Unit tidak ditemukan.");
 
+    if (
+      unit.isReadyStock ||
+      unit.readyStockSource === "legacy_ready_stock" ||
+      unit.readyStockSource === "manual_ready_stock"
+    ) {
+      throw new Error(
+        "Unit sudah berstatus Tersedia Siap Huni. Tidak perlu masuk ke Pembangunan Fisik; lanjutkan ke Akad / PPJB atau Pipeline KPR sesuai skema."
+      );
+    }
+
     if (!unit.currentBookingId) {
       throw new Error("Unit tidak memiliki data booking aktif.");
     }
@@ -2339,8 +2427,8 @@ export async function startPhysicalConstructionManual(unitId: string) {
     const booking = await tx.select().from(bookings).where(eq(bookings.id, unit.currentBookingId)).get();
     if (!booking) throw new Error("Data booking tidak ditemukan.");
 
-    if (["construction", "construction_done", "sold", "overdue"].includes(unit.status)) {
-      throw new Error("Unit sudah berada dalam tahap pembangunan fisik atau telah terjual.");
+    if (!["booking", "kpr_process"].includes(unit.status)) {
+      throw new Error("Pembangunan fisik hanya bisa dimulai dari status Booking atau Proses KPR.");
     }
 
     // Find invoices
@@ -2526,6 +2614,9 @@ export async function realizeKprFunds(data: unknown) {
     const account = await tx.select().from(financeAccounts).where(eq(financeAccounts.id, parsed.realizedAccountId)).get();
     if (!account) throw new Error("Rekening tujuan realisasi tidak ditemukan.");
     if (account.status !== "active") throw new Error("Rekening tujuan realisasi tidak aktif.");
+    if (account.type !== "cash" && account.type !== "bank") {
+      throw new Error("Rekening tujuan realisasi harus bertipe Kas atau Bank.");
+    }
 
     // 5.6. Update KPR ? status "realisasi"
     await tx.update(kprProcesses).set({
@@ -2554,7 +2645,7 @@ export async function realizeKprFunds(data: unknown) {
         unitId: unit.id,
         previousStatus: unit.status,
         newStatus: "menunggu_serah_terima",
-        reason: "Realisasi dana KPR dari bank partner � unit siap diserahterimakan",
+        reason: "Realisasi dana KPR dari bank partner — unit siap diserahterimakan",
         changedBy: activeUser.id,
         changedAt: new Date(),
       }).run();
@@ -2574,7 +2665,7 @@ export async function realizeKprFunds(data: unknown) {
       accountId: parsed.realizedAccountId,
       categoryId: incomeCategoryId,
       type: "income",
-      description: `Realisasi bersih dana KPR Unit ${unit.code} � ${account.name}`,
+      description: `Realisasi bersih dana KPR Unit ${unit.code} — ${account.name}`,
       amount: netReceived,
       transactionDate: parsed.realizedDate,
       paymentMethod: "transfer",
@@ -2585,36 +2676,40 @@ export async function realizeKprFunds(data: unknown) {
   });
 
   // 6. Audit Log
-  await writeAuditLog({
-    action: "kpr_realization",
-    module: "finance",
-    entityId: parsed.kprProcessId,
-    entityType: "kpr_process",
-    details: {
-      trigger: "kpr_bank_disbursement",
-      kprProcessId: parsed.kprProcessId,
-      bookingId,
-      unitId,
-      projectId,
-      oldKprStatus,
-      newKprStatus: "realisasi",
-      oldUnitStatus,
-      newUnitStatus: "menunggu_serah_terima",
-      plafondApproved: parsed.plafondApproved,
-      realizedNetReceived: netReceived,
-      realizedBankFees: parsed.realizedBankFees,
-      realizedInsuranceFees: parsed.realizedInsuranceFees,
-      realizedWithheldAmount: parsed.realizedWithheldAmount,
-      realizedDate: parsed.realizedDate,
-    },
-  });
+  try {
+    await writeAuditLog({
+      action: "kpr_realization",
+      module: "finance",
+      entityId: parsed.kprProcessId,
+      entityType: "kpr_process",
+      details: {
+        trigger: "kpr_bank_disbursement",
+        kprProcessId: parsed.kprProcessId,
+        bookingId,
+        unitId,
+        projectId,
+        oldKprStatus,
+        newKprStatus: "realisasi",
+        oldUnitStatus,
+        newUnitStatus: "menunggu_serah_terima",
+        plafondApproved: parsed.plafondApproved,
+        realizedNetReceived: netReceived,
+        realizedBankFees: parsed.realizedBankFees,
+        realizedInsuranceFees: parsed.realizedInsuranceFees,
+        realizedWithheldAmount: parsed.realizedWithheldAmount,
+        realizedDate: parsed.realizedDate,
+      },
+    });
+  } catch (err) {
+    console.warn("[realizeKprFunds] Audit log gagal ditulis:", err);
+  }
 
   // 7. Notifikasi Multi-Role
   try {
     await notifyUsersWithRoles({
       roleNames: ["Super Admin", "Admin Keuangan", "Direksi / Manager", "Admin Kantor", "Marketing Manager"],
       type: "handover_waiting",
-      title: "Dana KPR Terealisasi � Unit Siap Serah Terima",
+      title: "Dana KPR Terealisasi — Unit Siap Serah Terima",
       message: `Dana KPR dicairkan bersih Rp ${netReceived.toLocaleString("id-ID")}. Unit kini menunggu serah terima konsumen.`,
       entityId: bookingId,
       entityType: "unit_handover_wait",
@@ -2669,6 +2764,5 @@ export async function createRealizationAttachment(data: {
 
   return { success: true, attachmentId: id };
 }
-
 
 
