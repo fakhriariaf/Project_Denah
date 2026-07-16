@@ -6,6 +6,7 @@ import { roles as rolesTable } from "@/db/schema/access";
 import { requireAuth, getSessionRole } from "@/server/permissions";
 import { desc, eq, and, ilike, or, count } from "drizzle-orm";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { 
   Users, 
   TrendingUp, 
@@ -284,17 +285,25 @@ export default async function LeadsPage({
       </div>
 
       {/* ── FILTER & SEARCH BAR ── */}
-      <div className="bg-card border border-border rounded-2xl shadow-sage p-4">
-        <form method="GET" className="flex flex-col md:flex-row items-center gap-3">
-          {/* Search Input */}
-          <SearchInput
-            i18nKey="lead.search_placeholder"
-            name="q"
-            defaultValue={q}
-          />
+      <div className="bg-white/70 backdrop-blur-md border border-border rounded-2xl shadow-sage p-4">
+        <form method="GET" className="flex flex-col gap-3">
+          <div className="flex flex-col md:flex-row items-center gap-3">
+            {/* Search Input */}
+            <SearchInput
+              i18nKey="lead.search_placeholder"
+              name="q"
+              defaultValue={q}
+            />
+            <Button
+              type="submit"
+              className="w-full md:w-auto h-10 px-5 rounded-xl bg-[#4F6F52] hover:bg-[#3D563F] text-white text-sm font-semibold shadow-[0_2px_8px_rgba(79,111,82,0.25)]"
+            >
+              Cari...
+            </Button>
+          </div>
 
           {/* Status Pills Filter */}
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 pt-2 border-t border-border/40">
             {/* "Leads Saya" filter - only visible for Manager / Super Admin / Admin */}
             {!isBiasaRole && (
               <a

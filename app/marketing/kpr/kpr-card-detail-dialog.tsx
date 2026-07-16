@@ -43,6 +43,7 @@ import {
   Hammer,
   HardHat,
   CheckCircle,
+  FolderOpen,
 } from "lucide-react";
 import { 
   updateKprProcess, 
@@ -57,6 +58,7 @@ import {
   createRealizationAttachment,
 } from "@/server/actions/marketing";
 import { useI18n } from "@/lib/i18n";
+import { getBankSubmissionStatusLabel, getDocumentVerificationStatusLabel } from "@/lib/label-helpers";
 import { Translate } from "@/components/translate";
 import { Progress } from "@/components/ui/progress";
 import { KprMilestoneTracker } from "./kpr-milestone-tracker";
@@ -828,15 +830,16 @@ export default function KprCardDetailDialog({
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
-      <div className="flex gap-2 mt-2">
+      <div className="grid grid-cols-[1fr_88px] gap-3 mt-2">
         <SheetTrigger nativeButton={true} render={
-          <Button size="sm" className="flex-1 bg-slate-50 hover:bg-slate-100 text-primary hover:text-[#3F5941] font-semibold border border-slate-200/60 shadow-sm flex items-center justify-center gap-1">
-            <Eye className="h-4 w-4" /> {t("kpr_dialog.btn_manage")}
+          <Button size="sm" className="h-9 min-w-0 rounded-xl bg-card hover:bg-secondary/45 text-primary hover:text-primary font-bold border border-primary/25 shadow-sm flex items-center justify-center gap-1.5 px-3 text-[11px]">
+            <FolderOpen className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">Kelola Berkas</span>
           </Button>
         } />
         <a
           href={`/marketing/kpr/${kpr.id}`}
-          className="h-9 px-3 bg-primary/10 hover:bg-primary/20 text-primary font-semibold border border-[#4F6F52]/20 rounded-md text-xs flex items-center gap-1 transition-colors"
+          className="h-9 rounded-xl bg-primary hover:bg-[#3F5941] text-white font-bold border border-primary text-[11px] flex items-center justify-center gap-1 transition-colors shadow-sm whitespace-nowrap"
           title="Lihat Detail"
         >
           <ChevronRight className="h-3.5 w-3.5" />
@@ -869,7 +872,7 @@ export default function KprCardDetailDialog({
                     <span className="text-xs text-muted-foreground font-bold">{kpr.projectName}</span>
                     {kpr.isReadyStock && (
                       <Badge className="bg-[#4B286D]/15 text-[#4B286D] hover:bg-[#4B286D]/20 border-none font-extrabold text-[9px] px-2 py-0.5 rounded-full shrink-0">
-                        Ready Stock
+                        Siap Huni
                       </Badge>
                     )}
                   </div>
@@ -1565,11 +1568,11 @@ export default function KprCardDetailDialog({
                                   onChange={(e) => setEditStatus(e.target.value as any)}
                                   className="flex h-8 w-full rounded-xl border border-border bg-muted/30/60 px-2 py-1 text-[11px] focus:border-[#4F6F52] focus-visible:outline-none font-semibold"
                                 >
-                                  <option value="submitted">Submitted</option>
-                                  <option value="verified">Verified</option>
-                                  <option value="offering">Offering</option>
-                                  <option value="approved">Approved</option>
-                                  <option value="rejected">Rejected</option>
+                                  <option value="submitted">{getBankSubmissionStatusLabel("submitted")}</option>
+                                  <option value="verified">{getBankSubmissionStatusLabel("verified")}</option>
+                                  <option value="offering">{getBankSubmissionStatusLabel("offering")}</option>
+                                  <option value="approved">{getBankSubmissionStatusLabel("approved")}</option>
+                                  <option value="rejected">{getBankSubmissionStatusLabel("rejected")}</option>
                                 </select>
                               </div>
                               <div className="space-y-1">
@@ -1647,7 +1650,7 @@ export default function KprCardDetailDialog({
                                 ? "bg-rose-50 text-rose-700 border-rose-200" 
                                 : "bg-slate-50 text-slate-600 border-slate-200"
                             }`}>
-                              {sub.status}
+                              {getBankSubmissionStatusLabel(sub.status)}
                             </Badge>
                             
                             <button
@@ -1761,9 +1764,9 @@ export default function KprCardDetailDialog({
                     }`}
                   >
                     {docObj.status === "verified"
-                      ? "Terverifikasi"
+                      ? getDocumentVerificationStatusLabel("verified")
                       : docObj.status === "rejected"
-                      ? "Ditolak"
+                      ? getDocumentVerificationStatusLabel("rejected")
                       : "Menunggu Diverifikasi"}
                   </Badge>
                 )}

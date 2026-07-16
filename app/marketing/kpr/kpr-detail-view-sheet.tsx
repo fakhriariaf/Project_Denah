@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { useI18n } from "@/lib/i18n";
+import { getKprStatusLabel, getBankSubmissionStatusLabel } from "@/lib/label-helpers";
 import { KprMilestoneTracker } from "./kpr-milestone-tracker";
 
 interface Props {
@@ -90,52 +91,52 @@ export default function KprDetailViewSheet({
 
 
   const getKprStatusBadge = (status: string) => {
-    const map: Record<string, { label: string; className: string }> = {
-      bi_checking: { label: "BI Checking", className: "bg-indigo-50 text-indigo-700 border-indigo-200" },
-      pemberkasan: { label: "Pemberkasan", className: "bg-amber-50 text-amber-700 border-amber-200" },
-      proses_bank: { label: "Proses Bank", className: "bg-blue-50 text-blue-700 border-blue-200" },
-      offering:    { label: "Offering Letter", className: "bg-purple-50 text-purple-700 border-purple-200" },
-      approved:    { label: "Approved KPR", className: "bg-teal-50 text-teal-700 border-teal-200" },
-      rejected:    { label: "Rejected KPR", className: "bg-rose-50 text-rose-700 border-rose-200" },
-      akad:        { label: "Akad Kredit", className: "bg-emerald-50 text-emerald-700 border-emerald-200" },
-      realisasi:   { label: "Realisasi Dana", className: "bg-cyan-50 text-cyan-700 border-cyan-200" },
+    const map: Record<string, { className: string }> = {
+      bi_checking: { className: "bg-indigo-50 text-indigo-700 border-indigo-200" },
+      pemberkasan: { className: "bg-amber-50 text-amber-700 border-amber-200" },
+      proses_bank: { className: "bg-blue-50 text-blue-700 border-blue-200" },
+      offering:    { className: "bg-purple-50 text-purple-700 border-purple-200" },
+      approved:    { className: "bg-teal-50 text-teal-700 border-teal-200" },
+      rejected:    { className: "bg-rose-50 text-rose-700 border-rose-200" },
+      akad:        { className: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+      realisasi:   { className: "bg-cyan-50 text-cyan-700 border-cyan-200" },
     };
-    const current = map[status] || { label: status, className: "bg-slate-50 text-slate-700 border-slate-200" };
+    const style = map[status] || { className: "bg-slate-50 text-slate-700 border-slate-200" };
     return (
-      <Badge variant="outline" className={`font-black text-[10px] px-2.5 py-0.5 rounded-full ${current.className}`}>
-        {current.label}
+      <Badge variant="outline" className={`font-black text-[10px] px-2.5 py-0.5 rounded-full ${style.className}`}>
+        {getKprStatusLabel(status)}
       </Badge>
     );
   };
 
   const getBiCheckStatusBadge = (biCheck: string) => {
-    const map: Record<string, { label: string; className: string }> = {
-      pending: { label: "Pending", className: "bg-amber-50 text-amber-700 border-amber-200" },
-      partial: { label: "Disetujui Sebagian", className: "bg-yellow-50 text-yellow-700 border-yellow-200" },
-      approved: { label: "Lolos BI Checking", className: "bg-emerald-50 text-emerald-700 border-emerald-200" },
-      rejected_refund: { label: "Ditolak (Refund)", className: "bg-rose-50 text-rose-700 border-rose-200" },
-      rejected_no_refund: { label: "Ditolak (Tanpa Refund)", className: "bg-rose-100 text-rose-800 border-rose-300" },
+    const map: Record<string, { className: string }> = {
+      pending: { className: "bg-amber-50 text-amber-700 border-amber-200" },
+      partial: { className: "bg-yellow-50 text-yellow-700 border-yellow-200" },
+      approved: { className: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+      rejected_refund: { className: "bg-rose-50 text-rose-700 border-rose-200" },
+      rejected_no_refund: { className: "bg-rose-100 text-rose-800 border-rose-300" },
     };
-    const current = map[biCheck] || { label: biCheck, className: "bg-slate-50 text-slate-700 border-slate-200" };
+    const style = map[biCheck] || { className: "bg-slate-50 text-slate-700 border-slate-200" };
     return (
-      <Badge variant="outline" className={`font-black text-[10px] px-2.5 py-0.5 rounded-full ${current.className}`}>
-        {current.label}
+      <Badge variant="outline" className={`font-black text-[10px] px-2.5 py-0.5 rounded-full ${style.className}`}>
+        {getKprStatusLabel(biCheck)}
       </Badge>
     );
   };
 
   const getSubmissionStatusBadge = (subStatus: string) => {
-    const map: Record<string, { label: string; className: string }> = {
-      submitted: { label: "Diajukan", className: "bg-blue-50 text-blue-700 border-blue-100" },
-      verified: { label: "Diverifikasi", className: "bg-indigo-50 text-indigo-700 border-indigo-100" },
-      offering: { label: "Offering", className: "bg-purple-50 text-purple-700 border-purple-100" },
-      approved: { label: "Disetujui", className: "bg-emerald-50 text-emerald-700 border-emerald-100" },
-      rejected: { label: "Ditolak", className: "bg-rose-50 text-rose-700 border-rose-100" },
+    const map: Record<string, { className: string }> = {
+      submitted: { className: "bg-blue-50 text-blue-700 border-blue-100" },
+      verified: { className: "bg-indigo-50 text-indigo-700 border-indigo-100" },
+      offering: { className: "bg-purple-50 text-purple-700 border-purple-100" },
+      approved: { className: "bg-emerald-50 text-emerald-700 border-emerald-100" },
+      rejected: { className: "bg-rose-50 text-rose-700 border-rose-100" },
     };
-    const current = map[subStatus] || { label: subStatus, className: "bg-slate-50 text-slate-700 border-slate-100" };
+    const style = map[subStatus] || { className: "bg-slate-50 text-slate-700 border-slate-100" };
     return (
-      <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded border ${current.className}`}>
-        {current.label}
+      <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded border ${style.className}`}>
+        {getBankSubmissionStatusLabel(subStatus)}
       </span>
     );
   };
@@ -190,7 +191,7 @@ export default function KprDetailViewSheet({
                   <span className="text-xs text-muted-foreground font-bold">{kpr.projectName}</span>
                   {kpr.isReadyStock && (
                     <Badge className="bg-primary/10 text-primary hover:bg-primary/20 border border-primary/30 font-extrabold text-[9px] px-2 py-0.5 rounded-full shrink-0">
-                      🏡 Ready Stock
+                      🏡 Siap Huni
                     </Badge>
                   )}
                 </div>

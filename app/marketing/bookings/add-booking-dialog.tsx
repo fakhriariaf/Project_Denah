@@ -151,7 +151,7 @@ export default function AddBookingDialog({
     <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) reset(); }}>
       <DialogTrigger nativeButton render={
         triggerButton || (
-          <Button className="bg-primary hover:bg-[#3F5941] text-white font-bold rounded-xl px-4 py-2 flex items-center gap-2 shadow-[0_2px_8px_rgba(79,111,82,0.25)] hover:scale-[1.02] active:scale-[0.98] transition-all">
+          <Button className="btn-premium bg-[#4F6F52] hover:bg-[#3D563F] text-white font-bold rounded-xl px-4 py-2 flex items-center gap-2 shadow-[0_2px_8px_rgba(79,111,82,0.25)] hover:scale-[1.02] active:scale-[0.98] transition-all">
             <PlusCircle className="h-4 w-4" />
             {t("booking_form.add_btn")}
           </Button>

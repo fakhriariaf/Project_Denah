@@ -44,6 +44,11 @@ import {
   Landmark,
 } from "lucide-react";
 import { formatDate, formatRupiah } from "@/lib/format-utils";
+import {
+  getKprStatusLabel,
+  getBankSubmissionStatusLabel,
+  getDocumentVerificationStatusLabel,
+} from "@/lib/label-helpers";
 import { KprMilestoneTracker } from "../kpr-milestone-tracker";
 
 export const revalidate = 0;
@@ -381,36 +386,42 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
 }
 
 function KprStatusBadge({ status }: { status: string }) {
-  const map: Record<string, { label: string; className: string }> = {
-    bi_checking: { label: "BI Checking", className: "bg-indigo-100 text-indigo-700 border-indigo-200" },
-    pemberkasan: { label: "Pemberkasan", className: "bg-amber-100 text-amber-700 border-amber-200" },
-    proses_bank: { label: "Proses Bank", className: "bg-blue-100 text-blue-700 border-blue-200" },
-    offering: { label: "Offering", className: "bg-purple-100 text-purple-700 border-purple-200" },
-    approved: { label: "Approved", className: "bg-teal-100 text-teal-700 border-teal-200" },
-    rejected: { label: "Ditolak", className: "bg-rose-100 text-rose-700 border-rose-200" },
-    akad: { label: "Akad Kredit", className: "bg-emerald-100 text-emerald-700 border-emerald-200" },
-    realisasi: { label: "Realisasi", className: "bg-cyan-100 text-cyan-700 border-cyan-200" },
+  const styleMap: Record<string, string> = {
+    bi_checking: "bg-indigo-100 text-indigo-700 border-indigo-200",
+    pemberkasan: "bg-amber-100 text-amber-700 border-amber-200",
+    proses_bank: "bg-blue-100 text-blue-700 border-blue-200",
+    offering: "bg-purple-100 text-purple-700 border-purple-200",
+    approved: "bg-teal-100 text-teal-700 border-teal-200",
+    rejected: "bg-rose-100 text-rose-700 border-rose-200",
+    akad: "bg-emerald-100 text-emerald-700 border-emerald-200",
+    realisasi: "bg-cyan-100 text-cyan-700 border-cyan-200",
   };
-  const cfg = map[status] || { label: status, className: "bg-gray-100 text-gray-700 border-gray-200" };
+  const className = styleMap[status] || "bg-gray-100 text-gray-700 border-gray-200";
   return (
-    <Badge variant="outline" className={`text-[10px] font-bold ${cfg.className}`}>
-      {cfg.label}
+    <Badge variant="outline" className={`text-[10px] font-bold ${className}`}>
+      {getKprStatusLabel(status)}
     </Badge>
   );
 }
 
 function BiCheckBadge({ status }: { status: string }) {
-  const map: Record<string, { label: string; className: string }> = {
-    pending: { label: "Pending", className: "bg-gray-100 text-gray-600 border-gray-200" },
-    partial: { label: "Partial", className: "bg-amber-100 text-amber-700 border-amber-200" },
-    approved: { label: "Lolos", className: "bg-emerald-100 text-emerald-700 border-emerald-200" },
-    rejected_refund: { label: "Ditolak (Refund)", className: "bg-rose-100 text-rose-700 border-rose-200" },
-    rejected_no_refund: { label: "Ditolak", className: "bg-rose-100 text-rose-700 border-rose-200" },
+  const styleMap: Record<string, string> = {
+    pending: "bg-gray-100 text-gray-600 border-gray-200",
+    partial: "bg-amber-100 text-amber-700 border-amber-200",
+    approved: "bg-emerald-100 text-emerald-700 border-emerald-200",
+    rejected_refund: "bg-rose-100 text-rose-700 border-rose-200",
+    rejected_no_refund: "bg-rose-100 text-rose-700 border-rose-200",
   };
-  const cfg = map[status] || { label: status, className: "bg-gray-100 text-gray-600 border-gray-200" };
+  const labelMap: Record<string, string> = {
+    approved: "Lolos",
+    rejected_refund: "Ditolak (Refund)",
+    rejected_no_refund: "Ditolak",
+  };
+  const className = styleMap[status] || "bg-gray-100 text-gray-600 border-gray-200";
+  const label = labelMap[status] || getKprStatusLabel(status);
   return (
-    <Badge variant="outline" className={`text-[10px] font-bold ${cfg.className}`}>
-      {cfg.label}
+    <Badge variant="outline" className={`text-[10px] font-bold ${className}`}>
+      {label}
     </Badge>
   );
 }
@@ -433,17 +444,17 @@ function DocStatusBadge({ status }: { status: string }) {
 }
 
 function BankSubmissionStatusBadge({ status }: { status: string }) {
-  const map: Record<string, { label: string; className: string }> = {
-    submitted: { label: "Diajukan", className: "bg-gray-100 text-gray-700 border-gray-200" },
-    verified: { label: "Diverifikasi", className: "bg-blue-100 text-blue-700 border-blue-200" },
-    offering: { label: "Offering", className: "bg-purple-100 text-purple-700 border-purple-200" },
-    approved: { label: "Disetujui", className: "bg-emerald-100 text-emerald-700 border-emerald-200" },
-    rejected: { label: "Ditolak", className: "bg-rose-100 text-rose-700 border-rose-200" },
+  const styleMap: Record<string, string> = {
+    submitted: "bg-gray-100 text-gray-700 border-gray-200",
+    verified: "bg-blue-100 text-blue-700 border-blue-200",
+    offering: "bg-purple-100 text-purple-700 border-purple-200",
+    approved: "bg-emerald-100 text-emerald-700 border-emerald-200",
+    rejected: "bg-rose-100 text-rose-700 border-rose-200",
   };
-  const cfg = map[status] || { label: status, className: "bg-gray-100 text-gray-700 border-gray-200" };
+  const className = styleMap[status] || "bg-gray-100 text-gray-700 border-gray-200";
   return (
-    <Badge variant="outline" className={`text-[10px] font-bold ${cfg.className}`}>
-      {cfg.label}
+    <Badge variant="outline" className={`text-[10px] font-bold ${className}`}>
+      {getBankSubmissionStatusLabel(status)}
     </Badge>
   );
 }
@@ -491,15 +502,5 @@ function SlaIndicator({ status, days }: { status: "safe" | "warning" | "overdue"
 }
 
 function getDocTypeLabel(type: string): string {
-  const labels: Record<string, string> = {
-    ktp: "KTP",
-    npwp: "NPWP",
-    slip_gaji: "Slip Gaji",
-    kk: "Kartu Keluarga",
-    spjb: "SPJB",
-    kpr_doc: "Dokumen KPR",
-    bast: "BAST",
-    other: "Lainnya",
-  };
-  return labels[type] || type.toUpperCase();
+  return getDocumentVerificationStatusLabel(type);
 }

@@ -239,6 +239,10 @@ export default async function BookingsPage({
           unitCode: b.unitCode,
           projectName: b.projectName,
           marketingName: b.marketingName,
+          marketingId: b.marketingId,
+          projectId: b.projectId,
+          unitId: b.unitId,
+          customerId: b.customerId,
           cancellationReason: b.cancellationReason,
         }))}
         canBulkDelete={sessionRoleInfo.isSuperAdmin || sessionRoleInfo.isAdminKantor}

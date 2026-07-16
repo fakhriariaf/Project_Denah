@@ -9,19 +9,18 @@ import { Input } from "@/components/ui/input";
 import { 
   Building, 
   Clock, 
-  AlertCircle, 
   Filter, 
   Layers,
-  Sparkles,
   Search,
-  FileText,
   AlertTriangle,
   CheckCircle,
-  FolderOpen
+  FolderOpen,
+  User
 } from "lucide-react";
 import KprCardDetailDialog from "./kpr-card-detail-dialog";
 import KprDetailViewSheet from "./kpr-detail-view-sheet";
 import { useI18n } from "@/lib/i18n";
+import { getBankSubmissionStatusLabel } from "@/lib/label-helpers";
 import { updateKprStatusDirect } from "@/server/actions/marketing";
 import { Progress } from "@/components/ui/progress";
 import { KprMilestoneTracker } from "./kpr-milestone-tracker";
@@ -505,7 +504,7 @@ export function KprShell({
         </Card>
       </div>
 
-      {/* ── ADVANCED CONTROLS & FILTER BAR (Opsi C) ── */}
+      {/* Advanced controls and filter bar */}
       <div className="flex flex-col sm:flex-row gap-3 bg-card p-3.5 rounded-2xl border border-border shadow-sm">
         {/* Real-time search */}
         <div className="relative flex-1">
@@ -523,7 +522,13 @@ export function KprShell({
           <span className="text-[10px] font-bold text-muted-foreground uppercase whitespace-nowrap">{t("kpr_board.filter_doc")}</span>
           <Select value={docFilter} onValueChange={(val: string | null) => setDocFilter(val || "all")}>
             <SelectTrigger className="w-[140px] h-9 text-xs border-border rounded-xl bg-card">
-              <SelectValue />
+              <SelectValue>
+                {docFilter === "all"
+                  ? t("kpr_board.doc_all")
+                  : docFilter === "complete"
+                    ? t("kpr_board.doc_complete")
+                    : t("kpr_board.doc_incomplete")}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent className="rounded-xl">
               <SelectItem value="all" className="text-xs">{t("kpr_board.doc_all")}</SelectItem>
@@ -538,7 +543,13 @@ export function KprShell({
           <span className="text-[10px] font-bold text-muted-foreground uppercase whitespace-nowrap">{t("kpr_board.filter_sla")}</span>
           <Select value={slaFilter} onValueChange={(val: string | null) => setSlaFilter(val || "all")}>
             <SelectTrigger className="w-[140px] h-9 text-xs border-border rounded-xl bg-card">
-              <SelectValue />
+              <SelectValue>
+                {slaFilter === "all"
+                  ? t("kpr_board.sla_all")
+                  : slaFilter === "safe"
+                    ? t("kpr_board.sla_safe")
+                    : t("kpr_board.sla_overdue_filter")}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent className="rounded-xl">
               <SelectItem value="all" className="text-xs">{t("kpr_board.sla_all")}</SelectItem>
@@ -549,8 +560,8 @@ export function KprShell({
         </div>
       </div>
 
-      {/* ── PIPELINE KANBAN BOARD ── */}
-      <div className="flex gap-4 overflow-x-auto pb-6 items-start scrollbar-thin scrollbar-thumb-[#8FAF9A]/30 scrollbar-track-[#F7F8F3] w-full">
+      {/* Pipeline kanban board */}
+      <div className="flex gap-5 overflow-x-auto pb-6 items-start scrollbar-thin scrollbar-thumb-[#8FAF9A]/30 scrollbar-track-[#F7F8F3] w-full">
         {COLUMNS.map((col) => {
           const colCards = filteredKpr.filter((k) => getCardKanbanColumn(k) === col.id);
           const isOver = draggedOverColId === col.id;
@@ -561,25 +572,25 @@ export function KprShell({
               onDragOver={(e) => handleDragOver(e, col.id)}
               onDragLeave={handleDragLeave}
               onDrop={(e) => handleDrop(e, col.id)}
-              className={`p-3 rounded-2xl flex flex-col h-[calc(100vh-340px)] min-h-[500px] w-[280px] shrink-0 shadow-sm transition-all duration-200 ${
+              className={`p-3.5 rounded-[26px] flex flex-col h-[calc(100vh-330px)] min-h-[540px] w-[320px] shrink-0 shadow-sm transition-all duration-200 ${
                 isOver 
-                  ? "bg-secondary/50 border-2 border-dashed border-[#4F6F52] scale-[1.01]" 
-                  : "bg-muted/30/60 border border-border/60 hover:shadow-md"
+                  ? "bg-secondary/60 border-2 border-dashed border-primary scale-[1.01]" 
+                  : "bg-gradient-to-b from-secondary/35 to-card border border-primary/15 hover:shadow-sage-md"
               }`}
             >
               {/* Column Header */}
-              <div className={`p-3 rounded-xl border flex items-center justify-between font-bold text-xs mb-3 shadow-sm bg-card shrink-0 ${col.color}`}>
+              <div className="p-3 rounded-2xl border border-primary/15 flex items-center justify-between font-bold text-xs mb-3 shadow-sm bg-card shrink-0">
                 <div className="flex items-center gap-2">
                   <span className={`w-2 h-2 rounded-full ${col.marker}`} />
-                  <span className="uppercase tracking-wider font-extrabold">{col.label}</span>
+                  <span className="uppercase tracking-wider font-extrabold text-foreground">{col.label}</span>
                 </div>
-                <Badge className="bg-muted/30 text-foreground border border-border/60 font-mono font-bold text-[10px] px-2 py-0.5 rounded-md">
+                <Badge className="bg-secondary/60 text-primary border border-primary/15 font-mono font-bold text-[10px] px-2 py-0.5 rounded-md">
                   {colCards.length}
                 </Badge>
               </div>
 
               {/* Cards List */}
-              <div className="space-y-3 flex-1 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-slate-200">
+              <div className="space-y-3.5 flex-1 overflow-y-auto pr-1.5 scrollbar-thin scrollbar-thumb-[#D6DED2]">
                 {colCards.length > 0 ? (
                   colCards.map((kprCard) => {
                     const clientSubmissions = submissions.filter(sub => sub.kprProcessId === kprCard.id);
@@ -588,19 +599,45 @@ export function KprShell({
                     // SLA Countdown calculations
                     let remainingDays = 0;
                     let isSlaOverdue = false;
-                    if (kprCard.slaDeadlineAt && kprCard.status === "pemberkasan") {
+                    const hasSlaDeadline = Boolean(kprCard.slaDeadlineAt);
+                    if (kprCard.slaDeadlineAt) {
                       const limit = new Date(kprCard.slaDeadlineAt);
                       remainingDays = Math.ceil((limit.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-                      if (remainingDays <= 0) {
+                      if (remainingDays < 0) {
                         isSlaOverdue = true;
                       }
                     }
+                    const isSlaDueSoon = hasSlaDeadline && !isSlaOverdue && remainingDays <= 1;
+                    const slaDescription = !hasSlaDeadline
+                      ? "Belum mulai"
+                      : isSlaOverdue
+                        ? `Terlambat ${Math.abs(remainingDays)} hari`
+                        : remainingDays === 0
+                          ? "Jatuh tempo hari ini"
+                          : `${remainingDays} hari tersisa`;
+                    const slaBadgeLabel = !hasSlaDeadline
+                      ? "Menunggu"
+                      : isSlaOverdue
+                        ? "Terlambat"
+                        : isSlaDueSoon
+                          ? "Perlu Dicek"
+                          : "Tepat Waktu";
 
                     // Checklist Documents uploaded indicators (KTP, NPWP, Slip Gaji, KK)
                     const hasKtp = clientDocs.some(d => d.documentType === "ktp" && d.status !== "rejected");
                     const hasNpwp = clientDocs.some(d => d.documentType === "npwp" && d.status !== "rejected");
                     const hasSlip = clientDocs.some(d => d.documentType === "slip_gaji" && d.status !== "rejected");
                     const hasKk = clientDocs.some(d => d.documentType === "kk" && d.status !== "rejected");
+                    const uploadedCount = [hasKtp, hasNpwp, hasSlip, hasKk].filter(Boolean).length;
+                    const docsComplete = uploadedCount === 4;
+                    const primarySubmission =
+                      clientSubmissions.find(sub => sub.status === "approved" || sub.status === "offering") ??
+                      clientSubmissions[0];
+                    const primaryBank = primarySubmission
+                      ? bankPartners.find(b => b.id === primarySubmission.bankPartnerId)?.name
+                      : null;
+                    const colInfo = COLUMNS.find(c => c.id === kprCard.status);
+                    const kprStatusLabel = colInfo?.label || kprCard.status;
 
                     return (
                       <div
@@ -610,10 +647,10 @@ export function KprShell({
                       >
                         <Card 
                           onClick={() => setViewingKpr(kprCard)}
-                          className={`cursor-pointer hover:shadow-sage-lg active:scale-[0.99] shadow-sage-md bg-card border rounded-2xl relative transition-all duration-200 group hover:-translate-y-1 ${
+                          className={`cursor-pointer active:scale-[0.99] shadow-[0_10px_24px_rgba(79,111,82,0.09)] bg-gradient-to-b from-white to-secondary/20 border rounded-[22px] relative transition-all duration-200 group hover:shadow-sage-md hover:-translate-y-0.5 ${
                             isSlaOverdue 
                               ? "shadow-[0_0_15px_rgba(215,122,122,0.25)] border-[#D77A7A]/70" 
-                              : "border-border/80 hover:border-primary/50"
+                              : "border-primary/20 hover:border-primary/45"
                           }`}
                         >
                           {/* SLA Overdue Bar indicator */}
@@ -621,33 +658,145 @@ export function KprShell({
                             <div className="absolute top-0 inset-x-0 h-1 rounded-t-2xl bg-gradient-to-r from-[#D77A7A] to-[#E8A0A8]" />
                           )}
 
-                          <CardContent className="p-4 pt-5 space-y-3">
-                            {/* Customer Avatar & Name */}
-                            <div className="flex items-center gap-3">
-                              <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 shadow-inner ${
-                                isSlaOverdue ? "bg-[#F8D4DA] text-[#8B3443]" : "bg-secondary text-primary"
-                              }`}>
-                                {kprCard.customerName.substring(0, 2).toUpperCase()}
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <h4 className="font-bold text-foreground group-hover:text-primary transition text-xs truncate leading-tight">
-                                  {kprCard.customerName}
-                                </h4>
-                                <p className="text-[9px] text-muted-foreground font-semibold mt-0.5">
-                                  {t("kpr_board.card_booking")} <span className="font-mono text-primary">{kprCard.bookingNumber}</span>
-                                </p>
-                              </div>
-                            </div>
-
-                            {/* Unit Specifications info */}
-                            <div className="flex flex-col gap-1.5 bg-muted/30 p-2.5 rounded-xl border border-border/30">
-                              <div className="flex items-center justify-between text-[10px]">
-                                <span className="text-muted-foreground font-bold truncate pr-2">{kprCard.projectName}</span>
-                                <Badge variant="outline" className="font-mono font-black bg-card border-input text-primary text-[9px] px-2 py-0.5 rounded-md shrink-0">
+                          <CardContent className="p-4 space-y-3.5">
+                            <div className="space-y-2">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex min-w-0 flex-1 items-start gap-3">
+                                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/80 text-white shadow-[0_4px_10px_rgba(79,111,82,0.18)] ring-4 ring-secondary/70">
+                                    <User className="h-5 w-5" />
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <h4 className="font-extrabold text-foreground group-hover:text-primary transition text-[13px] truncate leading-tight">
+                                      {kprCard.customerName}
+                                    </h4>
+                                    <p className="text-[10px] text-primary/75 font-semibold mt-1 truncate">
+                                      {kprCard.projectName}
+                                    </p>
+                                  </div>
+                                </div>
+                                <Badge variant="outline" className="font-mono font-bold bg-secondary/70 border-primary/25 text-primary text-[10px] px-2 py-0.5 rounded-lg shrink-0">
                                   {kprCard.unitCode}
                                 </Badge>
                               </div>
-                              {/* Status Bank Rekanan Terkait */}
+
+                              <div className="text-[10px]">
+                                <span className="block font-mono text-muted-foreground truncate">
+                                  {kprCard.bookingNumber}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-1.5 text-[10px]">
+                              <div className="rounded-xl border border-primary/20 bg-secondary/35 px-2 py-2 text-center">
+                                <CheckCircle className="mx-auto mb-1 h-4 w-4 text-primary" />
+                                <span className="block text-[8px] uppercase tracking-wider text-foreground font-extrabold">BI Checking</span>
+                                <span className={`mt-1 inline-flex rounded-md px-1.5 py-0.5 font-black ${
+                                  kprCard.biCheckStatus === "approved" 
+                                    ? "bg-secondary text-primary" 
+                                    : kprCard.biCheckStatus.startsWith("rejected") 
+                                    ? "bg-rose-50 text-rose-700" 
+                                    : "bg-amber-50 text-amber-700"
+                                }`}>
+                                  {getBankSubmissionStatusLabel(kprCard.biCheckStatus)}
+                                </span>
+                              </div>
+                              <div className="rounded-xl border border-primary/20 bg-secondary/35 px-2 py-2 text-center">
+                                <FolderOpen className="mx-auto mb-1 h-4 w-4 text-primary" />
+                                <span className="block text-[8px] uppercase tracking-wider text-foreground font-extrabold">Dokumen</span>
+                                <span className={`mt-1 inline-flex rounded-md px-1.5 py-0.5 font-mono font-black ${docsComplete ? "bg-secondary text-primary" : "bg-amber-50 text-amber-700"}`}>
+                                  {uploadedCount}/4
+                                </span>
+                              </div>
+                              <div className="rounded-xl border border-primary/20 bg-secondary/35 px-2 py-2 text-center">
+                                <Building className="mx-auto mb-1 h-4 w-4 text-primary" />
+                                <span className="block text-[8px] uppercase tracking-wider text-foreground font-extrabold">Bank</span>
+                                <span className="mt-1 inline-flex rounded-md bg-secondary px-1.5 py-0.5 font-mono font-black text-primary">
+                                  {clientSubmissions.length}
+                                </span>
+                              </div>
+                            </div>
+                            <div className={`rounded-xl border px-2.5 py-2.5 text-[10px] ${
+                              !hasSlaDeadline
+                                ? "border-primary/20 bg-secondary/30 text-primary"
+                                : isSlaOverdue
+                                  ? "border-[#D77A7A]/35 bg-[#D77A7A]/10 text-[#9A3B48]"
+                                  : isSlaDueSoon
+                                    ? "border-amber-200 bg-amber-50 text-amber-700"
+                                    : "border-primary/25 bg-secondary/35 text-primary"
+                            }`}>
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex min-w-0 items-center gap-2">
+                                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
+                                    <Clock className="h-4 w-4" />
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="font-extrabold leading-tight">SLA Submission</p>
+                                    <p className="mt-0.5 font-semibold text-muted-foreground">
+                                      {slaDescription}
+                                    </p>
+                                  </div>
+                                </div>
+                                <span className={`shrink-0 rounded-lg border px-2 py-1 font-bold ${
+                                  !hasSlaDeadline
+                                    ? "border-primary/20 bg-white/70 text-primary"
+                                    : isSlaOverdue
+                                      ? "border-[#D77A7A]/30 bg-white/70 text-[#9A3B48]"
+                                      : isSlaDueSoon
+                                        ? "border-amber-200 bg-white/70 text-amber-700"
+                                        : "border-primary/20 bg-white/70 text-primary"
+                                }`}>
+                                  {slaBadgeLabel}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="hidden">
+                            {kprCard.status === "pemberkasan" && kprCard.slaDeadlineAt && (
+                              <div className={`rounded-xl border px-2.5 py-2.5 text-[10px] ${
+                                isSlaOverdue
+                                  ? "border-[#D77A7A]/35 bg-[#D77A7A]/10 text-[#9A3B48]"
+                                  : remainingDays <= 1
+                                    ? "border-amber-200 bg-amber-50 text-amber-700"
+                                    : "border-primary/25 bg-secondary/35 text-primary"
+                              }`}>
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex min-w-0 items-center gap-2">
+                                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
+                                      <Clock className="h-4 w-4" />
+                                    </div>
+                                    <div className="min-w-0">
+                                      <p className="font-extrabold leading-tight">SLA Submission</p>
+                                      <p className="mt-0.5 font-semibold text-muted-foreground">
+                                        {isSlaOverdue ? "Melewati batas" : `${Math.abs(remainingDays)} hari tersisa`}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <span className={`shrink-0 rounded-lg border px-2 py-1 font-bold ${
+                                    isSlaOverdue
+                                      ? "border-[#D77A7A]/30 bg-white/70 text-[#9A3B48]"
+                                      : remainingDays <= 1
+                                        ? "border-amber-200 bg-white/70 text-amber-700"
+                                        : "border-primary/20 bg-white/70 text-primary"
+                                  }`}>
+                                    {isSlaOverdue ? "Terlambat" : "Tepat Waktu"}
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+                            </div>
+
+                            <div className="rounded-xl border border-primary/20 bg-card px-2.5 py-2 text-[10px]">
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex min-w-0 flex-1 items-center gap-2">
+                                  <Building className="h-4 w-4 shrink-0 text-primary" />
+                                  <span className="font-extrabold text-foreground truncate" title={primaryBank || "Belum ada"}>
+                                    {primaryBank || "Belum ada"}
+                                  </span>
+                                </div>
+                                <span className="text-primary text-base leading-none">›</span>
+                              </div>
+                            </div>
+                            <div className="hidden">
+                            {/* Status Bank Rekanan Terkait */}
                               {(() => {
                                 const submittedBanks = clientSubmissions.map(sub => {
                                   const bp = bankPartners.find(b => b.id === sub.bankPartnerId);
@@ -658,7 +807,7 @@ export function KprShell({
                                   <div className="flex flex-wrap gap-1 pt-1 border-t border-border/20">
                                     {submittedBanks.map((bankName, idx) => (
                                       <Badge key={idx} variant="outline" className="bg-secondary/50 text-primary border-border/60 text-[8px] font-extrabold px-1.5 py-0.5 rounded-md shrink-0 flex items-center gap-1">
-                                        <span>ðŸ¦</span>
+                                        <span>🏦</span>
                                         <span>{bankName}</span>
                                       </Badge>
                                     ))}
@@ -672,6 +821,7 @@ export function KprShell({
                             </div>
 
                             {/* Ringkasan Finansial Presisi (Harga vs Plafond) */}
+                            <div className="hidden">
                             {(() => {
                               const approvedSub = clientSubmissions.find(sub => sub.status === "approved" || sub.status === "offering");
                               const approvedPlafond = approvedSub?.plafondAmount;
@@ -723,15 +873,7 @@ export function KprShell({
                                         ? "text-rose-700" 
                                         : "text-amber-700"
                                     }`}>
-                                      {kprCard.biCheckStatus === "approved" 
-                                        ? "Approved" 
-                                        : kprCard.biCheckStatus === "rejected_refund" 
-                                        ? "Rejected (Rfd)" 
-                                        : kprCard.biCheckStatus === "rejected_no_refund" 
-                                        ? "Rejected (NoRfd)" 
-                                        : kprCard.biCheckStatus === "partial"
-                                        ? "Partial"
-                                        : "Pending"}
+                                      {getBankSubmissionStatusLabel(kprCard.biCheckStatus)}
                                     </span>
                                   </div>
                                 </div>
@@ -801,21 +943,21 @@ export function KprShell({
                                 )}
                               </div>
                             )}
+                            </div>
 
-                            {/* INTEGRATED DIALOG & WHATSAPP QUICK-LINK */}
-                            <div className="pt-2 border-t border-border/30 flex gap-2" onClick={(e) => e.stopPropagation()}>
+                            <div className="pt-2 border-t border-border/30" onClick={(e) => e.stopPropagation()}>
                               <a
                                 href={`https://wa.me/${kprCard.customerPhone.replace(/[^0-9]/g, "")}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="h-8.5 w-8.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 hover:text-emerald-700 border border-emerald-200/50 rounded-xl flex items-center justify-center transition shadow-sm shrink-0"
+                                className="hidden"
                                 title="Hubungi WhatsApp"
                               >
                                 <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
                                   <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.514 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.73-1.455L0 24zm6.59-4.846c1.6.95 3.188 1.449 4.825 1.451 5.436.002 9.858-4.417 9.86-9.858.002-2.637-1.023-5.116-2.884-6.98C16.59 1.908 14.113.882 11.48.882c-5.435 0-9.856 4.418-9.858 9.858-.001 1.716.467 3.391 1.354 4.925l-.993 3.63 3.731-.979zm13.11-6.721c-.333-.167-1.972-.974-2.278-1.085-.306-.113-.53-.167-.752.167-.222.334-.861 1.085-1.055 1.306-.195.222-.389.25-.722.083-1.63-.82-2.802-1.424-3.92-3.35-.117-.203-.043-.314.04-.422.077-.101.167-.222.25-.334.083-.111.111-.19.167-.317.056-.128.028-.24-.014-.323-.042-.083-.752-1.812-1.03-2.482-.27-.655-.544-.567-.752-.578-.195-.01-.417-.012-.64-.012-.222 0-.583.083-.889.417-.306.334-1.167 1.141-1.167 2.784 0 1.642 1.194 3.224 1.361 3.447.167.222 2.35 3.587 5.69 5.032 2.782 1.202 3.411 1.054 3.99.988.583-.067 1.972-.806 2.25-1.584.278-.778.278-1.445.194-1.584-.083-.139-.306-.222-.639-.389z"/>
                                 </svg>
                               </a>
-                              <div className="flex-1">
+                              <div>
                                 <KprCardDetailDialog 
                                   kpr={kprCard}
                                   bankPartners={bankPartners}

@@ -115,7 +115,7 @@ export default function CreateLeadDialog({ projects, units, customers, marketing
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger nativeButton={true} render={
-        <Button className="bg-primary hover:bg-[#3F5941] text-white flex items-center gap-2">
+        <Button className="btn-premium bg-[#4F6F52] hover:bg-[#3D563F] text-white flex items-center gap-2">
           <Plus className="h-4 w-4" /> {t("lead_form.add_btn")}
         </Button>
       } />

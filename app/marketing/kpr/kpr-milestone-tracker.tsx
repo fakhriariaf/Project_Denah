@@ -23,7 +23,7 @@ export function KprMilestoneTracker({
 
   // Steps mirror kanban COLUMNS exactly (same IDs, same order, same conditions)
   const steps = [
-    { key: "available",        label: isReady ? "Tersedia - Ready Stock" : "Tersedia" },
+    { key: "available",        label: isReady ? "Tersedia Siap Huni" : "Tersedia (Indent)" },
     { key: "booking_fee",      label: "Booking Fee" },
     { key: "bi_checking",      label: "BI Checking" },
     { key: "pemberkasan",      label: "Pemberkasan" },

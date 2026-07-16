@@ -64,7 +64,7 @@ export function AddToWaitingListDialog({ projects, customers }: Props) {
 
   return (
     <>
-      <Button onClick={() => setOpen(true)} className="btn-premium bg-primary hover:bg-primary/90 text-white gap-2 shrink-0">
+      <Button onClick={() => setOpen(true)} className="btn-premium bg-[#4F6F52] hover:bg-[#3D563F] text-white gap-2 shrink-0">
         <PlusCircle className="h-4 w-4" />
         {t("waiting_dialog.add_btn")}
       </Button>
