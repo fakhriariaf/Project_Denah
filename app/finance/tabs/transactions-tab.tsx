@@ -28,6 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { CircleDollarSign, TrendingDown } from "lucide-react";
+import { FinanceDocLink } from "@/components/finance/finance-doc-link";
 
 interface Transaction {
   id: string;
@@ -138,7 +139,9 @@ export function TransactionsTab({
                   filteredTransactions.map((trx) => (
                     <TableRow key={trx.id}>
                       <TableCell className="font-mono text-xs font-semibold text-foreground">
-                        {trx.transactionNumber}
+                        <FinanceDocLink href={`/finance/transactions/${trx.id}`}>
+                          {trx.transactionNumber}
+                        </FinanceDocLink>
                       </TableCell>
                       <TableCell className="font-mono text-xs text-muted-foreground">
                         {trx.invoiceNumber || "—"}

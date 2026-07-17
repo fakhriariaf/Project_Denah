@@ -1,7 +1,50 @@
 import { db } from "./index";
 import { roles } from "./schema/access";
 import { user } from "./schema/auth";
+import { financeCategories } from "./schema/master";
 import { auth } from "../server/auth";
+
+/**
+ * Seed the two global "Koreksi & Pembalikan" finance categories used by the
+ * ledger correction/reversal flow (Phase 4). The reversal action resolves the
+ * category whose `type` matches the inverse adjustment type, so both an income
+ * and an expense variant are required. Categories are global (finance_categories
+ * has no projectId) and idempotent — only inserted when a category with the
+ * same name + type does not already exist.
+ */
+export async function seedReversalCategories() {
+  const { and, eq } = await import("drizzle-orm");
+
+  const reversalCategories: Array<{ name: string; type: "income" | "expense" }> = [
+    { name: "Koreksi & Pembalikan (Pemasukan)", type: "income" },
+    { name: "Koreksi & Pembalikan (Pengeluaran)", type: "expense" },
+  ];
+
+  for (const cat of reversalCategories) {
+    try {
+      const existing = await db
+        .select()
+        .from(financeCategories)
+        .where(and(eq(financeCategories.name, cat.name), eq(financeCategories.type, cat.type)))
+        .limit(1);
+
+      if (existing.length === 0) {
+        await db.insert(financeCategories).values({
+          id: crypto.randomUUID(),
+          name: cat.name,
+          type: cat.type,
+          status: "active",
+          createdAt: new Date(),
+        });
+        console.log(`Reversal category created: ${cat.name} (${cat.type})`);
+      } else {
+        console.log(`Reversal category already exists: ${cat.name} (${cat.type})`);
+      }
+    } catch (err) {
+      console.error(`Failed to seed reversal category ${cat.name}:`, err);
+    }
+  }
+}
 
 async function main() {
   console.log("Seeding database...");
@@ -170,6 +213,10 @@ async function main() {
       }
     }
   }
+
+  // 5. Reversal / correction finance categories (Phase 4)
+  console.log("Seeding reversal finance categories...");
+  await seedReversalCategories();
 
   console.log("Seeding complete.");
   process.exit(0);

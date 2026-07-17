@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, doublePrecision, integer, index } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, doublePrecision, integer, index, jsonb } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { projects, units, customers, financeAccounts, financeCategories } from "./master";
 import { bookings } from "./marketing";
@@ -20,10 +20,18 @@ export const invoices = pgTable("invoices", {
   dueDate: timestamp("due_date", { mode: "date" }),
   status: text("status").default("unpaid").notNull().$type<"unpaid" | "partial" | "paid" | "cancelled">(), // 'unpaid', 'partial', etc.
   notes: text("notes"),
+  // Schedule identity (Phase — installment schedule, additive & nullable). Stable
+  // schedule identity for idempotent duplicate detection; legacy invoices have all
+  // three columns NULL and rely on label-helper fallback to `type`.
+  scheduleKind: text("schedule_kind")
+    .$type<"booking_fee" | "dp" | "cash_settlement" | "installment">(), // nullable
+  scheduleSequence: integer("schedule_sequence"), // nullable; termin ke-i (1..N), null untuk non-termin
+  scheduleLabel: text("schedule_label"), // nullable; "Pelunasan Cash", "Termin 1".."Termin N"
   createdAt: defaultCreatedAt(),
   updatedAt: defaultUpdatedAt(),
 }, (table) => ({
   projectCreatedIdx: index("idx_invoices_project_created").on(table.projectId, table.createdAt),
+  scheduleIdentityIdx: index("idx_invoices_booking_schedule").on(table.bookingId, table.scheduleKind, table.scheduleSequence),
 }));
 
 export const payments = pgTable("payments", {
@@ -37,7 +45,11 @@ export const payments = pgTable("payments", {
   paymentDate: timestamp("payment_date", { mode: "date" }).notNull(),
   paymentMethod: text("payment_method").notNull().$type<"cash" | "transfer" | "giro" | "other">(), // 'cash', 'transfer', etc.
   proofAttachmentId: text("proof_attachment_id").references(() => attachments.id, { onDelete: "set null" }),
-  status: text("status").default("pending").notNull().$type<"pending" | "verified" | "rejected">(), // 'pending', 'verified', etc.
+  // Uploader identity (additive & nullable) — primary source for the self-verify
+  // guard (Req 11.7): a user must not verify a payment they uploaded. Legacy
+  // payments have this NULL and fall back to attachment uploader / audit history.
+  uploadedBy: text("uploaded_by").references(() => user.id, { onDelete: "set null" }),
+  status: text("status").default("pending").notNull().$type<"pending" | "verified" | "rejected" | "voided">(), // 'pending', 'verified', etc.
   verifiedBy: text("verified_by").references(() => user.id, { onDelete: "set null" }),
   verifiedAt: timestamp("verified_at", { mode: "date" }),
   createdAt: defaultCreatedAt(),
@@ -67,6 +79,17 @@ export const transactions = pgTable("transactions", {
   approvalNotes: text("approval_notes"),
   attachmentId: text("attachment_id").references(() => attachments.id, { onDelete: "set null" }),
   createdBy: text("created_by").references(() => user.id).notNull(),
+  // Correction/reversal linkage (Phase 4, additive & nullable) — links an inverse
+  // adjustment transaction back to the original it reverses. Normal transactions
+  // leave both null.
+  reversalOfTransactionId: text("reversal_of_transaction_id")
+    .references((): any => transactions.id, { onDelete: "set null" }),
+  // Payment-scoped reversal linkage (additive & nullable) — links an inverse
+  // adjustment transaction back to the original payment it reverses. Normal
+  // transactions leave this null.
+  reversalOfPaymentId: text("reversal_of_payment_id")
+    .references(() => payments.id, { onDelete: "set null" }),
+  reversalReason: text("reversal_reason"),
   createdAt: defaultCreatedAt(),
   updatedAt: defaultUpdatedAt(),
 }, (table) => ({
@@ -105,3 +128,25 @@ export const budgetLines = pgTable("budget_lines", {
   remainingAmount: doublePrecision("remaining_amount").notNull(),
   createdAt: defaultCreatedAt(),
 });
+
+export const financeActivityHistory = pgTable("finance_activity_history", {
+  id: text("id").primaryKey(),
+  entityType: text("entity_type").notNull()
+    .$type<"invoice" | "payment" | "transaction" | "approval" | "budget">(),
+  entityId: text("entity_id").notNull(),
+  action: text("action").notNull()
+    .$type<
+      | "created" | "submitted" | "approved" | "verified" | "rejected"
+      | "revised" | "resubmitted" | "cancelled" | "reversed" | "corrected"
+      | "updated" | "activated" | "closed" | "paid_partial" | "paid_full"
+    >(),
+  fromStatus: text("from_status"),
+  toStatus: text("to_status"),
+  reason: text("reason"), // enforced max 500 chars at the validator layer
+  snapshotBefore: jsonb("snapshot_before"),
+  snapshotAfter: jsonb("snapshot_after"),
+  actorId: text("actor_id").references(() => user.id).notNull(),
+  createdAt: defaultCreatedAt(),
+}, (table) => ({
+  entityIdx: index("idx_fin_activity_entity").on(table.entityType, table.entityId),
+}));

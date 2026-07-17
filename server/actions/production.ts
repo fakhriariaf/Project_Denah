@@ -1979,7 +1979,7 @@ export async function completeConstruction(unitId: string, bastAttachmentId?: st
       unitId,
       previousStatus: oldStatus,
       newStatus,
-      reason: `Pembangunan selesai secara resmi oleh Developer, unit berstatus ${newStatus === "available" ? "Tersedia (Ready Stock)" : newStatus === "sold" ? "Terjual (Sold)" : newStatus === "kpr_process" ? "Proses KPR (Ready Stock)" : "Booking (Ready Stock)"}. Bukti BAST Terunggah: ${bastAttachmentId || "Tidak Ada"}`,
+      reason: `Pembangunan selesai secara resmi oleh Developer, unit berstatus ${newStatus === "available" ? "Tersedia Siap Huni" : newStatus === "sold" ? "Terjual" : newStatus === "kpr_process" ? "Proses KPR Siap Huni" : "Booking Siap Huni"}. Bukti BAST Terunggah: ${bastAttachmentId || "Tidak Ada"}`,
       changedBy: activeUser.id,
       changedAt: new Date(),
     }).run();

@@ -8,6 +8,16 @@ import { unitStatusHistories } from "@/db/schema/master";
 import { bookings, bookingStatusHistories, kprProcesses } from "@/db/schema/marketing";
 import { invoices, payments } from "@/db/schema/finance";
 import { spks, spkProgressLogs } from "@/db/schema/production";
+import {
+  getUnitStatusLabel,
+  getBookingStatusLabel,
+  getPaymentSchemeLabel,
+  getKprStatusLabel,
+  getInvoiceStatusLabel,
+  getInvoiceTypeLabel,
+  getPaymentStatusLabel,
+  getSpkStatusLabel,
+} from "@/lib/label-helpers";
 
 export interface TimelineEvent {
   id: string;
@@ -40,7 +50,7 @@ export async function getUnitTimeline(unitId: string): Promise<TimelineEvent[]> 
     events.push({
       id: sh.id,
       type: "status_change",
-      title: `Status berubah: ${sh.previousStatus ?? "—"} → ${sh.newStatus}`,
+      title: `Status berubah: ${sh.previousStatus ? getUnitStatusLabel(sh.previousStatus) : "—"} → ${getUnitStatusLabel(sh.newStatus)}`,
       description: sh.reason ?? undefined,
       timestamp: sh.changedAt,
       metadata: {
@@ -63,7 +73,7 @@ export async function getUnitTimeline(unitId: string): Promise<TimelineEvent[]> 
       id: `booking-${bk.id}`,
       type: "booking",
       title: `Booking dibuat: ${bk.bookingNumber}`,
-      description: `Skema: ${bk.paymentScheme} | Status: ${bk.status}`,
+      description: `Skema: ${getPaymentSchemeLabel(bk.paymentScheme)} | Status: ${getBookingStatusLabel(bk.status)}`,
       timestamp: bk.bookingDate,
       metadata: {
         bookingId: bk.id,
@@ -84,7 +94,7 @@ export async function getUnitTimeline(unitId: string): Promise<TimelineEvent[]> 
       events.push({
         id: bsh.id,
         type: "booking_status",
-        title: `Status booking: ${bsh.previousStatus ?? "—"} → ${bsh.newStatus}`,
+        title: `Status booking: ${bsh.previousStatus ? getBookingStatusLabel(bsh.previousStatus) : "—"} → ${getBookingStatusLabel(bsh.newStatus)}`,
         description: bsh.notes ?? undefined,
         timestamp: bsh.changedAt,
         metadata: {
@@ -107,7 +117,7 @@ export async function getUnitTimeline(unitId: string): Promise<TimelineEvent[]> 
       events.push({
         id: `kpr-${kpr.id}`,
         type: "kpr",
-        title: `KPR: ${kpr.status}`,
+        title: `KPR: ${getKprStatusLabel(kpr.status)}`,
         description: kpr.akadDate
           ? `Akad: ${kpr.akadDate.toLocaleDateString("id-ID")}`
           : kpr.realizedDate
@@ -136,7 +146,7 @@ export async function getUnitTimeline(unitId: string): Promise<TimelineEvent[]> 
       id: `invoice-${inv.id}`,
       type: "invoice",
       title: `Invoice: ${inv.invoiceNumber}`,
-      description: `${inv.type} — Rp ${inv.amount.toLocaleString("id-ID")} | ${inv.status}`,
+      description: `${getInvoiceTypeLabel(inv.type)} — Rp ${inv.amount.toLocaleString("id-ID")} | ${getInvoiceStatusLabel(inv.status)}`,
       timestamp: inv.createdAt,
       metadata: {
         invoiceId: inv.id,
@@ -160,7 +170,7 @@ export async function getUnitTimeline(unitId: string): Promise<TimelineEvent[]> 
       id: `payment-${pay.id}`,
       type: "payment",
       title: `Pembayaran: ${pay.paymentNumber}`,
-      description: `Rp ${pay.amount.toLocaleString("id-ID")} | ${pay.status}${pay.verifiedAt ? ` (verified)` : ""}`,
+      description: `Rp ${pay.amount.toLocaleString("id-ID")} | ${getPaymentStatusLabel(pay.status)}${pay.verifiedAt ? ` (terverifikasi)` : ""}`,
       timestamp: pay.paymentDate,
       metadata: {
         paymentId: pay.id,
@@ -184,7 +194,7 @@ export async function getUnitTimeline(unitId: string): Promise<TimelineEvent[]> 
       id: `spk-${spk.id}`,
       type: "spk",
       title: `SPK: ${spk.spkNumber}`,
-      description: `${spk.title} | Progress: ${spk.progressPct}% | ${spk.status}`,
+      description: `${spk.title} | Progress: ${spk.progressPct}% | ${getSpkStatusLabel(spk.status)}`,
       timestamp: spk.createdAt,
       metadata: {
         spkId: spk.id,

@@ -56,16 +56,7 @@ import {
   getSpkDetails 
 } from "@/server/actions/production";
 import { useRouter } from "next/navigation";
-
-const SPK_STATUS_LABELS: Record<string, string> = {
-  active: "Aktif",
-  proses_konstruksi: "Proses Konstruksi",
-  selesai_konstruksi: "Selesai Konstruksi",
-  overdue: "Terlambat",
-  completed: "Selesai",
-  cancelled: "Batal",
-  draft: "Draft",
-};
+import { getSpkStatusLabel, getComplaintStatusLabel } from "@/lib/label-helpers";
 
 interface VendorDashboardShellProps {
   data: {
@@ -441,7 +432,7 @@ export function VendorDashboardShell({ data, userName }: VendorDashboardShellPro
         <div className="flex flex-wrap gap-2">
           <Button 
             onClick={() => { setErrorMsg(null); setActiveDialog("progress"); }}
-            className="bg-[#8FAF9A] hover:bg-[#7da089] text-white text-xs h-9 px-4 rounded-xl flex items-center gap-1.5 transition-all shadow-sm"
+            className="btn-premium bg-[#4F6F52] hover:bg-[#3D563F] text-white text-xs h-9 px-4 rounded-xl flex items-center gap-1.5 transition-all shadow-sm"
           >
             <Plus className="w-4 h-4" /> Update Progress
           </Button>
@@ -691,7 +682,7 @@ export function VendorDashboardShell({ data, userName }: VendorDashboardShellPro
                                 {c.complaintNumber}
                               </span>
                               <Badge variant="outline" className="text-[10px] font-semibold py-0 px-2 border-amber-300 text-amber-700 bg-amber-50">
-                                {c.status.replace("_", " ")}
+                                {getComplaintStatusLabel(c.status)}
                               </Badge>
                             </div>
                             <div>
@@ -829,7 +820,7 @@ export function VendorDashboardShell({ data, userName }: VendorDashboardShellPro
                         <div className="text-right space-y-1">
                           <p className="text-[10px] font-bold text-[#66736A] uppercase tracking-wider">Unit / Kavling</p>
                           <p className="font-black text-[#243028] text-sm">{currentSpk.projectName} &bull; Kav. {currentSpk.unitCode}</p>
-                          <p className="text-[10px] text-muted-foreground font-medium">Status SPK: <span className="capitalize font-bold text-amber-600">{SPK_STATUS_LABELS[currentSpk.status] || currentSpk.status.replace("_", " ")}</span></p>
+                          <p className="text-[10px] text-muted-foreground font-medium">Status SPK: <span className="capitalize font-bold text-amber-600">{getSpkStatusLabel(currentSpk.status)}</span></p>
                         </div>
                       </div>
                     )}

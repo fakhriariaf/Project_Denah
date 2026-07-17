@@ -111,7 +111,7 @@ export function SpmbTab({ materialRequests, spks }: SpmbTabProps) {
           <h3 className="text-lg font-bold text-foreground">{t("production.materials_title")}</h3>
           <p className="text-xs text-muted-foreground">{t("production.materials_desc")}</p>
         </div>
-        <Button onClick={() => { setMaterialOpen(true); setMaterialStep(1); setMaterialNecessity(50); }} className="bg-primary hover:bg-primary text-primary-foreground font-semibold text-xs">
+        <Button onClick={() => { setMaterialOpen(true); setMaterialStep(1); setMaterialNecessity(50); }} className="btn-premium bg-[#4F6F52] hover:bg-[#3D563F] text-white font-semibold text-xs">
           <Plus className="mr-1.5 h-3.5 w-3.5" />{t("production.btn_new_material")}
         </Button>
       </div>

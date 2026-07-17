@@ -10,6 +10,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { denahDesignTokens } from "@/lib/design-system";
 
+const primaryActionClass =
+  "btn-premium bg-[#4F6F52] text-white hover:bg-[#3D563F]";
+
 const meta = {
   title: "Design System/Components",
   parameters: {
@@ -30,7 +33,7 @@ export const CoreComponents: Story = {
         </CardHeader>
         <CardContent className="space-y-5">
           <div className="flex flex-wrap gap-2">
-            <Button style={{ backgroundColor: denahDesignTokens.color.primaryDark }}>
+            <Button className={primaryActionClass}>
               <Plus />
               Tambah Unit
             </Button>

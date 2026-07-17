@@ -37,6 +37,7 @@ import { CustomerDocumentsPanel } from "@/components/customer-documents-panel";
 import BookingAttachmentsList from "./attachments-list";
 import { getI18n } from "@/lib/i18n-server";
 import { getStatusBadge } from "@/lib/siteplan-utils";
+import { getBookingAkadReadiness } from "@/server/services/booking-akad-readiness";
 
 export const revalidate = 0;
 
@@ -171,7 +172,10 @@ export default async function BookingDetailPage({
 
   const canUploadProof = (session.isMarketing || session.isMarketingManager || session.isAdminKantor || session.isSuperAdmin) 
     && bookingData.status !== "cancelled";
-  const canUpgradeToAkad = (session.isAdminKantor || session.isSuperAdmin) && bookingData.status === "active";
+  const canManageAkad = (session.isAdminKantor || session.isSuperAdmin) && bookingData.status === "active";
+  const akadReadiness = canManageAkad ? await getBookingAkadReadiness(id) : null;
+  const canUpgradeToAkad = canManageAkad && !!akadReadiness?.eligible;
+  const shouldShowAkadCard = canManageAkad && bookingData.paymentScheme !== "kpr";
 
   const statusColorMap: Record<string, { bg: string; label: string; dot: string }> = {
     active:    { bg: "bg-emerald-50 text-emerald-700 border-emerald-200", label: t("booking.status_active"), dot: "bg-emerald-500" },
@@ -455,14 +459,16 @@ export default async function BookingDetailPage({
           )}
 
           {/* Upgrade ke Akad */}
-          {canUpgradeToAkad && (
-            <div className="bg-blue-50/50 border border-blue-200 rounded-2xl p-5">
+          {shouldShowAkadCard && (
+            <div className={`${canUpgradeToAkad ? "bg-blue-50/50 border-blue-200" : "bg-amber-50/60 border-amber-200"} border rounded-2xl p-5`}>
               <div className="flex items-start gap-3">
-                <ShieldCheck className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
+                <ShieldCheck className={`h-5 w-5 ${canUpgradeToAkad ? "text-blue-600" : "text-amber-600"} shrink-0 mt-0.5`} />
                 <div className="flex-1">
-                  <p className="font-bold text-blue-800 text-sm">{t("booking_detail.akad_title")}</p>
-                  <p className="text-xs text-blue-600 mt-0.5 mb-3">
-                    {t("booking_detail.akad_desc")}
+                  <p className={`font-bold text-sm ${canUpgradeToAkad ? "text-blue-800" : "text-amber-800"}`}>{t("booking_detail.akad_title")}</p>
+                  <p className={`text-xs mt-0.5 mb-3 ${canUpgradeToAkad ? "text-blue-600" : "text-amber-700"}`}>
+                    {canUpgradeToAkad
+                      ? t("booking_detail.akad_desc")
+                      : akadReadiness?.reason || "Booking belum memenuhi syarat untuk Akad / PPJB."}
                   </p>
                   <form
                     action={async () => {
@@ -472,7 +478,8 @@ export default async function BookingDetailPage({
                   >
                     <Button
                       type="submit"
-                      className="bg-blue-600 hover:bg-blue-700 text-white text-sm px-4 py-2 rounded-xl font-bold shadow-[0_2px_8px_rgba(37,99,235,0.25)] hover:scale-[1.01] active:scale-[0.98] transition-all"
+                      disabled={!canUpgradeToAkad}
+                      className="bg-blue-600 hover:bg-blue-700 text-white text-sm px-4 py-2 rounded-xl font-bold shadow-[0_2px_8px_rgba(37,99,235,0.25)] hover:scale-[1.01] active:scale-[0.98] transition-all disabled:bg-slate-100 disabled:text-slate-400 disabled:border disabled:border-slate-200 disabled:shadow-none disabled:cursor-not-allowed disabled:hover:scale-100"
                     >
                       <CheckCircle className="h-4 w-4 mr-2" />
                       {t("booking_detail.akad_btn")}

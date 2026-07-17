@@ -26,6 +26,7 @@ import {
   createSpk, activateSpk, checkOverdueSpks, deleteSpk, updateSpk,
   getSpkDetails, completeVendorSpk,
 } from "@/server/actions/production";
+import { getUnitStatusLabel } from "@/lib/label-helpers";
 
 const SPK_STATUS_LABELS: Record<string, string> = {
   active: "Aktif",
@@ -265,7 +266,7 @@ export function SpkTab({
         <Button onClick={handleRunOverdueScanner} disabled={isSubmitting} variant="outline" className="bg-white/90 backdrop-blur-sm border-border text-primary hover:bg-[#8FAF9A]/10 font-bold rounded-xl h-10 shadow-sm">
           <Calendar className="mr-2 h-4 w-4 text-primary" />{t("production.btn_scan_overdue")}
         </Button>
-        <Button onClick={() => { setEditingSpkId(null); setNewSpk({ projectId: "", unitId: "", vendorId: "", title: "", workDescription: "", specification: "", rabAmount: "", startDate: "", targetEndDate: "" }); setFormWeights(workItems.map(item => ({ workItemId: item.id, weightPct: item.defaultWeightPct }))); setSpkOpen(true); }} className="bg-primary hover:bg-primary/90 text-white font-bold rounded-xl h-10 shadow-[0_4px_14px_rgba(79,111,82,0.3)] hover:scale-[1.02] active:scale-[0.98] transition-all">
+        <Button onClick={() => { setEditingSpkId(null); setNewSpk({ projectId: "", unitId: "", vendorId: "", title: "", workDescription: "", specification: "", rabAmount: "", startDate: "", targetEndDate: "" }); setFormWeights(workItems.map(item => ({ workItemId: item.id, weightPct: item.defaultWeightPct }))); setSpkOpen(true); }} className="btn-premium bg-[#4F6F52] hover:bg-[#3D563F] text-white font-bold rounded-xl h-10 shadow-[0_4px_14px_rgba(79,111,82,0.3)] hover:scale-[1.02] active:scale-[0.98] transition-all">
           <Plus className="mr-2 h-4 w-4" />{t("production.btn_new_spk")}
         </Button>
       </div>
@@ -455,8 +456,8 @@ export function SpkTab({
               </div>
 
               <div className="space-y-1"><label className="font-semibold text-foreground text-xs">{t("production.spk_lbl_unit")}</label>
-                <Select value={newSpk.unitId} onValueChange={(val: string | null) => setNewSpk(prev => ({ ...prev, unitId: val || "" }))} disabled={!newSpk.projectId} required items={units.map(u => ({ label: `${u.code} — ${u.status}`, value: u.id }))}>
-                  <SelectTrigger className="w-full border-primary/30 focus:ring-primary"><SelectValue placeholder={t("production.spk_lbl_unit")}>{newSpk.unitId ? (() => { const u = units.find(unit => unit.id === newSpk.unitId); return u ? `${u.code} — ${u.status}` : undefined; })() : undefined}</SelectValue></SelectTrigger>
+                <Select value={newSpk.unitId} onValueChange={(val: string | null) => setNewSpk(prev => ({ ...prev, unitId: val || "" }))} disabled={!newSpk.projectId} required items={units.map(u => ({ label: `${u.code} — ${getUnitStatusLabel(u.status, { isReadyStock: u.isReadyStock })}`, value: u.id }))}>
+                  <SelectTrigger className="w-full border-primary/30 focus:ring-primary"><SelectValue placeholder={t("production.spk_lbl_unit")}>{newSpk.unitId ? (() => { const u = units.find(unit => unit.id === newSpk.unitId); return u ? `${u.code} — ${getUnitStatusLabel(u.status, { isReadyStock: u.isReadyStock })}` : undefined; })() : undefined}</SelectValue></SelectTrigger>
                   <SelectContent>{units.filter(u => (u.projectId === newSpk.projectId && !u.isReadyStock && u.status !== "belum_siap" && (u.status !== "construction" || !spks.some(s => s.unitId === u.id && s.status !== "cancelled")) && u.status !== "construction_done" && (u.constructionProgress || 0) < 100) || u.id === newSpk.unitId).map(u => <SelectItem key={u.id} value={u.id}>{u.code} &mdash; Progres {u.constructionProgress || 0}%</SelectItem>)}</SelectContent>
                 </Select>
               </div>

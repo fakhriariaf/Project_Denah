@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import * as React from "react";
 import { toast } from "sonner";
 import { useI18n } from "@/lib/i18n";
+import { invoiceScheduleLabel } from "@/lib/label-helpers";
+import { FinanceDocLink } from "@/components/finance/finance-doc-link";
 import { InvoicePrintModal } from "@/components/invoice-print-modal";
 import {
   Card,
@@ -61,6 +63,9 @@ type InvoiceListItem = {
   projectName: string;
   customerName: string | null;
   unitCode: string | null;
+  scheduleKind: string | null;
+  scheduleSequence: number | null;
+  scheduleLabel: string | null;
 };
 
 interface InvoicesTabProps {
@@ -83,6 +88,9 @@ interface InvoicesTabProps {
     projectName: string;
     customerName: string | null;
     unitCode: string | null;
+    scheduleKind: string | null;
+    scheduleSequence: number | null;
+    scheduleLabel: string | null;
   }>;
   initialPayments: Array<{
     id: string;
@@ -96,7 +104,7 @@ interface InvoicesTabProps {
     paymentMethod: "cash" | "transfer" | "giro" | "other";
     proofAttachmentId: string | null;
     proofFileUrl?: string | null;
-    status: "pending" | "verified" | "rejected";
+    status: "pending" | "verified" | "rejected" | "voided";
     verifiedBy: string | null;
     verifiedAt: Date | null;
     createdAt: Date;
@@ -223,7 +231,7 @@ export function InvoicesTab({
 
           <Dialog open={invoiceOpen} onOpenChange={setInvoiceOpen}>
             <DialogTrigger nativeButton={true} render={
-              <Button className="bg-[#8FAF9A] hover:bg-primary text-white flex items-center gap-1.5 text-xs">
+              <Button className="btn-premium bg-[#4F6F52] hover:bg-[#3D563F] text-white flex items-center gap-1.5 text-xs">
                 <Plus className="h-3.5 w-3.5" /> {t("finance.invoice_btn_new")}
               </Button>
             } />
@@ -418,8 +426,13 @@ export function InvoicesTab({
               ) : (
                 invoicePageData.data.map((inv) => (
                   <TableRow key={inv.id}>
-                    <TableCell className="font-mono text-xs font-semibold text-foreground">
-                      {inv.invoiceNumber}
+                    <TableCell className="font-mono text-xs font-semibold">
+                      <FinanceDocLink
+                        href={`/finance/invoices/${inv.id}`}
+                        className="text-xs font-semibold"
+                      >
+                        {inv.invoiceNumber}
+                      </FinanceDocLink>
                     </TableCell>
                     <TableCell className="text-xs text-foreground">
                       {inv.customerName || "—"}
@@ -428,23 +441,40 @@ export function InvoicesTab({
                       {inv.unitCode || "—"}
                     </TableCell>
                     <TableCell className="text-xs">
-                      {inv.type === "dp" ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#FBE4C9] text-[#7A3D0E] border border-[#D47A2E]/30 text-[10px] font-bold uppercase tracking-wide">
-                          🏗️ {t("finance.invoice_type_dp")}
-                        </span>
-                      ) : inv.type === "booking_fee" ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#FFF0A0] text-[#6B4F00] border border-[#D4A017]/30 text-[10px] font-bold uppercase tracking-wide">
-                          {t("finance.invoice_type_bf")}
-                        </span>
-                      ) : inv.type === "installment" ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#C7E8F7] text-[#0E3F57] border border-[#2196C4]/30 text-[10px] font-bold uppercase tracking-wide">
-                          {t("finance.invoice_type_inst")}
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#E7E9E7] text-[#3D4840] text-[10px] font-semibold uppercase tracking-wide">
-                          {inv.type.replace("_", " ")}
-                        </span>
-                      )}
+                      {(() => {
+                        const label = invoiceScheduleLabel({
+                          type: inv.type,
+                          scheduleKind: inv.scheduleKind ?? null,
+                          scheduleSequence: inv.scheduleSequence ?? null,
+                          scheduleLabel: inv.scheduleLabel ?? null,
+                        });
+                        if (inv.type === "dp") {
+                          return (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#FBE4C9] text-[#7A3D0E] border border-[#D47A2E]/30 text-[10px] font-bold uppercase tracking-wide">
+                              🏗️ {label}
+                            </span>
+                          );
+                        }
+                        if (inv.type === "booking_fee") {
+                          return (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#FFF0A0] text-[#6B4F00] border border-[#D4A017]/30 text-[10px] font-bold uppercase tracking-wide">
+                              {label}
+                            </span>
+                          );
+                        }
+                        if (inv.type === "installment") {
+                          return (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#C7E8F7] text-[#0E3F57] border border-[#2196C4]/30 text-[10px] font-bold uppercase tracking-wide">
+                              {label}
+                            </span>
+                          );
+                        }
+                        return (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#E7E9E7] text-[#3D4840] text-[10px] font-semibold uppercase tracking-wide">
+                            {label}
+                          </span>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell className="text-right font-mono font-semibold text-foreground tabular-nums text-xs">
                       Rp {inv.amount.toLocaleString("id-ID")}

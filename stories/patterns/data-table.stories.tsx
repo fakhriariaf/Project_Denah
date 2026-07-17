@@ -22,6 +22,9 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+const primaryActionClass =
+  "btn-premium bg-[#4F6F52] text-white hover:bg-[#3D563F]";
+
 const rows = [
   { code: "UNIT-A01", customer: "Budi Santoso", price: 875000000, status: "Terjual", variant: "default" as const },
   { code: "UNIT-A02", customer: "—", price: 910000000, status: "Tersedia", variant: "secondary" as const },
@@ -40,7 +43,7 @@ function Toolbar() {
           className="h-10 w-full rounded-xl border border-input bg-muted/40 pl-10 pr-4 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/50"
         />
       </div>
-      <Button className="gap-1.5">
+      <Button className={`${primaryActionClass} gap-1.5`}>
         <Plus /> Tambah Unit
       </Button>
     </div>

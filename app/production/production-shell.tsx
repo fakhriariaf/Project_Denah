@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n";
+import { getUnitStatusLabel } from "@/lib/label-helpers";
 import {
   Card, CardContent, CardHeader, CardTitle,
 } from "@/components/ui/card";
@@ -262,9 +263,9 @@ export default function ProductionShell({
                 </Select>
               </div>
               <div className="space-y-1"><label className="font-semibold text-foreground text-xs">{t("production.complaint_lbl_unit")}</label>
-                <Select value={newComplaint.unitId} onValueChange={(val: string | null) => setNewComplaint(prev => ({ ...prev, unitId: val || "" }))} required items={units.map(u => ({ label: `${u.code} — status ${u.status}`, value: u.id }))}>
-                  <SelectTrigger className="w-full h-10 border-primary/30 focus:ring-primary rounded-xl text-xs bg-card"><SelectValue placeholder={t("production.complaint_lbl_unit")}>{newComplaint.unitId ? (() => { const u = units.find(unit => unit.id === newComplaint.unitId); return u ? `${u.code} — status ${u.status}` : undefined; })() : undefined}</SelectValue></SelectTrigger>
-                  <SelectContent>{units.map(u => <SelectItem key={u.id} value={u.id}>{u.code} &mdash; status {u.status}</SelectItem>)}</SelectContent>
+                <Select value={newComplaint.unitId} onValueChange={(val: string | null) => setNewComplaint(prev => ({ ...prev, unitId: val || "" }))} required items={units.map(u => ({ label: `${u.code} — ${getUnitStatusLabel(u.status, { isReadyStock: u.isReadyStock })}`, value: u.id }))}>
+                  <SelectTrigger className="w-full h-10 border-primary/30 focus:ring-primary rounded-xl text-xs bg-card"><SelectValue placeholder={t("production.complaint_lbl_unit")}>{newComplaint.unitId ? (() => { const u = units.find(unit => unit.id === newComplaint.unitId); return u ? `${u.code} — ${getUnitStatusLabel(u.status, { isReadyStock: u.isReadyStock })}` : undefined; })() : undefined}</SelectValue></SelectTrigger>
+                  <SelectContent>{units.map(u => <SelectItem key={u.id} value={u.id}>{u.code} &mdash; {getUnitStatusLabel(u.status, { isReadyStock: u.isReadyStock })}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div className="space-y-1"><label className="font-semibold text-foreground text-xs">Judul Komplain</label><Input type="text" required placeholder="Contoh: Plafon kamar mandi bocor..." className="border-primary/30 focus-visible:ring-primary text-xs rounded-xl" value={newComplaint.title} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewComplaint(prev => ({ ...prev, title: e.target.value }))} /></div>

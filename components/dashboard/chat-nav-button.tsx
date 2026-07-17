@@ -3,7 +3,6 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { MessageCircle } from "lucide-react"
-import { authClient } from "@/lib/auth-client"
 import { useChatUnread } from "@/components/providers/chat-unread-provider"
 
 /**
@@ -12,11 +11,7 @@ import { useChatUnread } from "@/components/providers/chat-unread-provider"
  */
 export function ChatNavButton() {
   const pathname = usePathname()
-  const { data: session } = authClient.useSession()
   const { totalUnread } = useChatUnread()
-
-  // Only show for authenticated users
-  if (!session?.user) return null
 
   const isActive = pathname.startsWith("/chat")
 

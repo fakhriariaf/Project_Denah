@@ -6,7 +6,7 @@ import { UserIdentityDropdown } from "@/components/dashboard/user-identity-dropd
 import { CommandPalette } from "@/components/global-search/command-palette"
 import { KeyboardShortcutsHelp } from "@/components/keyboard-shortcuts-help"
 import { AutoBreadcrumb } from "@/components/auto-breadcrumb"
-import { requireAuth, getSessionRole } from "@/server/permissions"
+import { requireAuth, getSessionRole, canAccessFinanceModule } from "@/server/permissions"
 import { redirect } from "next/navigation"
 import { Translate } from "@/components/translate"
 
@@ -15,11 +15,11 @@ export default async function FinanceLayout({
 }: {
   children: React.ReactNode
 }) {
-  // RBAC: Only Admin Keuangan, Direksi/Manager, Admin Kantor, Super Admin can access Finance module
+  // RBAC: Finance module access gate — uses shared helper (Req 11.1, 11.2)
   const activeUser = await requireAuth();
-  const { isKeuangan, isDireksi, isSuperAdmin, isAdminKantor } = await getSessionRole(activeUser.id);
-  
-  if (!isKeuangan && !isDireksi && !isSuperAdmin && !isAdminKantor) {
+  const { role } = await getSessionRole(activeUser.id);
+
+  if (!canAccessFinanceModule(role)) {
     redirect("/unauthorized");
   }
 

@@ -45,6 +45,7 @@ import { VendorComplaintReviewDialog } from "./vendor-complaint-review-dialog";
 import { CustomerComplaintResolveDialog } from "./customer-complaint-resolve-dialog";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { getComplaintStatusLabel } from "@/lib/label-helpers";
 
 interface FieldSupervisorDashboardShellProps {
   data: {
@@ -253,7 +254,7 @@ export function FieldSupervisorDashboardShell({ data, userName }: FieldSuperviso
       if (!res.success) {
         throw new Error("Gagal menyetujui BAST.");
       }
-      setSuccessMsg("BAST berhasil disetujui! Status unit kini Ready Stock.");
+      setSuccessMsg("BAST berhasil disetujui! Status unit kini Tersedia Siap Huni.");
       setTimeout(() => {
         setActiveDialog(null);
         setSelectedBast(null);
@@ -570,7 +571,7 @@ export function FieldSupervisorDashboardShell({ data, userName }: FieldSuperviso
                               {c.complaintNumber}
                             </span>
                             <Badge className="bg-amber-500/10 text-amber-800 border border-amber-200/50 text-[9px] font-extrabold uppercase py-0.5 px-2 rounded-full shadow-none">
-                              {c.status.replace("_", " ")}
+                              {getComplaintStatusLabel(c.status)}
                             </Badge>
                           </div>
                           <div>
@@ -620,7 +621,7 @@ export function FieldSupervisorDashboardShell({ data, userName }: FieldSuperviso
                               {c.complaintNumber}
                             </span>
                             <Badge className="bg-rose-500/10 text-rose-800 border border-rose-200/50 text-[9px] font-extrabold uppercase py-0.5 px-2 rounded-full shadow-none">
-                              {c.status.replace("_", " ")}
+                              {getComplaintStatusLabel(c.status)}
                             </Badge>
                           </div>
                           <div>
@@ -832,7 +833,7 @@ export function FieldSupervisorDashboardShell({ data, userName }: FieldSuperviso
               <CardTitle className="text-base font-bold text-[#243028] flex items-center gap-2 font-sans">
                 <FileCheck className="w-5 h-5 text-[#4F6F52]" /> Verifikasi BAST Vendor
               </CardTitle>
-              <CardDescription className="text-xs text-[#66736A] font-medium">Review dokumen BAST Kontraktor untuk disetujui ke Ready Stock.</CardDescription>
+              <CardDescription className="text-xs text-[#66736A] font-medium">Review dokumen BAST Kontraktor untuk disetujui menjadi Tersedia Siap Huni.</CardDescription>
             </CardHeader>
             <CardContent className="p-0 flex-grow flex flex-col">
               {basts.length === 0 ? (
@@ -916,7 +917,7 @@ export function FieldSupervisorDashboardShell({ data, userName }: FieldSuperviso
             <div className="absolute top-0 right-0 w-24 h-24 bg-[#4F6F52]/5 rounded-full blur-xl pointer-events-none" />
             <DialogTitle className="text-base font-extrabold text-[#243028] flex items-center gap-2 font-sans">
               <FileCheck className="w-5 h-5 text-[#4F6F52]" />
-              Persetujuan BAST &amp; Ready Stock
+              Persetujuan BAST &amp; Siap Huni
             </DialogTitle>
             <DialogDescription className="text-xs text-[#66736A] font-medium pt-1">
               Anda akan menyetujui dokumen BAST fisik kontraktor secara resmi.
@@ -954,9 +955,9 @@ export function FieldSupervisorDashboardShell({ data, userName }: FieldSuperviso
                   <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-rose-500" />
                   <span>
                     {selectedBast.currentCustomerId ? (
-                      "Tindakan ini akan memverifikasi selesainya pembangunan fisik lapangan secara resmi. Karena unit ini telah terikat dengan konsumen, status unit akan tetap terikat dan tidak menjadi Ready Stock (Tersedia)."
+                      "Tindakan ini akan memverifikasi selesainya pembangunan fisik lapangan secara resmi. Karena unit ini telah terikat dengan konsumen, status unit akan tetap terikat dan tidak menjadi Tersedia Siap Huni."
                     ) : (
-                      "Tindakan ini akan memindahkan status unit secara resmi menjadi Ready Stock (available) di peta siteplan dan database."
+                      "Tindakan ini akan memindahkan status unit secara resmi menjadi Tersedia Siap Huni di peta siteplan dan database."
                     )}
                   </span>
                 </div>

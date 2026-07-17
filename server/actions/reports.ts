@@ -9,6 +9,7 @@ import { auditLogs, attachments } from "@/db/schema/system";
 import { user as userTable, vendorProfiles } from "@/db/schema/auth";
 import { requireAuth, getSessionRole } from "../permissions";
 import { eq, and, or, desc, sql, count, sum, gte, lte, lt, inArray, ne } from "drizzle-orm";
+import { getKprStatusLabel, getBankSubmissionStatusLabel, getUnitStatusLabel, getSpkStatusLabel, getApprovalStatusLabel } from "@/lib/label-helpers";
 
 /**
  * Fetch consolidated statistics for the executive dashboard
@@ -156,22 +157,8 @@ export async function getExecutiveOverviewData() {
   }
 
   // 5b. Unit Status Distribution dataset for charts
-  const statusLabels: Record<string, string> = {
-    belum_siap: "Belum Siap",
-    available: "Tersedia",
-    available_ready: "Tersedia - Ready Stock",
-    booking: "Booking",
-    kpr_process: "Proses KPR",
-    payment_pending: "Pending Bayar",
-    sold: "Terjual",
-    construction: "Proses Bangun",
-    construction_ready: "Proses Bangun - Ready Stock",
-    construction_done: "Selesai Bangun",
-    overdue: "Overdue",
-    cancelled: "Batal",
-  };
   const statusDataset = Object.entries(unitStatusDistribution).map(([key, cnt]) => ({
-    name: statusLabels[key] || key,
+    name: getUnitStatusLabel(key),
     Jumlah: cnt,
   }));
 
@@ -373,7 +360,7 @@ export async function getFinanceReportsData(projectId?: string, type?: "income" 
     amount: r.transaction.amount,
     transactionDate: r.transaction.transactionDate.toLocaleDateString("id-ID"),
     paymentMethod: r.transaction.paymentMethod,
-    approvalStatus: r.transaction.approvalStatus === "approved" ? "Disetujui" : r.transaction.approvalStatus === "pending" ? "Pending" : r.transaction.approvalStatus === "rejected" ? "Ditolak" : "Tanpa Otorisasi",
+    approvalStatus: getApprovalStatusLabel(r.transaction.approvalStatus),
   }));
 }
 
@@ -418,7 +405,7 @@ export async function getProductionReportsData(projectId?: string, status?: stri
     progressPct: r.spk.progressPct,
     startDate: r.spk.startDate.toLocaleDateString("id-ID"),
     targetEndDate: r.spk.targetEndDate.toLocaleDateString("id-ID"),
-    status: r.spk.status === "draft" ? "Draft" : r.spk.status === "active" ? "Aktif" : r.spk.status === "proses_konstruksi" ? "Proses Konstruksi" : r.spk.status === "selesai_konstruksi" || r.spk.status === "completed" ? "Selesai Konstruksi" : r.spk.status === "overdue" ? "Overdue / Terlambat" : "Batal",
+    status: getSpkStatusLabel(r.spk.status),
   }));
 }
 
@@ -449,15 +436,15 @@ export async function getUnitReportsData(projectId?: string, status?: string) {
   const results = conditions.length > 0 ? await query.where(and(...conditions)) : await query;
 
   const statusLabels: Record<string, string> = {
-    available: "Tersedia",
-    booking: "Booking",
-    kpr_process: "Proses KPR",
-    payment_pending: "Pending Bayar",
-    sold: "Terjual",
-    construction: "Proses Bangun",
-    construction_done: "Selesai Bangun",
-    overdue: "Overdue",
-    cancelled: "Batal",
+    available: getUnitStatusLabel("available"),
+    booking: getUnitStatusLabel("booking"),
+    kpr_process: getUnitStatusLabel("kpr_process"),
+    payment_pending: getUnitStatusLabel("payment_pending"),
+    sold: getUnitStatusLabel("sold"),
+    construction: getUnitStatusLabel("construction"),
+    construction_done: getUnitStatusLabel("construction_done"),
+    overdue: getUnitStatusLabel("overdue"),
+    cancelled: getUnitStatusLabel("cancelled"),
   };
 
   return results.map((r) => ({
@@ -466,7 +453,7 @@ export async function getUnitReportsData(projectId?: string, status?: string) {
     block: r.unit.code.includes("-") ? r.unit.code.split("-")[0] : (r.unit.code.match(/^[A-Za-z]+/) ? r.unit.code.match(/^[A-Za-z]+/)?.[0] : "-") || "-",
     cluster: r.unit.cluster || "-",
     price: r.unit.price,
-    status: statusLabels[r.unit.status] || r.unit.status,
+    status: statusLabels[r.unit.status] || getUnitStatusLabel(r.unit.status),
     projectName: r.project.name,
   }));
 }
@@ -606,10 +593,10 @@ export async function getVendorDashboardData() {
       
       if (attachment) {
         if (vs.unit.status === "available" || vs.spk.status === "completed" || vs.unit.isReadyStock) {
-          statusText = vs.unit.currentCustomerId ? "Approved" : "Approved (Ready Stock)";
+          statusText = vs.unit.currentCustomerId ? "Disetujui" : "Disetujui (Ready Stock)";
           statusCode = "approved";
         } else {
-          statusText = "Menunggu Approval";
+          statusText = "Menunggu Persetujuan";
           statusCode = "pending";
         }
       }
@@ -836,10 +823,10 @@ export async function getFieldSupervisorDashboardData() {
       
       if (attachment) {
         if (vs.unit.status === "available" || vs.spk.status === "completed" || vs.unit.isReadyStock) {
-          statusText = vs.unit.currentCustomerId ? "Approved" : "Approved (Ready Stock)";
+          statusText = vs.unit.currentCustomerId ? "Disetujui" : "Disetujui (Ready Stock)";
           statusCode = "approved";
         } else {
-          statusText = "Menunggu Approval";
+          statusText = "Menunggu Persetujuan";
           statusCode = "pending";
         }
       }
@@ -1077,14 +1064,14 @@ export async function getKprReportsData(projectId?: string) {
 
   // 6. Status distribution for chart
   const statusLabels: Record<string, string> = {
-    bi_checking: "BI Checking",
-    pemberkasan: "Pemberkasan",
-    proses_bank: "Proses Bank",
-    offering: "Offering",
-    approved: "Approved",
-    rejected: "Rejected",
-    akad: "Akad",
-    realisasi: "Realisasi",
+    bi_checking: getKprStatusLabel("bi_checking"),
+    pemberkasan: getKprStatusLabel("pemberkasan"),
+    proses_bank: getKprStatusLabel("proses_bank"),
+    offering: getKprStatusLabel("offering"),
+    approved: getKprStatusLabel("approved"),
+    rejected: getKprStatusLabel("rejected"),
+    akad: getKprStatusLabel("akad"),
+    realisasi: getKprStatusLabel("realisasi"),
   };
 
   const statusDataset = Object.entries(statusLabels).map(([key, label]) => ({
@@ -1095,11 +1082,11 @@ export async function getKprReportsData(projectId?: string) {
 
   // 7. BI Check status distribution for table
   const biCheckLabels: Record<string, string> = {
-    pending: "Pending",
-    partial: "Partial",
-    approved: "Approved",
-    rejected_refund: "Rejected (Refund)",
-    rejected_no_refund: "Rejected (No Refund)",
+    pending: getBankSubmissionStatusLabel("pending"),
+    partial: getBankSubmissionStatusLabel("partial"),
+    approved: getBankSubmissionStatusLabel("approved"),
+    rejected_refund: getBankSubmissionStatusLabel("rejected_refund"),
+    rejected_no_refund: getBankSubmissionStatusLabel("rejected_no_refund"),
   };
 
   const biCheckDataset = Object.entries(biCheckLabels).map(([key, label]) => ({

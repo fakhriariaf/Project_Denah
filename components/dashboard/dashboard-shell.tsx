@@ -560,7 +560,9 @@ export default function DashboardShell({
               const styleMap: Record<string, { bg: string, border: string, text: string, hoverBorder: string }> = {
                 "Belum Siap": { bg: "bg-white", border: "border-[#D6DED2]", text: "text-[#66736A]", hoverBorder: "hover:border-[#66736A]" },
                 "Tersedia": { bg: "bg-[#DDE8D8]/50", border: "border-[#8FAF9A]/30", text: "text-[#4F6F52]", hoverBorder: "hover:border-[#4F6F52]" },
+                "Tersedia (Indent)": { bg: "bg-[#DDE8D8]/50", border: "border-[#8FAF9A]/30", text: "text-[#4F6F52]", hoverBorder: "hover:border-[#4F6F52]" },
                 "Tersedia - Ready Stock": { bg: "bg-[#3F5941]/10", border: "border-[#3F5941]/35", text: "text-[#3F5941]", hoverBorder: "hover:border-[#3F5941]" },
+                "Tersedia Siap Huni": { bg: "bg-[#3F5941]/10", border: "border-[#3F5941]/35", text: "text-[#3F5941]", hoverBorder: "hover:border-[#3F5941]" },
                 "Booking": { bg: "bg-[#FFF2C2]/45", border: "border-[#E9C46A]/30", text: "text-[#8A6D1D]", hoverBorder: "hover:border-[#8A6D1D]" },
                 "Proses KPR": { bg: "bg-[#DCECF7]/50", border: "border-[#8FB8D8]/30", text: "text-[#33627A]", hoverBorder: "hover:border-[#33627A]" },
                 "Pending Bayar": { bg: "bg-[#FBE4C9]/40", border: "border-[#FBE4C9]/60", text: "text-[#9A5C21]", hoverBorder: "hover:border-[#9A5C21]" },
@@ -568,6 +570,7 @@ export default function DashboardShell({
                 "Proses Bangun": { bg: "bg-[#E9DDF7]/45", border: "border-[#B8A4D9]/40", text: "text-[#5D4382]", hoverBorder: "hover:border-[#5D4382]" },
                 "Proses Bangun - Ready Stock": { bg: "bg-[#4B286D]/10", border: "border-[#4B286D]/35", text: "text-[#4B286D]", hoverBorder: "hover:border-[#4B286D]" },
                 "Bangun - Ready Stock": { bg: "bg-[#4B286D]/10", border: "border-[#4B286D]/35", text: "text-[#4B286D]", hoverBorder: "hover:border-[#4B286D]" },
+                "Sedang Dibangun untuk Ready Stock": { bg: "bg-[#4B286D]/10", border: "border-[#4B286D]/35", text: "text-[#4B286D]", hoverBorder: "hover:border-[#4B286D]" },
                 "Selesai Bangun": { bg: "bg-[#D4EEE7]/50", border: "border-[#7AA874]/30", text: "text-[#2D5A4E]", hoverBorder: "hover:border-[#2D5A4E]" },
                 "Overdue": { bg: "bg-[#F8D4DA]/45", border: "border-[#E8A0A8]/55", text: "text-[#8B3443]", hoverBorder: "hover:border-[#8B3443]" },
                 "Batal": { bg: "bg-[#E7E9E7]/40", border: "border-[#A8B0AA]/40", text: "text-[#5F6861]", hoverBorder: "hover:border-[#5F6861]" },

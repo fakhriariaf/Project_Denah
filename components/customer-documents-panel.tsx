@@ -352,7 +352,9 @@ export function CustomerDocumentsPanel({
               <label className="text-xs font-medium text-[#243028] mb-1 block">Jenis Dokumen</label>
               <Select value={selectedDocType} onValueChange={(val: string | null) => setSelectedDocType(val ?? "ktp")}>
                 <SelectTrigger className="border-[#D6DED2] focus:ring-ring/50 focus:border-[#8FAF9A]">
-                  <SelectValue />
+                  <SelectValue>
+                    {DOC_TYPE_LABELS[selectedDocType] ?? selectedDocType}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent className="rounded-xl border-[#D6DED2] bg-white/95 backdrop-blur-md">
                   {Object.entries(DOC_TYPE_LABELS)

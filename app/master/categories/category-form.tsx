@@ -72,7 +72,7 @@ export function CategoryForm({
         id ? (
           <Button variant="outline" size="sm" className="h-7 text-xs border-border rounded-lg hover:bg-muted/50">{t("category_form.edit_btn")}</Button>
         ) : (
-          <Button className="bg-primary hover:bg-primary/90 text-primary-foreground active:scale-95 shadow-[0_4px_14px_rgba(79,111,82,0.25)] transition-all duration-300 h-9 rounded-xl font-bold text-xs px-4">
+          <Button className="btn-premium bg-[#4F6F52] hover:bg-[#3D563F] text-white active:scale-95 shadow-[0_4px_14px_rgba(79,111,82,0.25)] transition-all duration-300 h-9 rounded-xl font-bold text-xs px-4">
             <Plus className="mr-2 h-4 w-4" />
             {t("category_form.add_btn")}
           </Button>

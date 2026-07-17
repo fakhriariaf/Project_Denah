@@ -226,8 +226,8 @@ export async function createUnit(data: unknown) {
         projectId: parsed.projectId,
         unitId: id,
         vendorId: readyStockVendorId,
-        title: `Pembangunan Ready Stock Kavling ${parsed.code}`,
-        workDescription: "Pembuatan otomatis dari Master Unit (Bypass Ready Stock)",
+        title: `Pembangunan Unit Siap Huni Kavling ${parsed.code}`,
+        workDescription: "Pembuatan otomatis dari Master Unit (Bypass Unit Siap Huni)",
         rabAmount: 0,
         startDate: now,
         targetEndDate: targetEndDate,
@@ -341,7 +341,7 @@ export async function updateUnit(id: string, data: unknown) {
     }
 
     if (parsed.status === "construction" && existingUnit.status !== "construction" && !parsed.isReadyStock) {
-      throw new Error("⚠️ Unit tidak dapat langsung diset 'Proses Bangun'. Status 'Proses Bangun' hanya dapat diubah melalui SPK Konstruksi.");
+      throw new Error("⚠️ Unit tidak dapat langsung diset 'Pembangunan Unit Konsumen'. Status ini hanya dapat diubah melalui SPK Konstruksi.");
     }
 
     let finalSpkId = existingUnit.currentSpkId;
@@ -369,8 +369,8 @@ export async function updateUnit(id: string, data: unknown) {
         projectId: parsed.projectId,
         unitId: id,
         vendorId: readyStockVendorId,
-        title: `Pembangunan Ready Stock Kavling ${parsed.code}`,
-        workDescription: "Pembuatan otomatis dari Master Unit (Bypass Ready Stock)",
+        title: `Pembangunan Unit Siap Huni Kavling ${parsed.code}`,
+        workDescription: "Pembuatan otomatis dari Master Unit (Bypass Unit Siap Huni)",
         rabAmount: 0,
         startDate: now,
         targetEndDate: targetEndDate,
@@ -863,7 +863,7 @@ export async function updateFinanceAccount(id: string, data: unknown) {
   if (existing.length > 0 && existing[0].id !== id) {
     throw new Error(`Kode akun "${parsed.code}" sudah digunakan oleh rekening lain.`);
   }
-  // openingBalance is IMMUTABLE � DO NOT update it
+  // openingBalance is IMMUTABLE — DO NOT update it
   await db.update(financeAccounts)
     .set({ code: parsed.code, name: parsed.name, type: parsed.type, status: parsed.status })
     .where(eq(financeAccounts.id, id));

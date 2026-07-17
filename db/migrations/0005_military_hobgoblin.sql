@@ -1,0 +1,3 @@
+ALTER TABLE "transactions" ADD COLUMN "reversal_of_transaction_id" text;--> statement-breakpoint
+ALTER TABLE "transactions" ADD COLUMN "reversal_reason" text;--> statement-breakpoint
+ALTER TABLE "transactions" ADD CONSTRAINT "transactions_reversal_of_transaction_id_transactions_id_fk" FOREIGN KEY ("reversal_of_transaction_id") REFERENCES "public"."transactions"("id") ON DELETE set null ON UPDATE no action;

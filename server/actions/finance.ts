@@ -8,6 +8,7 @@ import {
   transactionApprovals,
   budgets,
   budgetLines,
+  financeActivityHistory,
 } from "@/db/schema/finance";
 import {
   financeAccounts,
@@ -22,18 +23,20 @@ import { bookings } from "@/db/schema/marketing";
 import { checkAndTransitionToConstruction } from "./marketing";
 import { attachments, notifications } from "@/db/schema/system";
 import { getCurrentUser, requireAuth, hasRole, getSessionRole } from "@/server/permissions";
-import { eq, and, desc, sum, sql, inArray, lte, isNotNull, gte, count, ilike, or } from "drizzle-orm";
+import { eq, and, desc, asc, sum, sql, inArray, lte, isNotNull, gte, count, ilike, or } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { cachedQuery } from "@/lib/cache";
 import { calculateOffset, validatePaginationParams, type PaginatedResult } from "@/lib/pagination";
 import { writeAuditLog } from "./audit";
 import { createNotification, notifyUsersWithRoles } from "./notification";
 import { applyRateLimit } from "@/server/middleware/apply-rate-limit";
+import { round2, computeOutstanding, computeInvoiceStatus, computeInvoiceSchedule, generateInvoiceSchedule } from "@/server/services/booking.service";
 import {
   invoiceSchema,
   paymentSchema,
   expenseRequestSchema,
   budgetSchema,
+  reversalReasonSchema,
 } from "../validators/finance";
 
 // ==========================================
@@ -82,6 +85,125 @@ function toFinancePaginatedResponse<T>(result: PaginatedResult<T>): FinancePagin
 }
 
 // ==========================================
+// FINANCE ACTIVITY HISTORY (AUDIT TIMELINE) RECORDING
+// ==========================================
+
+/**
+ * The transaction handle passed by `db.transaction(async (tx) => { ... })`.
+ * Derived from the actual `db.transaction` signature so it stays correct if the
+ * driver changes, and so callers can pass their existing `tx` without importing
+ * Drizzle's generic transaction types.
+ */
+type FinanceTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/** Entity types supported by the finance activity timeline (Req 3.6). */
+export type FinanceActivityEntityType =
+  | "invoice"
+  | "payment"
+  | "transaction"
+  | "approval"
+  | "budget";
+
+/** Action values supported by the finance activity timeline (Req 3.7). */
+export type FinanceActivityAction =
+  | "created"
+  | "submitted"
+  | "approved"
+  | "verified"
+  | "rejected"
+  | "revised"
+  | "resubmitted"
+  | "cancelled"
+  | "reversed"
+  | "corrected"
+  | "updated"
+  | "activated"
+  | "closed"
+  | "paid_partial"
+  | "paid_full";
+
+/**
+ * Input for {@link recordFinanceActivity}. `actorId` is always the acting user
+ * (available because every finance mutation runs after `requireAuth`). Snapshots
+ * are stored as JSON and may hold any editable-field subset of the entity.
+ */
+export interface RecordFinanceActivityInput {
+  entityType: FinanceActivityEntityType;
+  entityId: string;
+  action: FinanceActivityAction;
+  actorId: string;
+  fromStatus?: string | null;
+  toStatus?: string | null;
+  reason?: string | null;
+  snapshotBefore?: unknown;
+  snapshotAfter?: unknown;
+}
+
+/**
+ * Insert a single `finance_activity_history` row using the existing
+ * `db.transaction` + `.run()` style (id via `crypto.randomUUID()`).
+ *
+ * Transaction-boundary rule (Req 3.9, 3.10):
+ * For every STATUS-CHANGING mutation (verify, reject, resubmit, approve,
+ * reverse, correct, create-in-tx) this helper MUST be called with the SAME `tx`
+ * as the entity update. It performs no error swallowing: if the insert throws,
+ * the exception propagates and the parent `db.transaction` rolls back, so there
+ * is never a partial state where the entity changed but the timeline did not.
+ *
+ * The ONLY permitted history-only fallback that logs-and-swallows is
+ * {@link recordFinanceActivitySafe} below, which is reserved for non-status,
+ * best-effort events (e.g. reconstructing a legacy `created` event on first
+ * detail-page view). It MUST NOT be used for status-changing mutations.
+ */
+export async function recordFinanceActivity(
+  tx: FinanceTransaction,
+  input: RecordFinanceActivityInput,
+): Promise<void> {
+  await tx
+    .insert(financeActivityHistory)
+    .values({
+      id: crypto.randomUUID(),
+      entityType: input.entityType,
+      entityId: input.entityId,
+      action: input.action,
+      fromStatus: input.fromStatus ?? null,
+      toStatus: input.toStatus ?? null,
+      reason: input.reason ?? null,
+      snapshotBefore: input.snapshotBefore ?? null,
+      snapshotAfter: input.snapshotAfter ?? null,
+      actorId: input.actorId,
+    })
+    .run();
+}
+
+/**
+ * History-only, NON-status best-effort recording (the single permitted fallback
+ * documented by the transaction-boundary rule, Req 3.10 / Req 2.6 / Req 2.7).
+ *
+ * Use this ONLY for non-critical, history-only events that run OUTSIDE a status
+ * mutation — for example deriving/backfilling a limited `created` event for a
+ * legacy record when its detail page is first viewed. It opens its own tiny
+ * transaction and logs-and-swallows any failure so that a timeline-recording
+ * problem can never block detail-page rendering.
+ *
+ * NEVER call this from inside a status-changing mutation; those must use
+ * {@link recordFinanceActivity} with the parent `tx` so failures roll back.
+ */
+export async function recordFinanceActivitySafe(
+  input: RecordFinanceActivityInput,
+): Promise<void> {
+  try {
+    await db.transaction(async (tx) => {
+      await recordFinanceActivity(tx, input);
+    });
+  } catch (error) {
+    // Best-effort only: log and swallow. A history-only failure must not block
+    // detail-page rendering or any read path.
+    console.error("[finance] recordFinanceActivitySafe failed (swallowed):", error);
+  }
+}
+
+// ==========================================
 // UTILITY: Compute Real Account Balance
 // ==========================================
 /**
@@ -120,7 +242,10 @@ export async function computeCurrentBalance(accountId: string): Promise<number> 
       eq(transactions.approvalStatus, "approved")
     ));
 
-  return account.openingBalance + Number(incResult?.total ?? 0) - Number(expResult?.total ?? 0);
+  // Req 7.1: netting formula with 2-decimal precision (half-up) to avoid binary
+  // FP drift from doublePrecision columns; reversal income (negative amount,
+  // type="income", approvalStatus="not_required") is netted in automatically.
+  return round2(account.openingBalance + Number(incResult?.total ?? 0) - Number(expResult?.total ?? 0));
 }
 
 // ==========================================
@@ -277,27 +402,44 @@ export async function createInvoice(data: unknown) {
   const rand = crypto.randomUUID().replace(/-/g, "").slice(0, 6).toUpperCase();
   const invoiceNumber = `INV-${dateStr}-${rand}`;
 
-  await db.insert(invoices).values({
-    id: invoiceId,
-    invoiceNumber,
-    projectId: parsed.projectId,
-    unitId: parsed.unitId || null,
-    customerId: parsed.customerId || null,
-    bookingId: parsed.bookingId || null,
-    type: parsed.type,
-    amount: parsed.amount,
-    dueDate: parsed.dueDate || null,
-    status: "unpaid",
-    notes: parsed.notes || null,
+  await db.transaction(async (tx) => {
+    await tx.insert(invoices).values({
+      id: invoiceId,
+      invoiceNumber,
+      projectId: parsed.projectId,
+      unitId: parsed.unitId || null,
+      customerId: parsed.customerId || null,
+      bookingId: parsed.bookingId || null,
+      type: parsed.type,
+      amount: parsed.amount,
+      dueDate: parsed.dueDate || null,
+      status: "unpaid",
+      notes: parsed.notes || null,
+    }).run();
+
+    // Finance activity timeline: record invoice creation (Req 3.3, 3.4, 3.9).
+    // Recorded in the same tx as the insert so a history failure rolls back the create.
+    await recordFinanceActivity(tx, {
+      entityType: "invoice",
+      entityId: invoiceId,
+      action: "created",
+      actorId: activeUser.id,
+      fromStatus: null,
+      toStatus: "unpaid",
+    });
   });
 
-  await writeAuditLog({
-    action: "create",
-    module: "finance",
-    entityId: invoiceId,
-    entityType: "invoice",
-    details: { invoiceNumber, amount: parsed.amount, type: parsed.type },
-  });
+  try {
+    await writeAuditLog({
+      action: "create",
+      module: "finance",
+      entityId: invoiceId,
+      entityType: "invoice",
+      details: { invoiceNumber, amount: parsed.amount, type: parsed.type },
+    });
+  } catch (err) {
+    console.warn("[createInvoice] Audit log gagal ditulis:", err);
+  }
 
   revalidatePath("/finance/payments");
   return { success: true, invoiceId };
@@ -424,6 +566,42 @@ export async function createPayment(data: unknown) {
   const rand = crypto.randomUUID().replace(/-/g, "").slice(0, 6).toUpperCase();
   const paymentNumber = `PAY-${dateStr}-${rand}`;
 
+  // ── Req 2.11: Outstanding guard — validate payment amount does not exceed invoice outstanding ──
+  if (parsed.invoiceId) {
+    const [targetInvoice] = await db
+      .select({ id: invoices.id, amount: invoices.amount, status: invoices.status })
+      .from(invoices)
+      .where(eq(invoices.id, parsed.invoiceId))
+      .limit(1);
+
+    if (!targetInvoice) {
+      throw new Error("Invoice target tidak ditemukan.");
+    }
+    if (targetInvoice.status !== "unpaid" && targetInvoice.status !== "partial") {
+      throw new Error("Invoice target sudah lunas atau dibatalkan.");
+    }
+
+    // Sum verified payments for this invoice to compute outstanding
+    const [sumResult] = await db
+      .select({ total: sum(payments.amount) })
+      .from(payments)
+      .where(
+        and(
+          eq(payments.invoiceId, parsed.invoiceId),
+          eq(payments.status, "verified")
+        )
+      );
+
+    const paidTotal = Number(sumResult?.total ?? 0);
+    const outstanding = computeOutstanding(targetInvoice.amount, paidTotal);
+
+    if (parsed.amount > outstanding) {
+      throw new Error(
+        `Nominal pembayaran melebihi sisa tagihan. Outstanding: Rp ${outstanding.toLocaleString('id-ID')}`
+      );
+    }
+  }
+
   await db.insert(payments).values({
     id: paymentId,
     invoiceId: parsed.invoiceId || null,
@@ -435,26 +613,35 @@ export async function createPayment(data: unknown) {
     paymentDate: parsed.paymentDate,
     paymentMethod: parsed.paymentMethod,
     proofAttachmentId: parsed.proofAttachmentId || null,
+    uploadedBy: activeUser.id,
     status: "pending",
   });
 
-  await writeAuditLog({
-    action: "create",
-    module: "finance",
-    entityId: paymentId,
-    entityType: "payment",
-    details: { paymentNumber, amount: parsed.amount },
-  });
+  try {
+    await writeAuditLog({
+      action: "create",
+      module: "finance",
+      entityId: paymentId,
+      entityType: "payment",
+      details: { paymentNumber, amount: parsed.amount },
+    });
+  } catch (err) {
+    console.warn("[createPayment] Audit log gagal ditulis:", err);
+  }
 
   // Notify Admin Keuangan and Super Admin about new payment verification
-  await notifyUsersWithRoles({
-    roleNames: ["Admin Keuangan", "Super Admin"],
-    type: "approval_pending",
-    title: "Verifikasi Pembayaran Baru",
-    message: `Pembayaran baru senilai Rp ${parsed.amount.toLocaleString()} dari konsumen memerlukan verifikasi keuangan.`,
-    entityId: paymentId,
-    entityType: "payment",
-  });
+  try {
+    await notifyUsersWithRoles({
+      roleNames: ["Admin Keuangan", "Super Admin"],
+      type: "approval_pending",
+      title: "Verifikasi Pembayaran Baru",
+      message: `Pembayaran baru senilai Rp ${parsed.amount.toLocaleString()} dari konsumen memerlukan verifikasi keuangan.`,
+      entityId: paymentId,
+      entityType: "payment",
+    });
+  } catch (err) {
+    console.warn("[createPayment] Notifikasi gagal dikirim:", err);
+  }
 
   revalidatePath("/finance/payments");
   revalidatePath("/dashboard");
@@ -469,11 +656,57 @@ export async function verifyPayment(
 ) {
   const activeUser = await requireAuth();
 
-  // Validate authorization role: Keuangan, Direksi, or Super Admin
+  // ── Task 6.5: Role guard — only Admin Keuangan, Direksi/Manager, or Super Admin (Req 3.10, 11.4–11.6) ──
   const { isKeuangan: isFinance, isDireksi: isDirector, isSuperAdmin: isSuper } = await getSessionRole(activeUser.id);
 
   if (!isFinance && !isDirector && !isSuper) {
     throw new Error("Anda tidak memiliki akses untuk verifikasi pembayaran.");
+  }
+
+  // ── Task 6.1 Req 3.9: Account validation — accountId must exist and be active ──
+  if (isApproved) {
+    const [targetAccount] = await db
+      .select({ id: financeAccounts.id, status: financeAccounts.status })
+      .from(financeAccounts)
+      .where(eq(financeAccounts.id, accountId))
+      .limit(1);
+
+    if (!targetAccount || targetAccount.status !== "active") {
+      throw new Error("Akun keuangan tidak valid.");
+    }
+  }
+
+  // ── Task 6.2: Self-verify guard (Req 11.7) — pre-fetch payment for uploadedBy check ──
+  const [prefetchPayment] = await db
+    .select({
+      id: payments.id,
+      uploadedBy: payments.uploadedBy,
+      proofAttachmentId: payments.proofAttachmentId,
+    })
+    .from(payments)
+    .where(eq(payments.id, paymentId))
+    .limit(1);
+
+  if (!prefetchPayment) {
+    throw new Error("Pembayaran tidak ditemukan");
+  }
+
+  // Primary: if payment.uploadedBy is non-null, compare directly
+  if (!isSuper && prefetchPayment.uploadedBy && prefetchPayment.uploadedBy === activeUser.id) {
+    throw new Error("Anda tidak dapat memverifikasi bukti bayar yang Anda upload sendiri.");
+  }
+
+  // Fallback legacy: ONLY if uploadedBy is null, check attachments.uploadedBy
+  if (!isSuper && !prefetchPayment.uploadedBy && prefetchPayment.proofAttachmentId) {
+    const [proofAttachment] = await db
+      .select({ uploadedBy: attachments.uploadedBy })
+      .from(attachments)
+      .where(eq(attachments.id, prefetchPayment.proofAttachmentId))
+      .limit(1);
+
+    if (proofAttachment?.uploadedBy && proofAttachment.uploadedBy === activeUser.id) {
+      throw new Error("Anda tidak dapat memverifikasi bukti bayar yang Anda upload sendiri.");
+    }
   }
 
   let paymentNumber = "";
@@ -501,13 +734,52 @@ export async function verifyPayment(
     const payment = paymentResults[0];
     paymentNumber = payment.paymentNumber;
     paymentAmount = payment.amount;
+
+    // ── Task 6.1 Req 3.3: State guard — reject if not pending (covers verified, rejected, voided) ──
     if (payment.status !== "pending") {
-      throw new Error("Pembayaran ini sudah diverifikasi sebelumnya");
+      throw new Error("Pembayaran ini sudah diproses sebelumnya.");
+    }
+
+    // ── Task 6.1 Req 2.7: Row-level lock on invoice (if linked) ──
+    if (payment.invoiceId) {
+      await tx.execute(sql`SELECT id FROM invoices WHERE id = ${payment.invoiceId} FOR UPDATE`);
+    }
+
+    // ── Task 6.1 Req 2.2: Overpayment guard (skip if invoiceId is null per Req 2.8) ──
+    if (isApproved && payment.invoiceId) {
+      const [targetInvoice] = await tx
+        .select({ id: invoices.id, amount: invoices.amount })
+        .from(invoices)
+        .where(eq(invoices.id, payment.invoiceId))
+        .limit(1)
+        .all();
+
+      if (targetInvoice) {
+        const sumPayments = await tx
+          .select({ total: sum(payments.amount) })
+          .from(payments)
+          .where(
+            and(
+              eq(payments.invoiceId, payment.invoiceId),
+              eq(payments.status, "verified")
+            )
+          )
+          .all();
+
+        const paidTotal = Number(sumPayments[0]?.total || 0);
+
+        if (paidTotal + payment.amount > targetInvoice.amount) {
+          const outstanding = computeOutstanding(targetInvoice.amount, paidTotal);
+          throw new Error(
+            `Nominal pembayaran melebihi sisa tagihan. Outstanding: Rp ${outstanding.toLocaleString("id-ID")}`
+          );
+        }
+      }
     }
 
     const newStatus = isApproved ? "verified" : "rejected";
 
-    // 2. Update payment status
+    // 2. Update payment status with verifiedBy, verifiedAt (Req 3.7)
     await tx
       .update(payments)
       .set({
@@ -518,17 +790,32 @@ export async function verifyPayment(
       .where(eq(payments.id, paymentId))
       .run();
 
+    // Finance activity timeline: record the payment verification/rejection (Req 3.3,
+    // 3.9, 5.4, 6.7). Recorded in the SAME tx as the status change so a history-insert
+    // failure rolls back the whole verify/reject. `verified` on approve, `rejected`
+    // (with the rejection notes as reason) on reject. Immutability itself is already
+    // enforced by the `payment.status !== "pending"` guard above (Req 4.12, 6.7, 12.2).
+    await recordFinanceActivity(tx, {
+      entityType: "payment",
+      entityId: paymentId,
+      action: isApproved ? "verified" : "rejected",
+      actorId: activeUser.id,
+      fromStatus: "pending",
+      toStatus: newStatus,
+      reason: isApproved ? null : (notes ?? null),
+    });
+
     if (isApproved) {
-      // 3. Find target Account & check existence
+      // 3. Find target Account & check existence (already validated above, re-fetch in tx)
       const accountResults = await tx
         .select()
         .from(financeAccounts)
-        .where(eq(financeAccounts.id, accountId))
+        .where(and(eq(financeAccounts.id, accountId), eq(financeAccounts.status, "active")))
         .limit(1)
         .all();
 
       if (accountResults.length === 0) {
-        throw new Error("Akun penampung kas tidak valid");
+        throw new Error("Akun keuangan tidak valid.");
       }
 
       // 4. Find/Select target Finance Category for income
@@ -562,6 +849,23 @@ export async function verifyPayment(
         categoryId = fallbackResults[0].id;
       }
 
+      // ── Task 6.1 Req 3.6: Idempotency guard — skip if income already exists for this paymentId ──
+      const existingIncome = await tx
+        .select({ id: transactions.id })
+        .from(transactions)
+        .where(
+          and(
+            eq(transactions.paymentId, payment.id),
+            eq(transactions.type, "income")
+          )
+        )
+        .limit(1);
+
+      if (existingIncome.length > 0) {
+        // Idempotency: income already created, return success without side-effect
+        return;
+      }
+
       // 5. Generate Ledger Transaction record
       const trxId = crypto.randomUUID();
       const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
@@ -591,7 +895,7 @@ export async function verifyPayment(
       // currentBalance = openingBalance + sum(verified income) - sum(approved expenses)
       // No mutation of financeAccounts.openingBalance needed.
 
-      // 7. Recalculate Invoice totals
+      // ── Task 6.1 Req 2.3–2.6: Recompute invoice status atomically via computeInvoiceStatus ──
       if (payment.invoiceId) {
         const invoiceResults = await tx
           .select()
@@ -603,7 +907,7 @@ export async function verifyPayment(
         if (invoiceResults.length > 0) {
           const invoice = invoiceResults[0];
 
-          // Fetch sum of all verified payments for this invoice
+          // Fetch sum of all verified payments for this invoice (includes the just-verified one)
           const sumPayments = await tx
             .select({ total: sum(payments.amount) })
             .from(payments)
@@ -616,13 +920,7 @@ export async function verifyPayment(
             .all();
 
           const paidTotal = Number(sumPayments[0]?.total || 0);
-
-          let newInvoiceStatus: "unpaid" | "partial" | "paid" = "unpaid";
-          if (paidTotal >= invoice.amount) {
-            newInvoiceStatus = "paid";
-          } else if (paidTotal > 0) {
-            newInvoiceStatus = "partial";
-          }
+          const newInvoiceStatus = computeInvoiceStatus(paidTotal, invoice.amount);
 
           await tx
             .update(invoices)
@@ -632,6 +930,24 @@ export async function verifyPayment(
             })
             .where(eq(invoices.id, payment.invoiceId))
             .run();
+
+          // Finance activity timeline: record the invoice payment-status change ONLY
+          // when the recompute actually changes the invoice status (Req 3.3, 3.9, 5.4).
+          // `paid_full` when it becomes "paid", `paid_partial` when it becomes "partial".
+          // Recorded in the SAME tx as the invoice update so a history failure rolls back.
+          if (
+            newInvoiceStatus !== invoice.status &&
+            (newInvoiceStatus === "paid" || newInvoiceStatus === "partial")
+          ) {
+            await recordFinanceActivity(tx, {
+              entityType: "invoice",
+              entityId: payment.invoiceId,
+              action: newInvoiceStatus === "paid" ? "paid_full" : "paid_partial",
+              actorId: activeUser.id,
+              fromStatus: invoice.status,
+              toStatus: newInvoiceStatus,
+            });
+          }
 
           if (newInvoiceStatus === "paid" && invoice.bookingId) {
             shouldTransition = true;
@@ -717,17 +1033,21 @@ export async function verifyPayment(
 
   // 8. Log activities outside transaction
   const newStatus = isApproved ? "verified" : "rejected";
-  await writeAuditLog({
-    action: isApproved ? "approve" : "reject",
-    module: "finance",
-    entityId: paymentId,
-    entityType: "payment",
-    details: {
-      paymentNumber: paymentNumber,
-      status: newStatus,
-      notes: notes || null,
-    },
-  });
+  try {
+    await writeAuditLog({
+      action: isApproved ? "approve" : "reject",
+      module: "finance",
+      entityId: paymentId,
+      entityType: "payment",
+      details: {
+        paymentNumber: paymentNumber,
+        status: newStatus,
+        notes: notes || null,
+      },
+    });
+  } catch (err) {
+    console.warn("[verifyPayment] Audit log gagal ditulis:", err);
+  }
 
   // Find related booking and marketing PIC to send a targeted notification
   // BUG 2 FIX: Use single JOIN query instead of 3 chained N+1 queries post-transaction
@@ -761,25 +1081,33 @@ export async function verifyPayment(
 
   // 1. Send targeted notification to the Marketing PIC who made the booking
   if (marketingPicId) {
-    await createNotification({
-      userId: marketingPicId,
-      type: "info",
-      title: isApproved ? "Pembayaran Booking Disetujui" : "Pembayaran Booking Ditolak",
-      message: `Pembayaran ${paymentNumber} senilai Rp ${paymentAmount.toLocaleString("id-ID")} untuk Unit ${unitCodeStr || "kavling"} (Booking: ${bookingNumStr || "—"}) telah ${isApproved ? "disetujui" : "ditolak"} oleh Admin Keuangan.`,
-      entityId: paymentId,
-      entityType: "payment",
-    });
+    try {
+      await createNotification({
+        userId: marketingPicId,
+        type: "info",
+        title: isApproved ? "Pembayaran Booking Disetujui" : "Pembayaran Booking Ditolak",
+        message: `Pembayaran ${paymentNumber} senilai Rp ${paymentAmount.toLocaleString("id-ID")} untuk Unit ${unitCodeStr || "kavling"} (Booking: ${bookingNumStr || "—"}) telah ${isApproved ? "disetujui" : "ditolak"} oleh Admin Keuangan.`,
+        entityId: paymentId,
+        entityType: "payment",
+      });
+    } catch (err) {
+      console.warn("[verifyPayment] Notifikasi ke Marketing PIC gagal:", err);
+    }
   }
 
   // 2. Broadcast notification to Super Admin and Marketing Manager
-  await notifyUsersWithRoles({
-    roleNames: ["Super Admin", "Marketing Manager"],
-    type: "info",
-    title: isApproved ? "Pembayaran Diverifikasi" : "Pembayaran Ditolak",
-    message: `Pembayaran ${paymentNumber} senilai Rp ${paymentAmount.toLocaleString("id-ID")} telah ${isApproved ? "diverifikasi sukses" : "ditolak"}.`,
-    entityId: paymentId,
-    entityType: "payment",
-  });
+  try {
+    await notifyUsersWithRoles({
+      roleNames: ["Super Admin", "Marketing Manager"],
+      type: "info",
+      title: isApproved ? "Pembayaran Diverifikasi" : "Pembayaran Ditolak",
+      message: `Pembayaran ${paymentNumber} senilai Rp ${paymentAmount.toLocaleString("id-ID")} telah ${isApproved ? "diverifikasi sukses" : "ditolak"}.`,
+      entityId: paymentId,
+      entityType: "payment",
+    });
+  } catch (err) {
+    console.warn("[verifyPayment] Notifikasi broadcast gagal:", err);
+  }
 
   revalidatePath("/finance/payments");
   revalidatePath("/finance/transactions");
@@ -874,19 +1202,23 @@ async function triggerMenungguSerahTerima(
   });
 
   // Audit log
-  await writeAuditLog({
-    action: "update",
-    module: "finance",
-    entityId: unitId,
-    entityType: "unit_handover_wait",
-    details: {
-      unitCode: unit.code,
-      bookingId,
-      oldStatus,
-      newStatus: "menunggu_serah_terima",
-      trigger: `${schemeLabel} invoice paid_full`,
-    },
-  });
+  try {
+    await writeAuditLog({
+      action: "update",
+      module: "finance",
+      entityId: unitId,
+      entityType: "unit_handover_wait",
+      details: {
+        unitCode: unit.code,
+        bookingId,
+        oldStatus,
+        newStatus: "menunggu_serah_terima",
+        trigger: `${schemeLabel} invoice paid_full`,
+      },
+    });
+  } catch (err) {
+    console.warn("[triggerMenungguSerahTerima] Audit log gagal ditulis:", err);
+  }
 
   // Notifikasi ke role berwenang
   // Sprint 3: Gunakan type "handover_waiting" (bukan "info") agar routing notifikasi eksplisit
@@ -923,45 +1255,177 @@ async function triggerMenungguSerahTerima(
   revalidatePath("/siteplan");
 }
 
+export async function reversePayment(paymentId: string, reason: unknown) {
+  // 1. Auth + Role guard: Admin Keuangan / Super Admin only (Req 4.1, 4.2)
+  const activeUser = await requireAuth();
+  const { isKeuangan, isSuperAdmin } = await getSessionRole(activeUser.id);
+  if (!isKeuangan && !isSuperAdmin) {
+    throw new Error("Hanya Admin Keuangan atau Super Admin yang dapat membatalkan pembayaran terverifikasi.");
+  }
+
+  // 2. Validate reason via reversalReasonSchema (min 10, max 500 chars) (Req 4.6)
+  const validatedReason = reversalReasonSchema.parse(reason);
+
+  // 3. Atomic transaction
+  let auditDetails: any = {};
+
+  await db.transaction(async (tx) => {
+    // 3.1 Fetch payment
+    const [payment] = await tx.select().from(payments).where(eq(payments.id, paymentId)).limit(1);
+    if (!payment) throw new Error("Pembayaran tidak ditemukan.");
+
+    // 3.2 State guards (Req 4.3, 4.4, 4.5)
+    if (payment.status === "voided") throw new Error("Pembayaran ini sudah pernah di-void sebelumnya.");
+    if (payment.status === "pending") throw new Error("Pembayaran pending tidak perlu di-void. Gunakan hapus/reject.");
+    if (payment.status === "rejected") throw new Error("Pembayaran yang sudah ditolak tidak dapat di-void.");
+    if (payment.status !== "verified") throw new Error("Hanya pembayaran terverifikasi yang dapat di-void.");
+
+    // 3.3 Find original income transaction for this payment (Req 4.7)
+    const [originalIncome] = await tx.select().from(transactions)
+      .where(and(
+        eq(transactions.paymentId, payment.id),
+        eq(transactions.type, "income"),
+        // Must be non-reversal (originalIncome, not itself a reversal)
+        sql`${transactions.reversalOfPaymentId} IS NULL`
+      )).limit(1);
+
+    if (!originalIncome) throw new Error("Transaksi income asli untuk pembayaran ini tidak ditemukan.");
+
+    // 3.4 Use the original income's category for the reversal entry
+    const categoryId = originalIncome.categoryId;
+
+    // 3.5 Insert reversal transaction (netting model: negative income) (Req 4.8, 4.9, 7.5)
+    const reversalTrxId = crypto.randomUUID();
+    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    const rand = crypto.randomUUID().replace(/-/g, "").slice(0, 6).toUpperCase();
+
+    await tx.insert(transactions).values({
+      id: reversalTrxId,
+      transactionNumber: `TRX-REV-${dateStr}-${rand}`,
+      projectId: originalIncome.projectId,
+      unitId: originalIncome.unitId,
+      customerId: originalIncome.customerId,
+      paymentId: null, // NOT the original paymentId — avoids idempotency guard
+      accountId: originalIncome.accountId,
+      categoryId: categoryId,
+      type: "income",
+      description: `Reversal pembayaran ${payment.paymentNumber}: ${validatedReason}`,
+      amount: -Math.abs(originalIncome.amount), // NEGATIVE (Req 4.9)
+      transactionDate: new Date(),
+      paymentMethod: originalIncome.paymentMethod,
+      approvalStatus: "not_required",
+      attachmentId: null,
+      createdBy: activeUser.id,
+      reversalOfPaymentId: payment.id,
+      reversalOfTransactionId: originalIncome.id,
+      reversalReason: validatedReason,
+    }).run();
+
+    // 3.6 Update payment status to "voided" (Req 4.10)
+    await tx.update(payments).set({
+      status: "voided",
+    }).where(eq(payments.id, paymentId)).run();
+
+    // 3.7 Recompute invoice status from remaining verified (non-voided) payments (Req 4.11)
+    if (payment.invoiceId) {
+      const [invoice] = await tx.select().from(invoices).where(eq(invoices.id, payment.invoiceId)).limit(1);
+      if (invoice) {
+        const sumResult = await tx.select({ total: sum(payments.amount) }).from(payments)
+          .where(and(
+            eq(payments.invoiceId, payment.invoiceId),
+            eq(payments.status, "verified")
+          ));
+        const paidTotal = Number(sumResult[0]?.total ?? 0);
+        const newStatus = computeInvoiceStatus(paidTotal, invoice.amount);
+        await tx.update(invoices).set({ status: newStatus, updatedAt: new Date() })
+          .where(eq(invoices.id, payment.invoiceId)).run();
+      }
+    }
+
+    // 3.8 Record finance activity in same tx (Req 4.13)
+    await recordFinanceActivity(tx, {
+      entityType: "payment",
+      entityId: paymentId,
+      action: "reversed",
+      actorId: activeUser.id,
+      fromStatus: "verified",
+      toStatus: "voided",
+      reason: validatedReason,
+    });
+
+    // Prepare audit details for outside-tx audit log
+    auditDetails = {
+      paymentId: payment.id,
+      paymentNumber: payment.paymentNumber,
+      amount: payment.amount,
+      reason: validatedReason,
+      originalPaymentId: payment.id,
+      originalTransactionId: originalIncome.id,
+      reversalTransactionId: reversalTrxId,
+      userId: activeUser.id,
+    };
+  });
+
+  // 4. Task 7.4: Audit void/reversal — non-blocking per Req 12.7
+  try {
+    await writeAuditLog({
+      action: "void",
+      module: "finance",
+      entityId: paymentId,
+      entityType: "payment",
+      details: auditDetails,
+    });
+  } catch (err) {
+    console.warn("[reversePayment] Audit log gagal ditulis:", err);
+  }
+
+  revalidatePath("/finance/payments");
+  revalidatePath("/finance/transactions");
+  return { success: true };
+}
+
 export async function deletePayment(paymentId: string) {
   const activeUser = await requireAuth();
 
-  // Validate authorization role: Super Admin only
+  // Role guard: hard delete ONLY Super Admin (Req 4.1, 4.3, 11.8)
   const { isSuperAdmin } = await getSessionRole(activeUser.id);
   if (!isSuperAdmin) {
-    throw new Error("Hanya Super Admin yang dapat menghapus pembayaran.");
+    throw new Error("Penghapusan permanen pembayaran hanya dapat dilakukan oleh Super Admin.");
   }
 
-  // Fetch payment details first
-  const paymentResults = await db
-    .select()
-    .from(payments)
-    .where(eq(payments.id, paymentId))
-    .limit(1);
+  // Fetch payment
+  const [payment] = await db.select().from(payments).where(eq(payments.id, paymentId)).limit(1);
+  if (!payment) throw new Error("Pembayaran tidak ditemukan.");
 
-  if (paymentResults.length === 0) {
-    throw new Error("Pembayaran tidak ditemukan");
+  // Status guards (Req 4.3, 4.4, 4.5)
+  if (payment.status === "verified") {
+    throw new Error("Pembayaran terverifikasi tidak dapat dihapus langsung. Gunakan proses void/reversal.");
+  }
+  if (payment.status === "voided") {
+    throw new Error("Pembayaran yang sudah di-void tidak dapat dihapus.");
+  }
+  // Only pending/rejected allowed
+  if (payment.status !== "pending" && payment.status !== "rejected") {
+    throw new Error("Hanya pembayaran berstatus pending atau rejected yang dapat dihapus.");
   }
 
-  const payment = paymentResults[0];
-
-  // Delete the payment record
+  // Proceed with hard delete
   await db.delete(payments).where(eq(payments.id, paymentId));
 
-  // Write audit log
-  await writeAuditLog({
-    action: "delete",
-    module: "finance",
-    entityId: paymentId,
-    entityType: "payment",
-    details: {
-      paymentNumber: payment.paymentNumber,
-      amount: payment.amount,
-    },
-  });
+  // Audit (non-blocking per Req 12.6)
+  try {
+    await writeAuditLog({
+      action: "delete",
+      module: "finance",
+      entityId: paymentId,
+      entityType: "payment",
+      details: { paymentNumber: payment.paymentNumber, status: payment.status, userId: activeUser.id },
+    });
+  } catch (err) {
+    console.warn("[deletePayment] Audit log gagal ditulis:", err);
+  }
 
-  revalidatePath("/finance");
-  revalidatePath("/finance/transactions");
+  revalidatePath("/finance/payments");
   return { success: true };
 }
 
@@ -1131,6 +1595,25 @@ export async function createExpenseRequest(data: unknown) {
   const activeUser = await requireAuth();
   const parsed = expenseRequestSchema.parse(data);
 
+  // ── Part B: Master data validation BEFORE inserting any record ──
+
+  // 1. accountId validation — must exist, be active, and be cash or bank type
+  const [account] = await db.select().from(financeAccounts).where(eq(financeAccounts.id, parsed.accountId)).limit(1);
+  if (!account) throw new Error("Akun keuangan tidak ditemukan.");
+  if (account.status !== "active") throw new Error("Akun keuangan tidak aktif.");
+  if (account.type !== "cash" && account.type !== "bank") throw new Error("Akun pengeluaran harus bertipe Cash atau Bank.");
+
+  // 2. categoryId validation — must exist, be active, and be expense type
+  const [category] = await db.select().from(financeCategories).where(eq(financeCategories.id, parsed.categoryId)).limit(1);
+  if (!category) throw new Error("Kategori keuangan tidak ditemukan.");
+  if (category.status !== "active") throw new Error("Kategori keuangan tidak aktif.");
+  if (category.type !== "expense") throw new Error("Kategori harus bertipe pengeluaran (expense).");
+
+  // 3. projectId validation — must exist and be active
+  const [project] = await db.select().from(projects).where(eq(projects.id, parsed.projectId)).limit(1);
+  if (!project) throw new Error("Proyek tidak ditemukan.");
+  if (project.status !== "active") throw new Error("Proyek tidak aktif.");
+
   const trxId = crypto.randomUUID();
   const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
   const rand = crypto.randomUUID().replace(/-/g, "").slice(0, 6).toUpperCase();
@@ -1139,27 +1622,14 @@ export async function createExpenseRequest(data: unknown) {
   let approvalStatusResult: "pending" | "insufficient_balance" = "pending";
 
   await db.transaction(async (tx) => {
-    // Check if account has sufficient balance
-    const accountResults = await tx
-      .select()
-      .from(financeAccounts)
-      .where(eq(financeAccounts.id, parsed.accountId))
-      .limit(1)
-      .all();
-
-    if (accountResults.length === 0) {
-      throw new Error("Akun kas/bank tidak ditemukan");
-    }
-
-    const account = accountResults[0];
-    // Compute real current balance from all settled transactions
+    // 4. Balance check — compute real current balance from all settled transactions
     const expCheckData = await tx.select({ total: sum(transactions.amount) })
       .from(transactions)
-      .where(and(eq(transactions.accountId, account.id), eq(transactions.type, "expense"), eq(transactions.approvalStatus, "approved")))
+      .where(and(eq(transactions.accountId, parsed.accountId), eq(transactions.type, "expense"), eq(transactions.approvalStatus, "approved")))
       .all();
     const incCheckData = await tx.select({ total: sum(transactions.amount) })
       .from(transactions)
-      .where(and(eq(transactions.accountId, account.id), eq(transactions.type, "income"), eq(transactions.approvalStatus, "not_required")))
+      .where(and(eq(transactions.accountId, parsed.accountId), eq(transactions.type, "income"), eq(transactions.approvalStatus, "not_required")))
       .all();
     const realExpenseBalance = account.openingBalance + Number(incCheckData[0]?.total ?? 0) - Number(expCheckData[0]?.total ?? 0);
     const hasSufficient = realExpenseBalance >= parsed.amount;
@@ -1198,29 +1668,50 @@ export async function createExpenseRequest(data: unknown) {
       status: "unpaid",
       notes: `trxId:${trxId}`,
     }).run();
+
+    // Record the expense-request submission in the finance activity timeline
+    // (Req 3.3, 3.4, 3.9, 8.5). entityType "approval", entityId = transactions.id,
+    // action "submitted", fromStatus null → toStatus = the resulting approvalStatus.
+    // Inside the same tx so a history-insert failure rolls back the whole request.
+    await recordFinanceActivity(tx, {
+      entityType: "approval",
+      entityId: trxId,
+      action: "submitted",
+      actorId: activeUser.id,
+      fromStatus: null,
+      toStatus: approvalStatus,
+    });
   });
 
-  await writeAuditLog({
-    action: "create",
-    module: "finance",
-    entityId: trxId,
-    entityType: "transaction",
-    details: {
-      transactionNumber,
-      amount: parsed.amount,
-      approvalStatus: approvalStatusResult,
-    },
-  });
+  try {
+    await writeAuditLog({
+      action: "create",
+      module: "finance",
+      entityId: trxId,
+      entityType: "transaction",
+      details: {
+        transactionNumber,
+        amount: parsed.amount,
+        approvalStatus: approvalStatusResult,
+      },
+    });
+  } catch (err) {
+    console.warn("[createExpenseRequest] Audit log gagal ditulis:", err);
+  }
 
   // Notify Direksi / Manager and Super Admin
-  await notifyUsersWithRoles({
-    roleNames: ["Direksi / Manager", "Super Admin"],
-    type: "approval_pending",
-    title: "Pengajuan Kas Keluar Baru",
-    message: `Pengajuan kas keluar senilai Rp ${parsed.amount.toLocaleString()} untuk ${parsed.description} memerlukan persetujuan Anda.`,
-    entityId: trxId,
-    entityType: "transaction",
-  });
+  try {
+    await notifyUsersWithRoles({
+      roleNames: ["Direksi / Manager", "Super Admin"],
+      type: "approval_pending",
+      title: "Pengajuan Kas Keluar Baru",
+      message: `Pengajuan kas keluar senilai Rp ${parsed.amount.toLocaleString()} untuk ${parsed.description} memerlukan persetujuan Anda.`,
+      entityId: trxId,
+      entityType: "transaction",
+    });
+  } catch (err) {
+    console.warn("[createExpenseRequest] Notifikasi gagal dikirim:", err);
+  }
 
   revalidatePath("/finance/transactions");
   revalidatePath("/finance/approvals");
@@ -1231,94 +1722,95 @@ export async function createExpenseRequest(data: unknown) {
 export async function approveExpense(transactionId: string, notes?: string) {
   const activeUser = await requireAuth();
 
-  // Verify Director/Manager role
+  // Role guard: Direksi/Manager or Super Admin only
   const { isDireksi: isDirector, isSuperAdmin: isSuper } = await getSessionRole(activeUser.id);
 
   if (!isDirector && !isSuper) {
     throw new Error("Hanya Direktur atau Manager yang dapat memberikan persetujuan.");
   }
 
-  let transactionNumber = "";
-  let transactionAmount = 0;
+  // ──────────────────────────────────────────────────────────────────────────
+  // PHASE 0 — Fetch + Guards (before any transaction)
+  // ──────────────────────────────────────────────────────────────────────────
+
+  // 1. Fetch the transaction by transactionId
+  const trxResults = await db
+    .select()
+    .from(transactions)
+    .where(eq(transactions.id, transactionId))
+    .limit(1);
+
+  if (trxResults.length === 0) {
+    throw new Error("Transaksi pengeluaran tidak ditemukan.");
+  }
+
+  const transaction = trxResults[0];
+
+  // 2. Guard: must be expense type (Req 6.9)
+  if (transaction.type !== "expense") {
+    throw new Error("Transaksi pengeluaran tidak ditemukan.");
+  }
+
+  // 3. Guard terminal states (Req 6.3): approved, rejected, not_required are terminal
+  if (transaction.approvalStatus === "approved") {
+    throw new Error("Transaksi ini sudah disetujui dan tidak dapat diubah statusnya.");
+  }
+  if (transaction.approvalStatus === "rejected") {
+    throw new Error("Transaksi yang sudah ditolak tidak dapat disetujui.");
+  }
+  if (transaction.approvalStatus === "not_required") {
+    throw new Error("Transaksi ini tidak memerlukan persetujuan.");
+  }
+
+  // 4. Only "pending" and "insufficient_balance" are allowed to proceed
+  // (any other unknown status is rejected)
+  if (transaction.approvalStatus !== "pending" && transaction.approvalStatus !== "insufficient_balance") {
+    throw new Error("Status transaksi tidak valid untuk persetujuan.");
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // PHASE 1 — Balance check + insufficient_balance standalone commit (RISK-03 fix)
+  // ──────────────────────────────────────────────────────────────────────────
+
+  // 5. Compute real current balance
+  const balance = await computeCurrentBalance(transaction.accountId);
+
+  // 6. If balance < amount: standalone write OUTSIDE any transaction block,
+  //    then throw. The write persists because it is auto-committed (Req 6.10, 6.11).
+  if (balance < transaction.amount) {
+    await db.update(transactions).set({
+      approvalStatus: "insufficient_balance",
+      updatedAt: new Date(),
+    }).where(eq(transactions.id, transactionId));
+
+    throw new Error(
+      `Saldo akun tidak mencukupi untuk persetujuan. Saldo tersedia: Rp ${balance.toLocaleString('id-ID')}`
+    );
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // PHASE 2 — Approval (inside db.transaction) (Req 6.1, 6.2, 6.4)
+  // ──────────────────────────────────────────────────────────────────────────
+
+  let transactionNumber = transaction.transactionNumber;
+  let transactionAmount = transaction.amount;
 
   await db.transaction(async (tx) => {
-    // 1. Fetch transaction
-    const trxResults = await tx
-      .select()
-      .from(transactions)
-      .where(eq(transactions.id, transactionId))
-      .limit(1)
-      .all();
-
-    if (trxResults.length === 0) {
-      throw new Error("Transaksi pengeluaran tidak ditemukan");
-    }
-
-    const transaction = trxResults[0];
-    transactionNumber = transaction.transactionNumber;
-    transactionAmount = transaction.amount;
-    if (transaction.type !== "expense") {
-      throw new Error("Transaksi ini bukan pengeluaran");
-    }
-
-    if (transaction.approvalStatus === "approved") {
-      throw new Error("Pengeluaran ini sudah disetujui sebelumnya");
-    }
-
-    // 2. Query target account
-    const accountResults = await tx
-      .select()
-      .from(financeAccounts)
-      .where(eq(financeAccounts.id, transaction.accountId))
-      .limit(1)
-      .all();
-
-    if (accountResults.length === 0) {
-      throw new Error("Akun kas tidak ditemukan");
-    }
-
-    const account = accountResults[0];
-    // Compute real current balance from all settled transactions
-    const expBalResult = await tx
-      .select({ total: sum(transactions.amount) })
-      .from(transactions)
-      .where(and(
-        eq(transactions.accountId, account.id),
-        eq(transactions.type, "expense"),
-        eq(transactions.approvalStatus, "approved")
-      ))
-      .all();
-    const incBalResult = await tx
-      .select({ total: sum(transactions.amount) })
-      .from(transactions)
-      .where(and(
-        eq(transactions.accountId, account.id),
-        eq(transactions.type, "income"),
-        eq(transactions.approvalStatus, "not_required")
-      ))
-      .all();
-    const currentAccountBalance = account.openingBalance + Number(incBalResult[0]?.total ?? 0) - Number(expBalResult[0]?.total ?? 0);
-
-    if (currentAccountBalance < transaction.amount) {
-      // Mark as insufficient balance and block approval
-      await tx
-        .update(transactions)
-        .set({
-          approvalStatus: "insufficient_balance",
-          updatedAt: new Date(),
-        })
-        .where(eq(transactions.id, transactionId))
-        .run();
+    // Re-check balance inside tx for race condition safety
+    const txBalance = await computeCurrentBalance(transaction.accountId);
+    if (txBalance < transaction.amount) {
+      // Another approval happened concurrently — mark insufficient_balance
+      await db.update(transactions).set({
+        approvalStatus: "insufficient_balance",
+        updatedAt: new Date(),
+      }).where(eq(transactions.id, transactionId));
 
       throw new Error(
-        `Saldo kas/bank (${account.name}) saat ini tidak mencukupi untuk menyetujui transaksi senilai Rp ${transaction.amount.toLocaleString()}. Saldo tersedia: Rp ${currentAccountBalance.toLocaleString()}`
+        `Saldo akun tidak mencukupi untuk persetujuan. Saldo tersedia: Rp ${txBalance.toLocaleString('id-ID')}`
       );
     }
 
-    // 3. Balance is implicitly reduced by the approved expense transaction record.
-    // No mutation of financeAccounts.openingBalance needed.
-
-    // 4. Update transaction status
+    // Set approvalStatus = "approved", approvedBy, approvalNotes, updatedAt
     await tx
       .update(transactions)
       .set({
@@ -1330,7 +1822,7 @@ export async function approveExpense(transactionId: string, notes?: string) {
       .where(eq(transactions.id, transactionId))
       .run();
 
-    // 4b. Update corresponding auto-generated invoice status to paid
+    // Update corresponding auto-generated invoice (notes pattern "trxId:{id}") to "paid"
     await tx
       .update(invoices)
       .set({
@@ -1340,7 +1832,7 @@ export async function approveExpense(transactionId: string, notes?: string) {
       .where(eq(invoices.notes, `trxId:${transactionId}`))
       .run();
 
-    // 5. Log approval record
+    // Insert transactionApprovals record (Req 6.4)
     await tx.insert(transactionApprovals).values({
       id: crypto.randomUUID(),
       transactionId,
@@ -1351,7 +1843,13 @@ export async function approveExpense(transactionId: string, notes?: string) {
       actedAt: new Date(),
     }).run();
 
-    // 6. Check for project active budget, deduct if linked to a category in budget lines
+    // ── Budget deduct exactly-once (Req 6.5, 8.3, 8.4, 8.5, 8.7, 8.8, 8.9) ──
+    // This block ONLY executes inside the approval transaction (PHASE 2), which
+    // means it fires exclusively when the expense successfully transitions to
+    // "approved". It never fires during create pending, create insufficient_balance,
+    // reject, or re-approve (terminal guard already prevents re-approve).
+
+    // Only active budget — "draft" and "closed" are excluded by the status filter.
     const activeBudgetResults = await tx
       .select()
       .from(budgets)
@@ -1366,6 +1864,8 @@ export async function approveExpense(transactionId: string, notes?: string) {
 
     if (activeBudgetResults.length > 0) {
       const activeBudget = activeBudgetResults[0];
+
+      // Find matching budgetLine for this expense's category
       const budgetLineResults = await tx
         .select()
         .from(budgetLines)
@@ -1378,8 +1878,14 @@ export async function approveExpense(transactionId: string, notes?: string) {
         .limit(1)
         .all();
 
+      // Req 8.5: No matching budgetLine → approval still succeeds, skip budget tracking
       if (budgetLineResults.length > 0) {
         const line = budgetLineResults[0];
+
+        // Req 8.8: Row-level lock on budgetLine to serialize concurrent approvals
+        await tx.execute(sql`SELECT id FROM budget_lines WHERE id = ${line.id} FOR UPDATE`);
+
+        // Req 8.3, 8.7: Update exactly once per approval event
         const newUsed = line.usedAmount + transaction.amount;
         const newRemaining = line.allocatedAmount - newUsed;
 
@@ -1391,33 +1897,65 @@ export async function approveExpense(transactionId: string, notes?: string) {
           })
           .where(eq(budgetLines.id, line.id))
           .run();
+
+        // Req 8.4: Warning if remainingAmount <= 0 (budget line depleted)
+        if (newRemaining <= 0) {
+          await createNotification({
+            userId: activeBudget.createdBy,
+            type: "info",
+            title: "Anggaran Kategori Habis",
+            message: `Anggaran kategori ${transaction.categoryId} pada budget "${activeBudget.name}" telah habis (sisa: Rp ${newRemaining.toLocaleString('id-ID')}).`,
+            entityId: activeBudget.id,
+            entityType: "budget",
+          });
+        }
       }
     }
+
+    // Record the approval in the finance activity timeline (Req 3.3, 3.9, 8.5).
+    // entityType "approval", entityId = transactions.id, fromStatus → approved.
+    // Inside the same tx so a history-insert failure rolls back the whole approval.
+    await recordFinanceActivity(tx, {
+      entityType: "approval",
+      entityId: transactionId,
+      action: "approved",
+      actorId: activeUser.id,
+      fromStatus: transaction.approvalStatus,
+      toStatus: "approved",
+    });
   });
 
-  // 7. Write Audit Log outside transaction
-  await writeAuditLog({
-    action: "approve",
-    module: "finance",
-    entityId: transactionId,
-    entityType: "transaction",
-    details: {
-      transactionNumber,
-      amount: transactionAmount,
-    },
-  });
-
-  // Notify requester
-  const finalTrx = await db.select().from(transactions).where(eq(transactions.id, transactionId)).limit(1);
-  if (finalTrx.length > 0 && finalTrx[0].createdBy) {
-    await createNotification({
-      userId: finalTrx[0].createdBy,
-      type: "info",
-      title: "Pengajuan Kas Keluar Disetujui",
-      message: `Pengajuan kas keluar Anda senilai Rp ${finalTrx[0].amount.toLocaleString()} untuk "${finalTrx[0].description}" telah disetujui.`,
+  // Write Audit Log outside transaction
+  try {
+    await writeAuditLog({
+      action: "approve",
+      module: "finance",
       entityId: transactionId,
       entityType: "transaction",
+      details: {
+        transactionNumber,
+        amount: transactionAmount,
+      },
     });
+  } catch (err) {
+    console.warn("[approveExpense] Audit log gagal ditulis:", err);
+  }
+
+  // Notify requester
+  try {
+    const finalTrx = await db.select().from(transactions).where(eq(transactions.id, transactionId)).limit(1);
+    if (finalTrx.length > 0 && finalTrx[0].createdBy) {
+      await createNotification({
+        userId: finalTrx[0].createdBy,
+        type: "info",
+        title: "Pengajuan Kas Keluar Disetujui",
+        message: `Pengajuan kas keluar Anda senilai Rp ${finalTrx[0].amount.toLocaleString()} untuk "${finalTrx[0].description}" telah disetujui.`,
+        entityId: transactionId,
+        entityType: "transaction",
+      });
+    }
+  } catch (err) {
+    console.warn("[approveExpense] Notifikasi gagal dikirim:", err);
   }
 
   revalidatePath("/finance/transactions");
@@ -1430,51 +1968,77 @@ export async function approveExpense(transactionId: string, notes?: string) {
 export async function rejectExpense(transactionId: string, notes: string) {
   const activeUser = await requireAuth();
 
-  if (!notes || notes.trim().length === 0) {
-    throw new Error("Catatan penolakan wajib diisi");
+  // ──────────────────────────────────────────────────────────────────────────
+  // PHASE 0 — Input validation + Guards (before any mutation)
+  // ──────────────────────────────────────────────────────────────────────────
+
+  // 1. Notes validation: must be trimmed and non-empty (Req 6.6)
+  const trimmedNotes = (notes ?? "").trim();
+  if (trimmedNotes.length === 0) {
+    throw new Error("Catatan penolakan wajib diisi.");
   }
 
+  // Role guard: Direksi/Manager or Super Admin only
   const { isDireksi: isDirector, isSuperAdmin: isSuper } = await getSessionRole(activeUser.id);
 
   if (!isDirector && !isSuper) {
     throw new Error("Hanya Direktur atau Manager yang dapat menolak transaksi.");
   }
 
-  let transactionNumber = "";
-  let transactionAmount = 0;
+  // 2. Fetch transaction by transactionId
+  const trxResults = await db
+    .select()
+    .from(transactions)
+    .where(eq(transactions.id, transactionId))
+    .limit(1);
+
+  if (trxResults.length === 0) {
+    throw new Error("Transaksi pengeluaran tidak ditemukan.");
+  }
+
+  const transaction = trxResults[0];
+
+  // 3. Type guard: must be expense type (Req 6.9)
+  if (transaction.type !== "expense") {
+    throw new Error("Transaksi pengeluaran tidak ditemukan.");
+  }
+
+  // 4. Terminal state guards (Req 6.3, 6.12)
+  if (transaction.approvalStatus === "approved") {
+    throw new Error("Transaksi yang sudah disetujui tidak dapat ditolak.");
+  }
+  if (transaction.approvalStatus === "rejected") {
+    throw new Error("Transaksi ini sudah pernah ditolak.");
+  }
+  if (transaction.approvalStatus === "not_required") {
+    throw new Error("Transaksi ini tidak memerlukan persetujuan.");
+  }
+
+  // 5. Only "pending" and "insufficient_balance" are allowed to proceed with rejection
+  if (transaction.approvalStatus !== "pending" && transaction.approvalStatus !== "insufficient_balance") {
+    throw new Error("Status transaksi tidak valid untuk penolakan.");
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // PHASE 1 — Rejection (inside db.transaction) (Req 6.6, 6.7, 6.8, 6.12)
+  // ──────────────────────────────────────────────────────────────────────────
+
+  let transactionNumber = transaction.transactionNumber;
+  let transactionAmount = transaction.amount;
 
   await db.transaction(async (tx) => {
-    // 1. Fetch transaction
-    const trxResults = await tx
-      .select()
-      .from(transactions)
-      .where(eq(transactions.id, transactionId))
-      .limit(1)
-      .all();
-
-    if (trxResults.length === 0) {
-      throw new Error("Transaksi pengeluaran tidak ditemukan");
-    }
-
-    const transaction = trxResults[0];
-    transactionNumber = transaction.transactionNumber;
-    transactionAmount = transaction.amount;
-    if (transaction.type !== "expense") {
-      throw new Error("Transaksi ini bukan pengeluaran");
-    }
-
-    // 2. Update status to rejected
+    // 6. Set approvalStatus = "rejected", approvalNotes = trimmedNotes, updatedAt
     await tx
       .update(transactions)
       .set({
         approvalStatus: "rejected",
-        approvalNotes: notes,
+        approvalNotes: trimmedNotes,
         updatedAt: new Date(),
       })
       .where(eq(transactions.id, transactionId))
       .run();
 
-    // 2b. Update corresponding auto-generated invoice status to cancelled
+    // 7. Cancel associated invoice with notes = "trxId:{transactionId}" → set status "cancelled"
     await tx
       .update(invoices)
       .set({
@@ -1484,42 +2048,64 @@ export async function rejectExpense(transactionId: string, notes: string) {
       .where(eq(invoices.notes, `trxId:${transactionId}`))
       .run();
 
-    // 3. Log approval action
+    // 8. Insert transactionApprovals record (Req 6.4)
     await tx.insert(transactionApprovals).values({
       id: crypto.randomUUID(),
       transactionId,
       approverId: activeUser.id,
       level: 1,
       status: "rejected",
-      notes,
+      notes: trimmedNotes,
       actedAt: new Date(),
     }).run();
+
+    // 9. Record the rejection in the finance activity timeline (Req 3.3, 3.9, 8.5).
+    // entityType "approval", entityId = transactions.id, toStatus "rejected",
+    // reason = the persisted trimmedNotes. Inside the same tx so a history-insert
+    // failure rolls back the whole rejection.
+    await recordFinanceActivity(tx, {
+      entityType: "approval",
+      entityId: transactionId,
+      action: "rejected",
+      actorId: activeUser.id,
+      fromStatus: transaction.approvalStatus,
+      toStatus: "rejected",
+      reason: trimmedNotes,
+    });
   });
 
-  // 4. Write Audit Log outside transaction
-  await writeAuditLog({
-    action: "reject",
-    module: "finance",
-    entityId: transactionId,
-    entityType: "transaction",
-    details: {
-      transactionNumber,
-      amount: transactionAmount,
-      reason: notes,
-    },
-  });
-
-  // Notify requester
-  const finalTrx = await db.select().from(transactions).where(eq(transactions.id, transactionId)).limit(1);
-  if (finalTrx.length > 0 && finalTrx[0].createdBy) {
-    await createNotification({
-      userId: finalTrx[0].createdBy,
-      type: "info",
-      title: "Pengajuan Kas Keluar Ditolak",
-      message: `Pengajuan kas keluar Anda senilai Rp ${finalTrx[0].amount.toLocaleString()} untuk "${finalTrx[0].description}" ditolak. Catatan: ${notes}`,
+  // Write Audit Log outside transaction
+  try {
+    await writeAuditLog({
+      action: "reject",
+      module: "finance",
       entityId: transactionId,
       entityType: "transaction",
+      details: {
+        transactionNumber,
+        amount: transactionAmount,
+        reason: trimmedNotes,
+      },
     });
+  } catch (err) {
+    console.warn("[rejectExpense] Audit log gagal ditulis:", err);
+  }
+
+  // Notify requester
+  try {
+    const finalTrx = await db.select().from(transactions).where(eq(transactions.id, transactionId)).limit(1);
+    if (finalTrx.length > 0 && finalTrx[0].createdBy) {
+      await createNotification({
+        userId: finalTrx[0].createdBy,
+        type: "info",
+        title: "Pengajuan Kas Keluar Ditolak",
+        message: `Pengajuan kas keluar Anda senilai Rp ${finalTrx[0].amount.toLocaleString()} untuk "${finalTrx[0].description}" ditolak. Catatan: ${trimmedNotes}`,
+        entityId: transactionId,
+        entityType: "transaction",
+      });
+    }
+  } catch (err) {
+    console.warn("[rejectExpense] Notifikasi gagal dikirim:", err);
   }
 
   revalidatePath("/finance/transactions");
@@ -1579,6 +2165,18 @@ export async function createBudget(data: unknown) {
   const activeUser = await requireAuth();
   const parsed = budgetSchema.parse(data);
 
+  // ── Req 8.1: Validate budget line allocations ──
+  for (const line of parsed.lines) {
+    if (line.allocatedAmount < 0.01) {
+      throw new Error("Setiap alokasi budget line harus bernilai minimal Rp 0,01.");
+    }
+  }
+
+  const totalAllocated = parsed.lines.reduce((sum, l) => sum + l.allocatedAmount, 0);
+  if (totalAllocated > parsed.totalAmount) {
+    throw new Error(`Total alokasi budget line (Rp ${totalAllocated.toLocaleString('id-ID')}) melebihi total anggaran (Rp ${parsed.totalAmount.toLocaleString('id-ID')}).`);
+  }
+
   const budgetId = crypto.randomUUID();
 
   await db.transaction(async (tx) => {
@@ -1605,19 +2203,84 @@ export async function createBudget(data: unknown) {
         remainingAmount: line.allocatedAmount,
       }).run();
     }
+
+    // 3. Finance activity timeline: record budget creation (Req 3.3, 3.4, 3.9, 9.4).
+    // Recorded in the same tx as the budget insert so a history failure rolls back the create.
+    await recordFinanceActivity(tx, {
+      entityType: "budget",
+      entityId: budgetId,
+      action: "created",
+      actorId: activeUser.id,
+      fromStatus: null,
+      toStatus: "draft",
+    });
   });
 
   // 3. Audit Log outside transaction
-  await writeAuditLog({
-    action: "create",
-    module: "finance",
-    entityId: budgetId,
-    entityType: "budget",
-    details: { name: parsed.name, totalAmount: parsed.totalAmount },
-  });
+  try {
+    await writeAuditLog({
+      action: "create",
+      module: "finance",
+      entityId: budgetId,
+      entityType: "budget",
+      details: { name: parsed.name, totalAmount: parsed.totalAmount },
+    });
+  } catch (err) {
+    console.warn("[createBudget] Audit log gagal ditulis:", err);
+  }
 
   revalidatePath("/finance/budgets");
   return { success: true, budgetId };
+}
+
+export async function activateBudget(budgetId: string) {
+  const activeUser = await requireAuth();
+
+  // 1. Fetch budget
+  const [budget] = await db.select().from(budgets).where(eq(budgets.id, budgetId)).limit(1);
+  if (!budget) throw new Error("Budget tidak ditemukan.");
+  if (budget.status === "active") throw new Error("Budget ini sudah aktif.");
+  if (budget.status === "closed") throw new Error("Budget yang sudah ditutup tidak dapat diaktifkan.");
+  if (budget.status !== "draft") throw new Error("Hanya budget berstatus draft yang dapat diaktifkan.");
+
+  // 2. Check for overlapping active budget for same project (Req 8.2)
+  // Overlap: startA < endB AND startB < endA (exclusive boundary)
+  const overlapping = await db.select({ id: budgets.id, name: budgets.name })
+    .from(budgets)
+    .where(and(
+      eq(budgets.projectId, budget.projectId),
+      eq(budgets.status, "active"),
+      // startA < endB
+      sql`${budgets.periodStart} < ${budget.periodEnd}`,
+      // startB < endA
+      sql`${budget.periodStart} < ${budgets.periodEnd}`
+    ))
+    .limit(1);
+
+  if (overlapping.length > 0) {
+    throw new Error(
+      `Tidak dapat mengaktifkan budget: sudah ada budget aktif "${overlapping[0].name}" untuk proyek ini pada periode yang overlap.`
+    );
+  }
+
+  // 3. Activate
+  await db.update(budgets).set({ status: "active" }).where(eq(budgets.id, budgetId));
+
+  // 4. Audit + activity
+  try {
+    await writeAuditLog({
+      action: "update",
+      module: "finance",
+      entityId: budgetId,
+      entityType: "budget",
+      details: { previousStatus: "draft", newStatus: "active" },
+    });
+  } catch (err) {
+    console.warn("[activateBudget] Audit log gagal ditulis:", err);
+  }
+
+  revalidatePath("/finance/budgets");
+  return { success: true };
 }
 
 // ==========================================
@@ -1831,20 +2494,128 @@ export async function deleteInvoice(invoiceId: string) {
   await db.delete(invoices).where(eq(invoices.id, invoiceId));
 
   // 4. Write audit log
-  await writeAuditLog({
-    action: "delete",
-    module: "finance",
-    entityId: invoiceId,
-    entityType: "invoice",
-    details: {
-      invoiceNumber: invoice.invoiceNumber,
-      amount: invoice.amount,
-      type: invoice.type,
-    },
-  });
+  try {
+    await writeAuditLog({
+      action: "delete",
+      module: "finance",
+      entityId: invoiceId,
+      entityType: "invoice",
+      details: {
+        invoiceNumber: invoice.invoiceNumber,
+        amount: invoice.amount,
+        type: invoice.type,
+      },
+    });
+  } catch (err) {
+    console.warn("[deleteInvoice] Audit log gagal ditulis:", err);
+  }
 
   revalidatePath("/finance");
   return { success: true };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Admin Backfill Utility — backfillInvoiceSchedule (Req 13.4)
+// Backfills missing invoice schedules on existing bookings (cash/installment).
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function backfillInvoiceSchedule({ dryRun = true }: { dryRun?: boolean } = {}) {
+  // 1. Role guard: Super Admin only
+  const activeUser = await requireAuth();
+  const { isSuperAdmin } = await getSessionRole(activeUser.id);
+  if (!isSuperAdmin) throw new Error("Backfill hanya dapat dijalankan oleh Super Admin.");
+
+  // 2. Find candidate bookings: active, not cancelled/rejected, paymentScheme cash/installment
+  const candidateBookings = await db.select({
+    id: bookings.id,
+    bookingFee: bookings.bookingFee,
+    dpAmount: bookings.dpAmount,
+    paymentScheme: bookings.paymentScheme,
+    termin: bookings.termin,
+    bookingDate: bookings.bookingDate,
+    projectId: bookings.projectId,
+    unitId: bookings.unitId,
+    customerId: bookings.customerId,
+    status: bookings.status,
+  }).from(bookings).where(
+    and(
+      inArray(bookings.paymentScheme, ["cash", "installment"]),
+      inArray(bookings.status, ["active", "akad", "completed"])
+    )
+  );
+
+  const report: Array<{ bookingId: string; action: "backfill" | "skip"; reason?: string; invoicesCreated?: number }> = [];
+
+  for (const booking of candidateBookings) {
+    // 3. Guard: unit not handover_complete
+    const [unit] = await db.select({ status: units.status, price: units.price }).from(units).where(eq(units.id, booking.unitId)).limit(1);
+    if (!unit || unit.status === "handover_complete") {
+      report.push({ bookingId: booking.id, action: "skip", reason: "Unit handover_complete atau tidak ditemukan" });
+      continue;
+    }
+
+    // 4. Guard: check if schedule already exists (has installment/cash_settlement invoices)
+    const existingSchedule = await db.select({ id: invoices.id }).from(invoices).where(
+      and(
+        eq(invoices.bookingId, booking.id),
+        inArray(invoices.scheduleKind, ["cash_settlement", "installment"])
+      )
+    ).limit(1);
+
+    if (existingSchedule.length > 0) {
+      report.push({ bookingId: booking.id, action: "skip", reason: "Schedule sudah ada" });
+      continue;
+    }
+
+    // 5. Guard: check if remainingAmount <= 0
+    const remainingForSchedule = unit.price - booking.bookingFee - booking.dpAmount;
+
+    if (remainingForSchedule <= 0) {
+      report.push({ bookingId: booking.id, action: "skip", reason: "remainingAmount <= 0, tidak perlu schedule" });
+      continue;
+    }
+
+    // 6. Compute schedule (will only produce the missing pelunasan/termin invoices)
+    if (dryRun) {
+      // Dry-run: report what WOULD be created without writing DB
+      try {
+        const components = computeInvoiceSchedule(
+          unit.price, booking.bookingFee, booking.dpAmount,
+          booking.paymentScheme as "cash" | "installment",
+          booking.termin || null, booking.bookingDate
+        );
+        const newComponents = components.filter(c => c.kind === "cash_settlement" || c.kind === "installment");
+        report.push({ bookingId: booking.id, action: "backfill", invoicesCreated: newComponents.length });
+      } catch (err) {
+        report.push({ bookingId: booking.id, action: "skip", reason: `Compute error: ${err instanceof Error ? err.message : String(err)}` });
+      }
+    } else {
+      // Real execution: use generateInvoiceSchedule which handles idempotent upsert
+      try {
+        await generateInvoiceSchedule(db, booking as any, { price: unit.price }, activeUser.id);
+        // Count how many new schedule invoices now exist
+        const afterSchedule = await db.select({ id: invoices.id }).from(invoices).where(
+          and(eq(invoices.bookingId, booking.id), inArray(invoices.scheduleKind, ["cash_settlement", "installment"]))
+        );
+        report.push({ bookingId: booking.id, action: "backfill", invoicesCreated: afterSchedule.length });
+
+        // Audit per booking
+        try {
+          await writeAuditLog({
+            action: "create",
+            module: "finance",
+            entityId: booking.id,
+            entityType: "backfill_schedule",
+            details: { bookingId: booking.id, invoicesCreated: afterSchedule.length, dryRun: false },
+          });
+        } catch (err) { console.warn("[backfill] Audit gagal:", err); }
+      } catch (err) {
+        report.push({ bookingId: booking.id, action: "skip", reason: `Execution error: ${err instanceof Error ? err.message : String(err)}` });
+      }
+    }
+  }
+
+  return { success: true, dryRun, report, totalCandidates: candidateBookings.length, backfilled: report.filter(r => r.action === "backfill").length, skipped: report.filter(r => r.action === "skip").length };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1897,6 +2668,9 @@ export async function getFinancePageData() {
         status: invoices.status,
         notes: invoices.notes,
         createdAt: invoices.createdAt,
+        scheduleKind: invoices.scheduleKind,
+        scheduleSequence: invoices.scheduleSequence,
+        scheduleLabel: invoices.scheduleLabel,
         projectName: projects.name,
         customerName: customers.name,
         unitCode: units.code,
@@ -1921,9 +2695,11 @@ export async function getFinancePageData() {
         paymentMethod: payments.paymentMethod,
         proofAttachmentId: payments.proofAttachmentId,
         proofFileUrl: attachments.fileUrl,
+        proofUploadedBy: attachments.uploadedBy,
         status: payments.status,
         verifiedBy: payments.verifiedBy,
         verifiedAt: payments.verifiedAt,
+        uploadedBy: payments.uploadedBy,
         createdAt: payments.createdAt,
         projectName: projects.name,
         customerName: customers.name,

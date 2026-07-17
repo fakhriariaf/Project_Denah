@@ -6,8 +6,8 @@ import {
   COLORS,
   formatCurrency,
   formatDate,
-  formatPaymentMethod,
 } from "./shared-styles";
+import { getPaymentMethodLabel, getInvoiceTypeLabel } from "@/lib/label-helpers";
 
 const receiptStyles = StyleSheet.create({
   receiptBox: {
@@ -65,7 +65,7 @@ export interface PaymentReceiptData {
 
 export function PaymentReceiptTemplate({ data }: { data: PaymentReceiptData }) {
   const description = data.invoice
-    ? `Pembayaran ${data.invoice.type === "booking_fee" ? "Booking Fee" : data.invoice.type === "dp" ? "DP" : data.invoice.type === "installment" ? "Cicilan" : "Lainnya"}${data.unit ? ` Unit ${data.unit.code}` : ""}`
+    ? `Pembayaran ${getInvoiceTypeLabel(data.invoice.type)}${data.unit ? ` Unit ${data.unit.code}` : ""}`
     : `Pembayaran${data.unit ? ` Unit ${data.unit.code}` : ""} - ${data.project.name}`;
 
   return (
@@ -128,7 +128,7 @@ export function PaymentReceiptTemplate({ data }: { data: PaymentReceiptData }) {
           )}
           <View style={sharedStyles.row}>
             <Text style={sharedStyles.label}>Metode Pembayaran</Text>
-            <Text style={sharedStyles.value}>: {formatPaymentMethod(data.paymentMethod)}</Text>
+            <Text style={sharedStyles.value}>: {getPaymentMethodLabel(data.paymentMethod)}</Text>
           </View>
           <View style={sharedStyles.row}>
             <Text style={sharedStyles.label}>Proyek</Text>

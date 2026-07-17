@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { FinanceDocLink } from "@/components/finance/finance-doc-link";
 import { Input } from "@/components/ui/input";
 import {
   Table,
@@ -110,7 +111,12 @@ export function ApprovalsTab({
                 pendingApprovals.map((exp) => (
                   <TableRow key={exp.id}>
                     <TableCell className="font-mono text-xs font-semibold text-foreground">
-                      {exp.transactionNumber}
+                      <FinanceDocLink
+                        href={`/finance/approvals/${exp.id}`}
+                        className="text-xs font-semibold"
+                      >
+                        {exp.transactionNumber}
+                      </FinanceDocLink>
                     </TableCell>
                     <TableCell className="font-mono text-xs text-muted-foreground">
                       {exp.invoiceNumber || "—"}

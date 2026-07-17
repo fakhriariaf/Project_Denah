@@ -19,6 +19,9 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+const primaryActionClass =
+  "btn-premium bg-[#4F6F52] text-white hover:bg-[#3D563F]";
+
 function FormShell({
   children,
   loading = false,
@@ -45,7 +48,7 @@ function FormShell({
         <Button
           type="submit"
           disabled={loading}
-          className="h-9 gap-2 rounded-xl bg-primary text-xs font-bold text-primary-foreground hover:bg-primary/90"
+          className={`${primaryActionClass} h-9 gap-2 rounded-xl text-xs font-bold`}
         >
           {loading && <Loader2 className="h-4 w-4 animate-spin" />}
           Simpan

@@ -99,7 +99,7 @@ export function UnitForm({
         ) : id ? (
           <Button variant="outline" size="sm" className="h-7 text-xs border-input rounded-lg hover:bg-muted/50">{t("unit_form.edit_btn")}</Button>
         ) : (
-          <Button className="bg-primary hover:bg-primary/90 text-primary-foreground active:scale-95 shadow-[0_4px_14px_rgba(79,111,82,0.25)] transition-all duration-300 h-9 rounded-xl font-bold text-xs px-4">
+          <Button className="btn-premium bg-[#4F6F52] hover:bg-[#3D563F] text-white active:scale-95 shadow-[0_4px_14px_rgba(79,111,82,0.25)] transition-all duration-300 h-9 rounded-xl font-bold text-xs px-4">
             <Plus className="mr-2 h-4 w-4" />
             {t("unit_form.add_btn")}
           </Button>
@@ -253,7 +253,7 @@ export function UnitForm({
               {watch("isReadyStock") && (
                 <div className="pl-7 mt-1 animate-in fade-in zoom-in-95 duration-200 space-y-3">
                   <div className="space-y-1.5">
-                    <Label htmlFor="readyStockSource" className="text-xs font-semibold text-foreground mb-1.5 block">Sumber Ready Stock <span className="text-destructive">*</span></Label>
+                    <Label htmlFor="readyStockSource" className="text-xs font-semibold text-foreground mb-1.5 block">Sumber Unit Siap Huni <span className="text-destructive">*</span></Label>
                     <Select 
                       value={watch("readyStockSource") ?? "construction_flow"} 
                       onValueChange={(val) => {
@@ -265,16 +265,16 @@ export function UnitForm({
                       required
                     >
                       <SelectTrigger className="w-full text-xs rounded-xl border border-input bg-card hover:bg-muted/50 focus:ring-2 focus:ring-ring/20 h-9 px-3 transition-premium">
-                        <SelectValue placeholder="Pilih Sumber Ready Stock">
+                        <SelectValue placeholder="Pilih Sumber Unit Siap Huni">
                           {watch("readyStockSource") === "construction_flow" && "Dibangun melalui ERP (Konstruksi Baru)"}
-                          {watch("readyStockSource") === "legacy_ready_stock" && "Existing Ready Stock (Legacy)"}
-                          {watch("readyStockSource") === "manual_ready_stock" && "Manual Ready Stock (Admin)"}
+                          {watch("readyStockSource") === "legacy_ready_stock" && "Existing Siap Huni (Legacy)"}
+                          {watch("readyStockSource") === "manual_ready_stock" && "Manual Siap Huni (Admin)"}
                         </SelectValue>
                       </SelectTrigger>
                       <SelectContent className="border-input rounded-xl bg-popover backdrop-blur-md">
                         <SelectItem value="construction_flow" className="text-xs">Dibangun melalui ERP (Konstruksi Baru)</SelectItem>
-                        <SelectItem value="legacy_ready_stock" className="text-xs">Existing Ready Stock (Legacy)</SelectItem>
-                        <SelectItem value="manual_ready_stock" className="text-xs">Manual Ready Stock (Admin)</SelectItem>
+                        <SelectItem value="legacy_ready_stock" className="text-xs">Existing Siap Huni (Legacy)</SelectItem>
+                        <SelectItem value="manual_ready_stock" className="text-xs">Manual Siap Huni (Admin)</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

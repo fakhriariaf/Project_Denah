@@ -30,6 +30,10 @@ export interface BookingRow {
   unitCode: string | null;
   projectName: string | null;
   marketingName: string | null;
+  marketingId: string;
+  projectId: string;
+  unitId: string;
+  customerId: string;
   cancellationReason?: string | null;
 }
 

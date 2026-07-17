@@ -13,6 +13,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FormLabel, FormFieldGroup } from "@/components/ui/form-primitives";
 
+const primaryActionClass =
+  "btn-premium bg-[#4F6F52] text-white hover:bg-[#3D563F]";
+
 const meta = {
   title: "Components/Dialog",
   component: Dialog,
@@ -25,7 +28,7 @@ type Story = StoryObj<typeof meta>;
 export const Default: Story = {
   render: () => (
     <Dialog>
-      <DialogTrigger render={<Button>Tambah Konsumen</Button>} />
+      <DialogTrigger render={<Button className={primaryActionClass}>Tambah Konsumen</Button>} />
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Tambah Konsumen</DialogTitle>
@@ -43,7 +46,7 @@ export const Default: Story = {
         </div>
         <DialogFooter>
           <DialogClose render={<Button variant="outline">Batal</Button>} />
-          <Button>Simpan</Button>
+          <Button className={primaryActionClass}>Simpan</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

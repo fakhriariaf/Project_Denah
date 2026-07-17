@@ -53,9 +53,11 @@ type PaymentListItem = {
   paymentMethod: "cash" | "transfer" | "giro" | "other";
   proofAttachmentId: string | null;
   proofFileUrl?: string | null;
-  status: "pending" | "verified" | "rejected";
+  proofUploadedBy?: string | null;
+  status: "pending" | "verified" | "rejected" | "voided";
   verifiedBy: string | null;
   verifiedAt: Date | null;
+  uploadedBy: string | null;
   createdAt: Date;
   projectName: string;
   customerName: string | null;
@@ -100,6 +102,9 @@ interface FinanceShellProps {
     projectName: string;
     customerName: string | null;
     unitCode: string | null;
+    scheduleKind: string | null;
+    scheduleSequence: number | null;
+    scheduleLabel: string | null;
   }>;
   payments: Array<{
     id: string;
@@ -113,9 +118,11 @@ interface FinanceShellProps {
     paymentMethod: "cash" | "transfer" | "giro" | "other";
     proofAttachmentId: string | null;
     proofFileUrl?: string | null;
-    status: "pending" | "verified" | "rejected";
+    proofUploadedBy?: string | null;
+    status: "pending" | "verified" | "rejected" | "voided";
     verifiedBy: string | null;
     verifiedAt: Date | null;
+    uploadedBy: string | null;
     createdAt: Date;
     projectName: string;
     customerName: string | null;
@@ -379,6 +386,15 @@ export default function FinanceShell({
 
   const handleVerifyPaymentSubmit = async (isApproved: boolean) => {
     if (!selectedPayment) return;
+    const isOwnUpload =
+      selectedPayment.uploadedBy === activeUser.id ||
+      (!selectedPayment.uploadedBy && selectedPayment.proofUploadedBy === activeUser.id);
+    if (!isSuperAdmin && isOwnUpload) {
+      const msg = "Anda tidak dapat memverifikasi bukti bayar yang Anda upload sendiri.";
+      setErrorMsg(msg);
+      toast.error(msg);
+      return;
+    }
     setIsSubmitting(true);
     setErrorMsg(null);
     try {
@@ -543,17 +559,19 @@ export default function FinanceShell({
         title={t("finance.title")}
         description={t("finance.subtitle")}
         actions={
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="grid w-full grid-cols-1 gap-3 sm:w-auto sm:grid-cols-[280px_280px]">
             {/* Project Selector filter */}
-            <div className="w-[200px]">
+            <div className="min-w-0">
               <Select 
                 value={selectedProjectId} 
                 onValueChange={(val) => setSelectedProjectId(val || "all")}
                 items={[{ label: t("finance.all_projects"), value: "all" }, ...projects.map(p => ({ label: p.name, value: p.id }))] }
               >
-                <SelectTrigger className="bg-white/90 backdrop-blur-sm border-border focus:ring-ring rounded-xl shadow-sm">
-                  <SelectValue placeholder={t("finance.all_projects")}>
-                    {selectedProjectId === "all" ? t("finance.all_projects") : projects.find(p => p.id === selectedProjectId)?.name}
+                <SelectTrigger className="!w-[280px] min-w-0 h-10 bg-white/90 backdrop-blur-sm border-border focus:ring-ring rounded-2xl shadow-sm px-4 text-sm">
+                  <SelectValue className="min-w-0 flex-1 truncate pr-2" placeholder={t("finance.all_projects")}>
+                    <span className="block truncate">
+                      {selectedProjectId === "all" ? t("finance.all_projects") : projects.find(p => p.id === selectedProjectId)?.name}
+                    </span>
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
@@ -565,13 +583,13 @@ export default function FinanceShell({
               </Select>
             </div>
 
-            <div className="relative w-[240px]">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground/70" />
+            <div className="relative min-w-0">
+              <Search className="absolute left-3 top-2 h-4 w-4 text-muted-foreground/70" />
               <Input
                 placeholder={t("finance.search_ph")}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 bg-white/90 backdrop-blur-sm border-border focus-visible:ring-ring rounded-xl shadow-sm"
+                className="!w-[280px] h-8 pl-9 pr-4 bg-white/90 backdrop-blur-sm border-border focus-visible:ring-ring rounded-2xl shadow-sm text-sm"
               />
             </div>
           </div>
@@ -678,6 +696,8 @@ export default function FinanceShell({
           setVerificationAccount={setVerificationAccount}
           verificationNotes={verificationNotes}
           setVerificationNotes={setVerificationNotes}
+          currentUserId={activeUser.id}
+          canSelfVerify={isSuperAdmin}
           errorMsg={errorMsg}
           isSubmitting={isSubmitting}
           isSuperAdmin={isSuperAdmin}

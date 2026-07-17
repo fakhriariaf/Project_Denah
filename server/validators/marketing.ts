@@ -8,13 +8,13 @@ const safeStringNullOpt = z.string().nullable().optional().transform(v => (v ? s
 
 export const leadSchema = z.object({
   customerId: safeStringNullOpt,
-  name: safeString.pipe(z.string().min(2, "val.marketing_name")),
+  name: safeString.pipe(z.string().min(2, "Nama minimal 2 karakter")),
   phone: safeString.pipe(
     z.string()
-      .min(8, "val.marketing_phone")
-      .regex(/^[0-9+\-\s()]{8,20}$/, "val.marketing_phone_format")
+      .min(8, "Nomor HP minimal 8 karakter")
+      .regex(/^[0-9+\-\s()]{8,20}$/, "Format nomor HP tidak valid. Gunakan angka (08xx atau +62xx)")
   ),
-  source: safeString.pipe(z.string().min(1, "val.marketing_source")),
+  source: safeString.pipe(z.string().min(1, "Sumber lead wajib dipilih")),
   interestedProjectId: safeStringNullOpt,
   interestedUnitId: safeStringNullOpt,
   status: z.enum(["new", "contacted", "follow_up", "converted", "lost"]).default("new"),
@@ -28,7 +28,7 @@ export const followupSchema = z.object({
   leadId: safeStringNullOpt,
   followupDate: z.coerce.date(),
   method: z.enum(["call", "whatsapp", "meeting", "email", "site_visit"]),
-  result: safeString.pipe(z.string().min(3, "val.followup_result")),
+  result: safeString.pipe(z.string().min(3, "Hasil follow-up minimal 3 karakter")),
   nextFollowupAt: z.preprocess(
     (val) => {
       if (!val) return null;
@@ -43,10 +43,10 @@ export const followupSchema = z.object({
 export const bookingSchema = z.object({
   id: z.string().optional(),
   bookingNumber: z.string().optional(),
-  projectId: z.string().min(1, "val.booking_project"),
-  unitId: z.string().min(1, "val.booking_unit"),
-  customerId: z.string().min(1, "val.booking_customer"),
-  marketingId: z.string().min(1, "val.booking_marketing"),
+  projectId: z.string().min(1, "Project wajib dipilih"),
+  unitId: z.string().min(1, "Unit wajib dipilih"),
+  customerId: z.string().min(1, "Customer wajib dipilih"),
+  marketingId: z.string().min(1, "Marketing PIC wajib dipilih"),
   bookingDate: z.coerce.date(),
   bookingFee: z.coerce.number().gt(0, "Booking fee harus lebih besar dari 0"),
   dpAmount: z.coerce.number().gt(0, "Uang muka (DP) harus lebih besar dari 0"),
@@ -55,6 +55,22 @@ export const bookingSchema = z.object({
   nik: z.string().optional(),
   isLead: z.boolean().optional(),
   termin: z.coerce.number().optional().nullable(),
+});
+
+/**
+ * Schema untuk edit booking.
+ *
+ * Project, kavling, dan konsumen adalah data terkunci setelah booking dibuat.
+ * Field tersebut diambil dari record booking yang sudah ada di server, bukan
+ * dari payload client, supaya edit tidak gagal ketika UI hanya menampilkan
+ * nama/kode tetapi tidak mengirim ID terkunci.
+ */
+export const bookingUpdateSchema = bookingSchema.omit({
+  projectId: true,
+  unitId: true,
+  customerId: true,
+  nik: true,
+  isLead: true,
 });
 
 export const kprProcessSchema = z.object({
@@ -103,7 +119,7 @@ export type KprUpdateInput = z.infer<typeof kprUpdateSchema>;
 
 export const bankPartnerSchema = z.object({
   id: z.string().optional(),
-  name: z.string().min(2, "val.bank_name"),
+  name: z.string().min(2, "Nama bank minimal 2 karakter"),
   contactPerson: z.string().nullable().optional(),
   phone: z.string().nullable().optional(),
   status: z.enum(["active", "inactive"]).default("active"),
@@ -112,7 +128,7 @@ export const bankPartnerSchema = z.object({
 export const bankSubmissionSchema = z.object({
   id: z.string().optional(),
   kprProcessId: z.string().min(1),
-  bankPartnerId: z.string().min(1, "val.bank_partner"),
+  bankPartnerId: z.string().min(1, "Bank partner wajib dipilih"),
   submissionDate: z.coerce.date(),
   status: z.enum(["submitted", "verified", "offering", "approved", "rejected"]),
   plafondAmount: z.number().nullable().optional(),

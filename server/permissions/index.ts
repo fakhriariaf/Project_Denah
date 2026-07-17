@@ -6,6 +6,7 @@ import { user as userTable } from "@/db/schema/auth";
 import { roles, permissions as permissionsTable, rolePermissions } from "@/db/schema/access";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { isValidCallbackUrl } from "@/lib/auth-utils";
 
 export async function getCurrentUser() {
   const session = await auth.api.getSession({
@@ -17,13 +18,70 @@ export async function getCurrentUser() {
 export async function requireAuth() {
   const user = await getCurrentUser();
   if (!user) {
-    redirect("/login");
+    // Session invalid/expired — redirect with reason and callbackUrl
+    const callbackPath = await extractCurrentPath();
+    const callbackParam = isValidCallbackUrl(callbackPath)
+      ? `&callbackUrl=${encodeURIComponent(callbackPath)}`
+      : "&callbackUrl=%2Fdashboard";
+    redirect(`/login?reason=session-expired${callbackParam}`);
   }
   const details = await getUserRoleDetails(user.id);
   if (details && details.status !== "active") {
     redirect("/login?error=inactive");
   }
   return user;
+}
+
+/**
+ * Extracts the current request path from available headers.
+ * Tries common Next.js headers in priority order, falls back to `/dashboard`.
+ */
+async function extractCurrentPath(): Promise<string> {
+  try {
+    const hdrs = await headers();
+    // Try headers that carry the current request URL/path
+    const candidates = [
+      hdrs.get("x-current-path"),
+      hdrs.get("x-url"),
+      hdrs.get("x-invoke-path"),
+      hdrs.get("next-url"),
+      hdrs.get("referer"),
+    ];
+
+    for (const candidate of candidates) {
+      if (!candidate) continue;
+      // Extract pathname (+ query) from the candidate
+      const path = extractPathFromHeader(candidate);
+      if (path && isValidCallbackUrl(path)) {
+        return path;
+      }
+    }
+  } catch {
+    // headers() may throw in some edge cases; fallback gracefully
+  }
+  return "/dashboard";
+}
+
+/**
+ * Extracts a pathname (with query string) from a header value.
+ * Handles both full URLs (from referer) and path-only values.
+ */
+function extractPathFromHeader(value: string): string | null {
+  if (!value) return null;
+
+  // If it starts with `/`, it's already a path
+  if (value.startsWith("/")) {
+    return value;
+  }
+
+  // Try parsing as full URL to extract pathname + search
+  try {
+    const url = new URL(value);
+    const path = url.pathname + url.search + url.hash;
+    return path || null;
+  } catch {
+    return null;
+  }
 }
 
 // memoize role details per request cycle to avoid multiple DB roundtrips in a single request
@@ -122,6 +180,31 @@ export async function requirePermission(permissionName: string) {
     redirect("/unauthorized");
   }
   return user;
+}
+
+/**
+ * Role-set yang diizinkan mengakses modul Finance (Req 11.1, 11.2).
+ * Sumber tunggal kebenaran agar layout & page memakai set identik (7 role).
+ * Super Admin selalu termasuk. Gunakan nama role persis seperti di getSessionRole.
+ */
+export const FINANCE_MODULE_ROLES = [
+  "Super Admin",
+  "Admin Keuangan",
+  "Direksi / Manager",
+  "Admin Kantor",
+  "Marketing",
+  "Marketing Manager",
+  "Pengawas Lapangan",
+] as const;
+
+/**
+ * Helper bersama untuk cek akses modul Finance (Req 11.1).
+ * Mengembalikan true bila `sessionRole` termasuk dalam FINANCE_MODULE_ROLES.
+ * Dipakai oleh app/finance/layout.tsx dan app/finance/page.tsx (Task 14.2).
+ */
+export function canAccessFinanceModule(sessionRole: string | null | undefined): boolean {
+  if (!sessionRole) return false;
+  return (FINANCE_MODULE_ROLES as readonly string[]).includes(sessionRole);
 }
 
 export async function getSessionRole(userId: string) {

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { toast } from "sonner";
 import {
@@ -17,16 +17,25 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { useI18n } from "@/lib/i18n";
 import { LoginBranding } from "./_components/login-branding";
+import { SessionExpiredDialog } from "./_components/session-expired-dialog";
+import { getSafeRedirectUrl } from "@/lib/auth-utils";
 
-export default function LoginPage() {
+function LoginPageContent() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { t } = useI18n();
   const year = new Date().getFullYear();
+
+  // Session expired dialog: show only when reason=session-expired
+  const reason = searchParams.get("reason");
+  const [sessionExpiredOpen, setSessionExpiredOpen] = useState(
+    reason === "session-expired"
+  );
 
   const handleLogin = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -60,7 +69,7 @@ export default function LoginPage() {
         return;
       }
 
-      window.location.href = "/dashboard";
+      window.location.href = getSafeRedirectUrl(searchParams.get("callbackUrl"));
     } catch {
       setError(t("auth.login_error"));
     } finally {
@@ -74,6 +83,12 @@ export default function LoginPage() {
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-background text-foreground lg:h-[100dvh] lg:min-h-0">
+      {/* Session expired informational dialog — non-blocking, Sage Green styling */}
+      <SessionExpiredDialog
+        open={sessionExpiredOpen}
+        onClose={() => setSessionExpiredOpen(false)}
+      />
+
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 hidden lg:block">
         <Image
           src="/auth/login-background.png"
@@ -206,5 +221,13 @@ export default function LoginPage() {
         </section>
       </div>
     </main>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginPageContent />
+    </Suspense>
   );
 }

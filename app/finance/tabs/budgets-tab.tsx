@@ -37,6 +37,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Plus, FolderOpen } from "lucide-react";
+import { FinanceDocLink } from "@/components/finance/finance-doc-link";
 
 interface BudgetsTabProps {
   projects: Array<{ id: string; name: string; code: string }>;
@@ -106,7 +107,7 @@ export function BudgetsTab({
             </div>
             <Dialog open={budgetOpen} onOpenChange={setBudgetOpen}>
               <DialogTrigger nativeButton={true} render={
-                <Button className="bg-[#8FAF9A] hover:bg-primary text-white flex items-center gap-1.5 text-xs">
+                <Button className="btn-premium bg-[#4F6F52] hover:bg-[#3D563F] text-white flex items-center gap-1.5 text-xs">
                   <Plus className="h-3.5 w-3.5" /> {t("finance.budget_btn_new")}
                 </Button>
               } />
@@ -281,7 +282,12 @@ export function BudgetsTab({
                   filteredBudgets.map((b) => (
                     <TableRow key={b.id}>
                       <TableCell className="text-xs font-semibold text-foreground">
-                        {b.name}
+                        <FinanceDocLink
+                          href={`/finance/budgets/${b.id}`}
+                          className="font-sans font-semibold"
+                        >
+                          {b.name}
+                        </FinanceDocLink>
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
                         {b.projectName}

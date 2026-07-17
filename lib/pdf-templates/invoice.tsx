@@ -6,8 +6,8 @@ import {
   COLORS,
   formatCurrency,
   formatDate,
-  formatInvoiceType,
 } from "./shared-styles";
+import { getInvoiceStatusLabel, getInvoiceTypeLabel } from "@/lib/label-helpers";
 
 const invoiceStyles = StyleSheet.create({
   tableHeader: {
@@ -91,13 +91,6 @@ export interface InvoiceData {
 }
 
 export function InvoiceTemplate({ data }: { data: InvoiceData }) {
-  const statusLabel: Record<string, string> = {
-    unpaid: "BELUM LUNAS",
-    partial: "SEBAGIAN",
-    paid: "LUNAS",
-    cancelled: "DIBATALKAN",
-  };
-
   return (
     <Document>
       <Page size="A4" style={sharedStyles.page}>
@@ -166,7 +159,7 @@ export function InvoiceTemplate({ data }: { data: InvoiceData }) {
 
         <View style={invoiceStyles.tableRow}>
           <Text style={invoiceStyles.colNo}>1</Text>
-          <Text style={invoiceStyles.colType}>{formatInvoiceType(data.type)}</Text>
+          <Text style={invoiceStyles.colType}>{getInvoiceTypeLabel(data.type)}</Text>
           <Text style={invoiceStyles.colDescription}>
             {data.unit ? `Unit ${data.unit.code} - ${data.project.name}` : data.project.name}
             {data.notes ? ` (${data.notes})` : ""}
@@ -189,7 +182,7 @@ export function InvoiceTemplate({ data }: { data: InvoiceData }) {
             fontFamily: "Helvetica-Bold",
             color: data.status === "paid" ? "#166534" : data.status === "cancelled" ? "#991b1b" : "#854d0e",
           }}>
-            Status: {statusLabel[data.status] || data.status.toUpperCase()}
+            Status: {getInvoiceStatusLabel(data.status)}
           </Text>
         </View>
 
