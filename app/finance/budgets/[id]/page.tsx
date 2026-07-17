@@ -1,7 +1,7 @@
 import { db } from "@/db";
 import { transactions, budgets, budgetLines } from "@/db/schema/finance";
 import { financeCategories, projects } from "@/db/schema/master";
-import { and, asc, count, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { requireAuth, getSessionRole } from "@/server/permissions";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
@@ -150,13 +150,53 @@ export default async function BudgetDetailPage({
     .where(eq(budgetLines.budgetId, id))
     .orderBy(asc(financeCategories.name));
 
-  // Overall totals from the allocation lines (Req 9.1) via the pure summary
-  // helper. tabular-nums applied in cells.
-  const { totalAllocated, totalUsed, totalRemaining } = computeBudgetTotals(lines);
-
   // Category ids that this budget allocates — related transactions are matched
   // against these plus the budget's project (Req 9.2).
   const categoryIds = lines.map((l) => l.categoryId).filter((c): c is string => Boolean(c));
+
+  const periodEndInclusive = new Date(budget.periodEnd);
+  periodEndInclusive.setHours(23, 59, 59, 999);
+
+  const relatedTransactionWhereClause =
+    categoryIds.length > 0
+      ? and(
+          eq(transactions.projectId, budget.projectId),
+          inArray(transactions.categoryId, categoryIds),
+          eq(transactions.type, "expense"),
+          eq(transactions.approvalStatus, "approved"),
+          gte(transactions.transactionDate, budget.periodStart),
+          lte(transactions.transactionDate, periodEndInclusive),
+        )
+      : undefined;
+
+  const usageRows = relatedTransactionWhereClause
+    ? await db
+        .select({
+          categoryId: transactions.categoryId,
+          usedAmount: sql<number>`coalesce(sum(${transactions.amount}), 0)`,
+        })
+        .from(transactions)
+        .where(relatedTransactionWhereClause)
+        .groupBy(transactions.categoryId)
+    : [];
+
+  const liveUsageByCategory = new Map(
+    usageRows.map((row) => [row.categoryId, Number(row.usedAmount) || 0]),
+  );
+
+  const displayLines = lines.map((line) => {
+    const usedAmount = liveUsageByCategory.get(line.categoryId) ?? 0;
+
+    return {
+      ...line,
+      usedAmount,
+      remainingAmount: line.allocatedAmount - usedAmount,
+    };
+  });
+
+  // Overall totals from the display allocation lines (Req 9.1) via the pure
+  // summary helper. tabular-nums applied in cells.
+  const { totalAllocated, totalUsed, totalRemaining } = computeBudgetTotals(displayLines);
 
   // --- Pagination for related transactions (Req 9.2) ---
   const requestedPage = Number.parseInt(pageParam ?? "1", 10);
@@ -173,16 +213,11 @@ export default async function BudgetDetailPage({
   }> = [];
   let totalTransactions = 0;
 
-  if (categoryIds.length > 0) {
-    const whereClause = and(
-      eq(transactions.projectId, budget.projectId),
-      inArray(transactions.categoryId, categoryIds),
-    );
-
+  if (relatedTransactionWhereClause) {
     const [countRow] = await db
       .select({ totalCount: count() })
       .from(transactions)
-      .where(whereClause);
+      .where(relatedTransactionWhereClause);
     totalTransactions = countRow?.totalCount ?? 0;
 
     relatedTransactions = await db
@@ -197,7 +232,7 @@ export default async function BudgetDetailPage({
       })
       .from(transactions)
       .leftJoin(financeCategories, eq(transactions.categoryId, financeCategories.id))
-      .where(whereClause)
+      .where(relatedTransactionWhereClause)
       .orderBy(desc(transactions.transactionDate))
       .limit(PAGE_SIZE)
       .offset((safePage - 1) * PAGE_SIZE);
@@ -312,7 +347,7 @@ export default async function BudgetDetailPage({
                   </tr>
                 </thead>
                 <tbody>
-                  {lines.map((line) => (
+                  {displayLines.map((line) => (
                     <tr key={line.id} className="border-b border-border/60">
                       <td className="py-2 pr-4 text-foreground">{line.categoryName ?? EM_DASH}</td>
                       <td className="py-2 px-4 text-right font-mono tabular-nums text-foreground">

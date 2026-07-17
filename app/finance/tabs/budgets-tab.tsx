@@ -111,7 +111,7 @@ export function BudgetsTab({
                   <Plus className="h-3.5 w-3.5" /> {t("finance.budget_btn_new")}
                 </Button>
               } />
-              <DialogContent className="bg-card">
+              <DialogContent className="bg-card sm:max-w-lg">
                 <DialogHeader>
                   <DialogTitle>{t("finance.budget_form_title")}</DialogTitle>
                   <DialogDescription>{t("finance.budget_form_desc")}</DialogDescription>
@@ -129,8 +129,8 @@ export function BudgetsTab({
                       onValueChange={(val) => setBudgetForm(f => ({ ...f, projectId: val || "" }))}
                       items={projects.map(p => ({ label: p.name, value: p.id }))}
                     >
-                      <SelectTrigger className="bg-card border-input">
-                        <SelectValue placeholder="Pilih Perumahan">
+                      <SelectTrigger className="w-full min-w-0 bg-card border-input">
+                        <SelectValue placeholder="Pilih Perumahan" className="block max-w-full truncate text-left">
                           {budgetForm.projectId ? projects.find(p => p.id === budgetForm.projectId)?.name : undefined}
                         </SelectValue>
                       </SelectTrigger>
@@ -176,7 +176,7 @@ export function BudgetsTab({
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3">
                     <div className="space-y-1">
                       <label className="text-xs font-semibold text-foreground">{t("finance.budget_lbl_category")}</label>
                       <Select
@@ -184,14 +184,16 @@ export function BudgetsTab({
                         onValueChange={(val) => setBudgetForm(f => ({ ...f, categoryId: val || "" }))}
                         items={categories.filter(c => c.type === "expense").map(c => ({ label: c.name, value: c.id }))}
                       >
-                        <SelectTrigger className="bg-card border-input">
-                          <SelectValue placeholder="Pilih Kategori">
+                        <SelectTrigger className="w-full min-w-0 bg-card border-input">
+                          <SelectValue placeholder="Pilih Kategori" className="block max-w-full truncate text-left">
                             {budgetForm.categoryId ? categories.find(c => c.id === budgetForm.categoryId)?.name : undefined}
                           </SelectValue>
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent className="min-w-[min(420px,calc(100vw-2rem))] max-w-[calc(100vw-2rem)]">
                           {categories.filter(c => c.type === "expense").map(c => (
-                            <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                            <SelectItem key={c.id} value={c.id} className="text-sm">
+                              <span className="block max-w-[360px] truncate">{c.name}</span>
+                            </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>

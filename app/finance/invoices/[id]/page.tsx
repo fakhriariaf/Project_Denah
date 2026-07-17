@@ -35,6 +35,8 @@ import {
   CreditCard,
   Hash,
   Receipt,
+  ClipboardCheck,
+  History,
 } from "lucide-react";
 import { formatRupiah, formatDate } from "@/lib/format-utils";
 import {
@@ -152,7 +154,12 @@ export default async function InvoiceDetailPage({
   const { totalPaid, remainingBalance } = computeInvoicePaymentSummary(
     invoice.amount,
     paymentsList,
+    { invoiceStatus: invoice.status },
   );
+  const relatedApprovalId = invoice.notes?.startsWith("trxId:")
+    ? invoice.notes.slice("trxId:".length)
+    : null;
+  const isExpenseApprovalInvoice = Boolean(relatedApprovalId);
 
   return (
     <div className="space-y-6 p-6">
@@ -347,10 +354,31 @@ export default async function InvoiceDetailPage({
         </CardHeader>
         <CardContent>
           {paymentsList.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <CreditCard className="h-8 w-8 mx-auto mb-2 opacity-40" />
-              <p className="text-sm">Belum ada pembayaran tercatat.</p>
-            </div>
+            isExpenseApprovalInvoice ? (
+              <div className="rounded-md border border-dashed border-border bg-[#F7F8F3] px-4 py-8 text-center">
+                <ClipboardCheck className="h-8 w-8 mx-auto mb-3 text-primary/50" />
+                <p className="text-sm font-semibold text-foreground">
+                  Invoice ini diselesaikan melalui persetujuan kas keluar.
+                </p>
+                <p className="mx-auto mt-1 max-w-xl text-sm text-muted-foreground">
+                  Tidak ada pembayaran customer yang dicatat pada invoice ini. Status lunas
+                  mengikuti pengajuan kas keluar terkait.
+                </p>
+                {relatedApprovalId && (
+                  <Link href={`/finance/approvals/${relatedApprovalId}`}>
+                    <Button variant="outline" size="sm" className="mt-4 gap-2">
+                      <ClipboardCheck className="h-4 w-4" />
+                      Lihat Pengajuan Kas Keluar
+                    </Button>
+                  </Link>
+                )}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <CreditCard className="h-8 w-8 mx-auto mb-2 opacity-40" />
+                <p className="text-sm">Belum ada pembayaran customer untuk invoice ini.</p>
+              </div>
+            )
           ) : (
             <div className="overflow-x-auto">
               <Table>
@@ -409,7 +437,32 @@ export default async function InvoiceDetailPage({
       </Card>
 
       {/* Timeline */}
-      <FinanceTimeline entityType="invoice" entityId={id} />
+      <FinanceTimeline
+        entityType="invoice"
+        entityId={id}
+        emptyState={
+          isExpenseApprovalInvoice ? (
+            <div className="rounded-md border border-dashed border-border bg-[#F7F8F3] px-4 py-8 text-center">
+              <History className="h-8 w-8 mx-auto mb-3 text-primary/50" />
+              <p className="text-sm font-semibold text-foreground">
+                Aktivitas utama tersedia di pengajuan kas keluar.
+              </p>
+              <p className="mx-auto mt-1 max-w-xl text-sm text-muted-foreground">
+                Invoice kas keluar mengikuti timeline approval transaksi terkait, bukan
+                timeline pembayaran customer.
+              </p>
+              {relatedApprovalId && (
+                <Link href={`/finance/approvals/${relatedApprovalId}`}>
+                  <Button variant="outline" size="sm" className="mt-4 gap-2">
+                    <ClipboardCheck className="h-4 w-4" />
+                    Lihat Timeline Pengajuan
+                  </Button>
+                </Link>
+              )}
+            </div>
+          ) : undefined
+        }
+      />
     </div>
   );
 }

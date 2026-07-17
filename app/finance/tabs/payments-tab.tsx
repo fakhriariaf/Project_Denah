@@ -229,17 +229,29 @@ export function PaymentsTab({
                     }}
                     items={initialInvoices.filter(i => i.status !== "paid").map(i => ({ label: `${i.invoiceNumber} - ${i.customerName} (Rp ${i.amount.toLocaleString()})`, value: i.id }))}
                   >
-                    <SelectTrigger className="bg-muted/30 border-border rounded-xl focus:ring-ring font-semibold text-xs h-9.5 text-foreground">
-                      <SelectValue placeholder={t("finance.verify_lbl_deposit_account")}>
+                    <SelectTrigger className="w-full min-w-0 bg-muted/30 border-border rounded-xl focus:ring-ring font-semibold text-xs h-9.5 text-foreground">
+                      <SelectValue
+                        placeholder={t("finance.verify_lbl_deposit_account")}
+                        className="block max-w-full truncate text-left"
+                      >
                         {paymentForm.invoiceId ? (() => {
                           const inv = initialInvoices.find(i => i.id === paymentForm.invoiceId);
                           return inv ? `${inv.invoiceNumber} - ${inv.customerName} (Rp ${inv.amount.toLocaleString("id-ID")})` : undefined;
                         })() : undefined}
                       </SelectValue>
                     </SelectTrigger>
-                    <SelectContent className="border-border rounded-xl">
+                    <SelectContent className="min-w-[min(520px,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] border-border rounded-xl">
                       {initialInvoices.filter(i => i.status !== "paid").map(i => (
-                        <SelectItem key={i.id} value={i.id} className="text-xs font-medium">{i.invoiceNumber} - {i.customerName} (Rp {i.amount.toLocaleString()})</SelectItem>
+                        <SelectItem key={i.id} value={i.id} className="text-xs font-medium">
+                          <span className="flex min-w-0 flex-col gap-0.5">
+                            <span className="font-mono font-bold text-foreground">
+                              {i.invoiceNumber}
+                            </span>
+                            <span className="truncate text-muted-foreground">
+                              {i.customerName ?? "Tanpa nama"} • Rp {i.amount.toLocaleString("id-ID")}
+                            </span>
+                          </span>
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>

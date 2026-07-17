@@ -6,6 +6,7 @@ import {
   getPaymentMethodLabel,
   getInvoiceStatusLabel,
 } from "@/lib/label-helpers";
+import { computeInvoicePaymentSummary } from "@/lib/finance-invoice-summary";
 
 interface InvoiceData {
   id: string;
@@ -77,8 +78,10 @@ export function InvoicePrintModal({ invoice, payments, companyName = "PT Denah P
   const verifiedPayments = payments.filter(
     (p) => p.invoiceId === invoice.id && p.status === "verified"
   );
-  const paidAmount = verifiedPayments.reduce((s, p) => s + p.amount, 0);
-  const outstanding = Math.max(0, invoice.amount - paidAmount);
+  const { totalPaid: paidAmount, remainingBalance: outstanding } =
+    computeInvoicePaymentSummary(invoice.amount, verifiedPayments, {
+      invoiceStatus: invoice.status,
+    });
 
   const handlePrint = () => window.print();
 
@@ -87,11 +90,39 @@ export function InvoicePrintModal({ invoice, payments, companyName = "PT Denah P
       {/* Print-only CSS injected into head via style tag */}
       <style>{`
         @media print {
-          body > *:not(#invoice-print-root) { display: none !important; }
-          #invoice-print-root { display: block !important; position: fixed !important; inset: 0 !important; z-index: 99999 !important; background: white !important; overflow: visible !important; }
-          .invoice-modal-overlay { background: white !important; position: static !important; }
+          html, body { background: white !important; margin: 0 !important; padding: 0 !important; }
+          body * { visibility: hidden !important; }
+          #invoice-print-root,
+          #invoice-print-root * { visibility: visible !important; }
+          #invoice-print-root {
+            display: block !important;
+            position: absolute !important;
+            inset: 0 auto auto 0 !important;
+            width: 100% !important;
+            min-height: auto !important;
+            z-index: 99999 !important;
+            background: white !important;
+            overflow: visible !important;
+            padding: 0 !important;
+          }
+          .invoice-modal-overlay {
+            background: white !important;
+            backdrop-filter: none !important;
+            position: static !important;
+            display: block !important;
+            padding: 0 !important;
+            overflow: visible !important;
+          }
           .invoice-no-print { display: none !important; }
-          .invoice-card { box-shadow: none !important; margin: 0 !important; border-radius: 0 !important; border: none !important; max-width: 100% !important; }
+          .invoice-card {
+            box-shadow: none !important;
+            margin: 0 !important;
+            border-radius: 0 !important;
+            border: none !important;
+            max-width: 100% !important;
+            width: 100% !important;
+            overflow: visible !important;
+          }
           @page { margin: 10mm; size: A4 portrait; }
         }
       `}</style>

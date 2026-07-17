@@ -243,11 +243,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                         <item.icon className={`h-4 w-4 shrink-0 transition-transform duration-200 ${active ? "text-secondary-foreground" : "group-hover:scale-110"}`} />
                         <span suppressHydrationWarning>{t(item.tKey as any) || item.fallback}</span>
                         {item.url === "/dashboard/notifications" && unreadCount > 0 && (
-                          <span className="ml-auto flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-success text-[9px] font-bold text-white font-mono tabular-nums animate-pulse shadow-sm shadow-primary/20">
+                          <span className="ml-auto inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary/70 px-1.5 text-[10px] font-bold leading-none text-primary-foreground font-mono tabular-nums shadow-sm">
                             {unreadCount}
                           </span>
                         )}
-                        {active && item.url !== "/dashboard" && (
+                        {active && item.url !== "/dashboard" && item.url !== "/dashboard/notifications" && (
                           <span className="ml-auto h-1.5 w-1.5 rounded-full bg-secondary-foreground" />
                         )}
                       </SidebarMenuButton>

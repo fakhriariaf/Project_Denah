@@ -1,5 +1,6 @@
 import { and, desc, eq } from "drizzle-orm";
 import { History } from "lucide-react";
+import type { ReactNode } from "react";
 import { db } from "@/db";
 import { financeActivityHistory } from "@/db/schema/finance";
 import { auditLogs } from "@/db/schema/system";
@@ -50,6 +51,10 @@ export interface FinanceTimelineProps {
   entityId: string;
   /** Optional card title override. */
   title?: string;
+  /** Optional card description override. */
+  description?: string;
+  /** Optional empty-state content override for context-specific entities. */
+  emptyState?: ReactNode;
   className?: string;
 }
 
@@ -129,6 +134,8 @@ export async function FinanceTimeline({
   entityType,
   entityId,
   title = "Timeline Aktivitas",
+  description = "Riwayat aktivitas finance dari terbaru ke terlama",
+  emptyState,
   className,
 }: FinanceTimelineProps) {
   const rows = await db
@@ -178,15 +185,17 @@ export async function FinanceTimeline({
           {title}
         </CardTitle>
         <CardDescription className="text-muted-foreground">
-          Riwayat aktivitas finance dari terbaru ke terlama
+          {description}
         </CardDescription>
       </CardHeader>
       <CardContent>
         {isEmpty ? (
-          <div className="rounded-md border border-dashed border-border bg-[#F7F8F3] px-4 py-8 text-center">
-            <History className="mx-auto mb-2 h-8 w-8 text-muted-foreground/40" />
-            <p className="text-sm text-muted-foreground">{EMPTY_MESSAGE}</p>
-          </div>
+          emptyState ?? (
+            <div className="rounded-md border border-dashed border-border bg-[#F7F8F3] px-4 py-8 text-center">
+              <History className="mx-auto mb-2 h-8 w-8 text-muted-foreground/40" />
+              <p className="text-sm text-muted-foreground">{EMPTY_MESSAGE}</p>
+            </div>
+          )
         ) : (
           <ol className="relative space-y-6 border-l border-border pl-6">
             {entries.map((entry) => (

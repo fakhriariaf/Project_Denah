@@ -349,18 +349,18 @@ export function NotificationDropdown() {
         />
         {unreadCount > 0 && (
           <span
-            className={`absolute top-1 right-1 flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-[9px] font-bold text-white ring-2 ring-background font-mono tabular-nums ${
+            className={`absolute top-0.5 right-0.5 flex h-4.5 min-w-4.5 shrink-0 items-center justify-center rounded-full bg-emerald-600 px-1 text-[9px] leading-none font-bold text-white ring-2 ring-background font-mono tabular-nums ${
               bellPulse ? "animate-ping" : "animate-pulse"
             }`}
           >
-            {unreadCount}
+            {unreadCount > 99 ? "99+" : unreadCount}
           </span>
         )}
       </button>
 
       {/* Dropdown Panel */}
       {isOpen && (
-        <div className="absolute right-0 mt-3 w-85 sm:w-98 z-50 rounded-2xl border border-[#D6DED2] bg-white/95 backdrop-blur-md text-card-foreground shadow-sage-lg p-0 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+        <div className="absolute right-0 mt-3 w-[min(21.25rem,calc(100vw-1.5rem))] sm:w-98 z-50 rounded-2xl border border-[#D6DED2] bg-white/95 backdrop-blur-md text-card-foreground shadow-sage-lg p-0 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
           
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 bg-[#F7F8F3]/80 border-b border-[#D6DED2]">
@@ -450,15 +450,15 @@ export function NotificationDropdown() {
                 >
                   {renderIcon(item.type, item.entityType)}
                   
-                  <div className="flex-1 min-w-0 pr-4">
+                  <div className={`flex-1 min-w-0 ${!item.isRead ? "pr-7" : ""}`}>
                     <p className={`text-xs font-semibold truncate text-[#243028] ${!item.isRead ? "font-bold text-[#4F6F52]" : ""}`}>
                       {item.title}
                     </p>
-                    <p className="text-xs text-[#66736A] line-clamp-2 mt-1 leading-relaxed">
+                    <p className="text-xs text-[#66736A] line-clamp-2 mt-1 leading-relaxed break-words">
                       {item.message}
                     </p>
                     <p className="text-[9px] text-[#66736A]/75 mt-1.5 flex items-center gap-1 font-mono">
-                      <Clock className="w-3 h-3 text-[#8FAF9A]" />
+                      <Clock className="w-3 h-3 shrink-0 text-[#8FAF9A]" />
                       {formatRelativeTime(item.createdAt)}
                     </p>
                   </div>
@@ -468,7 +468,7 @@ export function NotificationDropdown() {
                     <button
                       onClick={(e) => handleMarkAsRead(item.id, e)}
                       title="Tandai dibaca"
-                      className="absolute right-3 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 p-1.5 hover:bg-[#DDE8D8]/45 text-[#4F6F52] rounded-full transition-all duration-200"
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 p-1.5 hover:bg-[#DDE8D8]/45 text-[#4F6F52] rounded-full transition-all duration-200"
                     >
                       <Check className="w-4 h-4" />
                     </button>
@@ -476,7 +476,7 @@ export function NotificationDropdown() {
 
                   {/* Small Unread dot on the right side if hovered is false */}
                   {!item.isRead && (
-                    <span className="absolute right-4 top-4 w-2 h-2 rounded-full bg-[#4F6F52] group-hover:hidden" />
+                    <span className="absolute right-3.5 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-[#4F6F52] group-hover:hidden" />
                   )}
                 </div>
               ))
