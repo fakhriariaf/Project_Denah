@@ -3,7 +3,7 @@ import { invoices, payments } from "@/db/schema/finance";
 import { projects, units, customers } from "@/db/schema/master";
 import { bookings } from "@/db/schema/marketing";
 import { attachments } from "@/db/schema/system";
-import { eq, desc } from "drizzle-orm";
+import { and, eq, desc } from "drizzle-orm";
 import { requireAuth, getSessionRole } from "@/server/permissions";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
@@ -132,6 +132,33 @@ export default async function InvoiceDetailPage({
     notFound();
   }
 
+  // Older booking flows store the uploaded proof under the Booking attachment
+  // rather than payments.proofAttachmentId. Reuse that same file for the
+  // matching BF, DP, or Pelunasan Cash invoice detail without duplicating it.
+  const bookingProofEntityType =
+    invoice.type === "booking_fee"
+      ? "booking_bf"
+      : invoice.type === "dp"
+        ? "booking_dp"
+        : invoice.scheduleKind === "cash_settlement"
+          ? "booking_cash_settlement"
+          : null;
+
+  const [bookingProof] =
+    invoice.bookingId && bookingProofEntityType
+      ? await db
+          .select({ fileUrl: attachments.fileUrl, fileName: attachments.fileName })
+          .from(attachments)
+          .where(
+            and(
+              eq(attachments.entityId, invoice.bookingId),
+              eq(attachments.entityType, bookingProofEntityType)
+            )
+          )
+          .orderBy(desc(attachments.createdAt))
+          .limit(1)
+      : [];
+
   // Fetch all payments linked to this invoice
   const paymentsList = await db
     .select({
@@ -149,6 +176,10 @@ export default async function InvoiceDetailPage({
     .leftJoin(attachments, eq(payments.proofAttachmentId, attachments.id))
     .where(eq(payments.invoiceId, id))
     .orderBy(desc(payments.paymentDate));
+
+  const showBookingProofFallback =
+    Boolean(bookingProof?.fileUrl) &&
+    !paymentsList.some((payment) => Boolean(payment.proofFileUrl));
 
   // Calculate totals (verified payments only; remaining balance never negative)
   const { totalPaid, remainingBalance } = computeInvoicePaymentSummary(
@@ -353,6 +384,26 @@ export default async function InvoiceDetailPage({
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {showBookingProofFallback && bookingProof?.fileUrl && (
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/20 bg-primary/5 px-4 py-3">
+              <div>
+                <p className="text-sm font-semibold text-foreground">
+                  Bukti pembayaran diunggah dari Detail Booking
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {bookingProof.fileName ?? "Lampiran bukti pembayaran"}
+                </p>
+              </div>
+              <a
+                href={bookingProof.fileUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm font-semibold text-primary hover:underline"
+              >
+                Lihat Bukti
+              </a>
+            </div>
+          )}
           {paymentsList.length === 0 ? (
             isExpenseApprovalInvoice ? (
               <div className="rounded-md border border-dashed border-border bg-[#F7F8F3] px-4 py-8 text-center">

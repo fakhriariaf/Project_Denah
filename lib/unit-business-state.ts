@@ -82,7 +82,6 @@ export function getUnitBusinessState(unit: UnitBusinessStateInput | null | undef
   const status = unit?.status ?? "unknown";
   const readyStock = isReadyStockUnit(unit);
   const hasBuyer = hasUnitBuyerContext(unit);
-  const progress = unit?.constructionProgress ?? 0;
 
   let flowType: UnitFlowType = "unknown";
   let physicalStatusLabel = "Status fisik tidak diketahui";
@@ -91,6 +90,12 @@ export function getUnitBusinessState(unit: UnitBusinessStateInput | null | undef
   let allowedActions: UnitAllowedAction[] = [];
 
   switch (status) {
+    // NOTE: "available_ready_stock" and "construction_ready_stock" are SYNTHETIC
+    // keys (not persisted in units.status). They exist only for callers that map
+    // available/construction + isReadyStock into a combined key before calling
+    // this helper (e.g. siteplan badge/color maps). Real DB rows always arrive as
+    // "available"/"construction" and are handled by their own cases below, which
+    // already branch on `readyStock`. Keep both in sync.
     case "available_ready_stock":
       flowType = "ready_stock_available";
       physicalStatusLabel = "Fisik Siap Huni";
@@ -135,7 +140,6 @@ export function getUnitBusinessState(unit: UnitBusinessStateInput | null | undef
       physicalStatusLabel = readyStock ? "Fisik Siap Huni" : "Fisik Belum Ready Stock";
       salesStatusLabel = "Booking";
       displayLabel = "Booking";
-      if (!readyStock) allowedActions = ["start_consumer_construction"];
       break;
 
     case "kpr_process":
@@ -143,8 +147,6 @@ export function getUnitBusinessState(unit: UnitBusinessStateInput | null | undef
       physicalStatusLabel = readyStock ? "Fisik Siap Huni" : "Fisik Belum Ready Stock";
       salesStatusLabel = "Proses KPR";
       displayLabel = "Proses KPR";
-      if (!readyStock) allowedActions = ["start_consumer_construction"];
-      if (readyStock || progress >= 100) allowedActions.push("process_kpr_akad");
       break;
 
     case "construction":
@@ -183,7 +185,9 @@ export function getUnitBusinessState(unit: UnitBusinessStateInput | null | undef
         physicalStatusLabel = "Selesai Bangun";
         salesStatusLabel = hasBuyer ? "Siap Akad / Serah Terima" : "Belum Terikat";
         displayLabel = "Selesai Bangun - Siap Akad/Serah Terima";
-        allowedActions = ["process_akad_ppjb"];
+        // Kelayakan Akad/PPJB bergantung pada invoice, dokumen, dan BAST;
+        // action tidak ditentukan dari status unit saja.
+        allowedActions = [];
       }
       break;
 
@@ -192,7 +196,8 @@ export function getUnitBusinessState(unit: UnitBusinessStateInput | null | undef
       physicalStatusLabel = "Fisik Siap Diserahterimakan";
       salesStatusLabel = "Menunggu Serah Terima";
       displayLabel = "Menunggu Serah Terima";
-      allowedActions = ["process_customer_handover"];
+      // BAST Konsumen yang sudah diverifikasi harus dihitung oleh server.
+      allowedActions = [];
       break;
 
     case "handover_complete":

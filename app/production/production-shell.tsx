@@ -60,7 +60,7 @@ interface ProductionShellProps {
     category: string; description: string; status: string; resolvedAt: Date | null;
     createdAt: Date; customerName: string; unitCode: string; projectName: string;
   }>;
-  dpPaidUnitIds: string[];
+  spkEligibleUnitIds: string[];
   isSuperAdmin?: boolean;
   isPengawas?: boolean;
   isVendor?: boolean;
@@ -79,7 +79,7 @@ const productionTabs: Array<{ key: ProductionTabKey; labelKey: string; icon: Rea
 export default function ProductionShell({
   activeUser, isSuperAdmin = false, isPengawas = false, isVendor = false,
   projects, units, customers, vendors, workItems,
-  spks, spmbs, materialRequests, complaints, dpPaidUnitIds, defaultTab,
+  spks, spmbs, materialRequests, complaints, spkEligibleUnitIds, defaultTab,
 }: ProductionShellProps) {
   const router = useRouter();
   const { t } = useI18n();
@@ -102,6 +102,7 @@ export default function ProductionShell({
   // Progress dialog bridge (SPK tab can trigger progress dialog in Progress tab)
   const [externalProgressSpkId, setExternalProgressSpkId] = React.useState<string | null>(null);
   const [externalProgressTab, setExternalProgressTab] = React.useState<string | null>(null);
+  const [spkDetailRefreshKey, setSpkDetailRefreshKey] = React.useState(0);
 
   React.useEffect(() => { if (defaultTab) setActiveTab(defaultTab); }, [defaultTab]);
 
@@ -134,17 +135,21 @@ export default function ProductionShell({
 
   // Bridge: SPK tab requests opening progress dialog
   const handleOpenProgressDialog = (spkId: string, tab: string) => {
+    // ProgressTab tetap ter-mount sebagai penyedia dialog, tanpa memindahkan user dari tab SPK.
     setExternalProgressSpkId(spkId);
     setExternalProgressTab(tab);
-    // Switch to progress tab context isn't needed since progress dialog is inside ProgressTab
-    // The ProgressTab will pick up the external trigger via prop
   };
 
   // Bridge: SPK tab requests opening BAST dialog  
-  const handleOpenBastDialog = (unit: any, spk: any) => {
-    // Trigger it inside the progress tab where BAST dialog lives
+  const handleOpenBastDialog = (_unit: any, spk: any) => {
+    // Dialog BAST disediakan oleh ProgressTab melalui portal. Tetap berada di
+    // tab SPK agar progres/unit hanya menjadi tampilan ringkasan.
     setExternalProgressSpkId(spk?.id || null);
     setExternalProgressTab("bast");
+  };
+
+  const handleProgressSaved = () => {
+    setSpkDetailRefreshKey((current) => current + 1);
   };
 
   return (
@@ -216,23 +221,25 @@ export default function ProductionShell({
           {activeTab === "spk" && (
             <SpkTab
               spks={spks} spmbs={spmbs} projects={projects} units={units}
-              vendors={vendors} workItems={workItems} dpPaidUnitIds={dpPaidUnitIds}
+              vendors={vendors} workItems={workItems} spkEligibleUnitIds={spkEligibleUnitIds}
               isSuperAdmin={isSuperAdmin} isPengawas={isPengawas} isVendor={isVendor}
               searchQuery={searchQuery} onSearchChange={setSearchQuery}
               onOpenProgressDialog={handleOpenProgressDialog}
               onOpenBastDialog={handleOpenBastDialog}
+              detailRefreshKey={spkDetailRefreshKey}
             />
           )}
 
-          {activeTab === "progress" && (
+          <div className={activeTab === "progress" ? undefined : "hidden"}>
             <ProgressTab
               spks={spks} units={units} workItems={workItems}
               isSuperAdmin={isSuperAdmin} isPengawas={isPengawas} isVendor={isVendor}
               externalProgressSpkId={externalProgressSpkId}
               externalProgressTab={externalProgressTab}
               onExternalProgressHandled={() => { setExternalProgressSpkId(null); setExternalProgressTab(null); }}
+              onProgressSaved={handleProgressSaved}
             />
-          )}
+          </div>
 
           {activeTab === "materials" && (
             <SpmbTab materialRequests={materialRequests} spks={spks} />

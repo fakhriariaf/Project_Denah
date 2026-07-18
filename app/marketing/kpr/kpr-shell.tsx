@@ -152,6 +152,29 @@ export function KprShell({
     return k.status;
   };
 
+  // Preventive drop-target validation used to dim invalid columns while dragging.
+  // Mirrors the (authoritative) guards in handleDrop; it is a UX projection only.
+  const STAGE_ORDER = ["bi_checking", "pemberkasan", "proses_bank", "offering", "approved", "akad"];
+  const TERMINAL_COLUMNS = ["realisasi", "physical_waiting", "handover_waiting", "bast_developer", "handover_done"];
+  const isValidDropTarget = (card: KprCard, targetStatus: string): boolean => {
+    if (TERMINAL_COLUMNS.includes(targetStatus)) return false;
+    if (card.status === targetStatus) return false;
+    // Post-realisasi / handover cards are not draggable at all.
+    if (card.status === "realisasi" || card.unitStatus === "menunggu_serah_terima" || card.unitStatus === "handover_complete" || card.unitStatus === "sold") return false;
+    // "rejected" is reachable from any active stage except approved.
+    if (targetStatus === "rejected") return card.status !== "approved";
+    const currentIndex = STAGE_ORDER.indexOf(card.status);
+    const newIndex = STAGE_ORDER.indexOf(targetStatus);
+    if (currentIndex === -1 || newIndex === -1) return false;
+    // Backward allowed (guarded by revision-notes prompt), forward only +1 stage.
+    if (newIndex < currentIndex) {
+      // approved/realisasi are one-way — cannot go backward.
+      if (card.status === "approved" || card.status === "realisasi") return false;
+      return true;
+    }
+    return newIndex === currentIndex + 1;
+  };
+
   // States
   const [projectFilter, setProjectFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -242,7 +265,6 @@ export function KprShell({
     const id = e.dataTransfer.getData("text/plain") || draggingId;
     if (!id) return;
 
-    const TERMINAL_COLUMNS = ["realisasi", "physical_waiting", "handover_waiting", "bast_developer", "handover_done"];
     if (TERMINAL_COLUMNS.includes(targetStatus)) {
       alert("Tahapan ini tidak dapat diubah dengan geser kartu.\n\n• Realisasi Dana → gunakan Form Realisasi di 'Kelola Berkas KPR'\n• Cek Fisik / Serah Terima → dikelola otomatis oleh sistem");
       setDraggingId(null);
@@ -371,9 +393,23 @@ export function KprShell({
     }
 
     // Demotion check: prompt for revision notes when moving KPR card backward
-    const STAGE_ORDER = ["bi_checking", "pemberkasan", "proses_bank", "offering", "approved", "akad"];
     const currentIndex = STAGE_ORDER.indexOf(targetCard.status);
     const newIndex = STAGE_ORDER.indexOf(targetStatus);
+
+    // Sequential-forward guard: a pipeline card may only advance ONE stage at a
+    // time. Skipping stages (e.g. bi_checking → approved) is not allowed even if
+    // per-stage prerequisites happen to be satisfied. Backward moves and moves to
+    // the "rejected" column (outside STAGE_ORDER) are handled by their own guards.
+    if (currentIndex !== -1 && newIndex !== -1 && newIndex > currentIndex + 1) {
+      const nextColName = COLUMNS.find(c => c.id === STAGE_ORDER[currentIndex + 1])?.label || STAGE_ORDER[currentIndex + 1];
+      alert(
+        "Gagal memindahkan status KPR:\n\n" +
+        "Alur KPR harus dijalankan bertahap. Anda tidak dapat melompati tahap.\n\n" +
+        `Lanjutkan dulu ke tahap berikutnya: "${nextColName}".`
+      );
+      setDraggingId(null);
+      return;
+    }
 
     let revisionNotes = "";
     if (currentIndex !== -1 && newIndex !== -1 && newIndex < currentIndex) {
@@ -565,17 +601,22 @@ export function KprShell({
         {COLUMNS.map((col) => {
           const colCards = filteredKpr.filter((k) => getCardKanbanColumn(k) === col.id);
           const isOver = draggedOverColId === col.id;
+          const draggingCard = draggingId ? initialKpr.find((k) => k.id === draggingId) ?? null : null;
+          const isInvalidTarget = Boolean(draggingCard) && !isValidDropTarget(draggingCard as KprCard, col.id);
 
           return (
             <div 
               key={col.id} 
-              onDragOver={(e) => handleDragOver(e, col.id)}
+              onDragOver={(e) => { if (isInvalidTarget) return; handleDragOver(e, col.id); }}
               onDragLeave={handleDragLeave}
-              onDrop={(e) => handleDrop(e, col.id)}
+              onDrop={(e) => { if (isInvalidTarget) { e.preventDefault(); return; } handleDrop(e, col.id); }}
+              aria-disabled={isInvalidTarget}
               className={`p-3.5 rounded-[26px] flex flex-col h-[calc(100vh-330px)] min-h-[540px] w-[320px] shrink-0 shadow-sm transition-all duration-200 ${
-                isOver 
-                  ? "bg-secondary/60 border-2 border-dashed border-primary scale-[1.01]" 
-                  : "bg-gradient-to-b from-secondary/35 to-card border border-primary/15 hover:shadow-sage-md"
+                isInvalidTarget
+                  ? "opacity-40 grayscale border border-border"
+                  : isOver
+                    ? "bg-secondary/60 border-2 border-dashed border-primary scale-[1.01]"
+                    : "bg-gradient-to-b from-secondary/35 to-card border border-primary/15 hover:shadow-sage-md"
               }`}
             >
               {/* Column Header */}

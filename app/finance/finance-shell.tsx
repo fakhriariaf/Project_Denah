@@ -105,6 +105,8 @@ interface FinanceShellProps {
     scheduleKind: string | null;
     scheduleSequence: number | null;
     scheduleLabel: string | null;
+    bookingProofFileUrl: string | null;
+    bookingProofFileName: string | null;
   }>;
   payments: Array<{
     id: string;

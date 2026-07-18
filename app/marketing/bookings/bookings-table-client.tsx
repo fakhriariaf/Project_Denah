@@ -245,6 +245,12 @@ export function BookingsTableClient({
                     .slice(0, 2)
                     .toUpperCase();
                   const statusStyle = statusColorMap[booking.status];
+                  // `completed` berlaku untuk cash, cash bertahap, maupun KPR.
+                  // Skema sudah ditampilkan di kolom sendiri, jadi jangan salah
+                  // menyebut seluruh transaksi selesai sebagai Akad Kredit.
+                  const statusLabel = booking.status === "completed"
+                    ? "Selesai"
+                    : statusStyle?.label || booking.status;
                   const selected = isSelected(booking.id);
 
                   return (
@@ -355,13 +361,7 @@ export function BookingsTableClient({
                               "bg-slate-50 text-slate-600 border-slate-200"
                             } flex items-center gap-1 w-fit mx-auto rounded-full px-2.5 py-0.5`}
                           >
-                            <Translate
-                              namespace="booking"
-                              translationKey={
-                                `status_${booking.status}`
-                              }
-                              fallback={booking.status}
-                            />
+                          {statusLabel}
                           </Badge>
                           {booking.status === "cancelled" &&
                             booking.cancellationReason && (

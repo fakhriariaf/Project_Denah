@@ -10,6 +10,7 @@ import { PrintButton } from "@/components/ui/print-button";
 import { FileText, MapPin, Phone, Mail, CheckCircle2, User, Calendar, ShieldCheck, Building } from "lucide-react";
 import { requireAuth } from "@/server/permissions";
 import { getI18n } from "@/lib/i18n-server";
+import { getUnitStatusLabel } from "@/lib/label-helpers";
 
 export const revalidate = 0;
 
@@ -95,7 +96,30 @@ export default async function PrintBastKonsumenPage({ params }: Props) {
     "available",
   ].includes(statusStr);
   if (!isValidStatus) {
-    throw new Error("⚠️ Dokumen BAST Konsumen hanya dapat dicetak jika pembangunan unit fisik telah selesai 100% dari Vendor (Status unit minimal 'Selesai Bangun').");
+    return (
+      <main className="min-h-screen bg-muted/30 flex items-center justify-center p-6 font-sans">
+        <section className="w-full max-w-lg rounded-3xl border border-border bg-card p-8 text-center shadow-[0_8px_30px_rgb(143,175,154,0.12)]">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-50 text-amber-700">
+            <FileText className="h-7 w-7" />
+          </div>
+          <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">BAST Konsumen Belum Siap Dicetak</p>
+          <h1 className="mt-2 text-xl font-extrabold text-foreground">Pembangunan fisik unit belum selesai</h1>
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">
+            BAST Konsumen baru dapat dicetak setelah vendor menyelesaikan pembangunan fisik 100% dan unit berstatus minimal <strong className="text-foreground">Selesai Bangun</strong>.
+          </p>
+          <div className="mt-5 rounded-2xl border border-border bg-muted/30 p-4 text-left text-sm">
+            <div className="flex justify-between gap-4"><span className="text-muted-foreground">Unit</span><span className="font-mono font-bold text-foreground">{booking.unitCode || "—"}</span></div>
+            <div className="mt-2 flex justify-between gap-4 border-t border-border pt-2"><span className="text-muted-foreground">Status saat ini</span><span className="font-semibold text-foreground">{getUnitStatusLabel(statusStr)}</span></div>
+          </div>
+          <a
+            href={`/marketing/bookings/${id}`}
+            className="mt-6 inline-flex h-10 items-center justify-center rounded-xl bg-primary px-4 text-sm font-bold text-white transition-colors hover:bg-primary/90"
+          >
+            Kembali ke Detail Booking
+          </a>
+        </section>
+      </main>
+    );
   }
 
   // Company settings
@@ -134,7 +158,7 @@ export default async function PrintBastKonsumenPage({ params }: Props) {
       `}} />
 
       {/* TOP HEADER CONTROLS */}
-      <PrintButton label="Cetak BAST Konsumen" />
+      <PrintButton label="Cetak BAST Konsumen" backHref={`/marketing/bookings/${id}`} />
 
       {/* PRINT CONTAINER */}
       <div className="print-area max-w-4xl mx-auto mt-6 bg-card border border-border rounded-3xl p-12 shadow-[0_8px_30px_rgb(143,175,154,0.06)] print:shadow-none print:border-none">

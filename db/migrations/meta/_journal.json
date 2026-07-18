@@ -50,6 +50,13 @@
       "when": 1784120000000,
       "tag": "0006_finance_hardening_schedule",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1784366618378,
+      "tag": "0007_material_request_income_hardening",
+      "breakpoints": true
     }
   ]
 }

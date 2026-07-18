@@ -2,7 +2,7 @@
 
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { uploadPaymentProof } from "@/server/actions/marketing";
+import { attachExistingPaymentProof, uploadPaymentProof } from "@/server/actions/marketing";
 import { Button } from "@/components/ui/button";
 import { Upload, FileCheck, AlertCircle, X, FilePlus } from "lucide-react";
 import { parseServerError } from "@/lib/error-parser";
@@ -10,10 +10,17 @@ import { useI18n } from "@/lib/i18n";
 
 interface Props {
   bookingId: string;
-  paymentType: "booking_fee" | "dp";
+  paymentType: "booking_fee" | "dp" | "cash_settlement" | "installment";
+  invoiceId?: string;
+  existingPaymentId?: string;
 }
 
-export default function BookingPaymentProofForm({ bookingId, paymentType }: Props) {
+export default function BookingPaymentProofForm({
+  bookingId,
+  paymentType,
+  invoiceId,
+  existingPaymentId,
+}: Props) {
   const { t } = useI18n();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -74,12 +81,15 @@ export default function BookingPaymentProofForm({ bookingId, paymentType }: Prop
 
       const fileData = await uploadRes.json();
       
-      const res = await uploadPaymentProof(bookingId, {
+      const proofData = {
         fileName: selectedFile.name,
         fileUrl: fileData.url,
         mimeType: selectedFile.type,
         fileSize: selectedFile.size,
-      }, paymentType);
+      };
+      const res = existingPaymentId
+        ? await attachExistingPaymentProof(bookingId, existingPaymentId, proofData)
+        : await uploadPaymentProof(bookingId, proofData, paymentType, invoiceId);
 
       if (res.success) {
         setSuccess(true);
@@ -100,6 +110,13 @@ export default function BookingPaymentProofForm({ bookingId, paymentType }: Prop
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
+  const paymentProofLabel =
+    paymentType === "booking_fee"
+      ? "Booking Fee (BF)"
+      : paymentType === "dp"
+        ? "Uang Muka (DP)"
+        : "Pelunasan Cash";
+
   return (
     <div className="bg-card border border-border rounded-2xl p-5 shadow-sage">
       <div className="flex items-center gap-2 mb-4">
@@ -108,7 +125,7 @@ export default function BookingPaymentProofForm({ bookingId, paymentType }: Prop
         </div>
         <div>
           <h3 className="font-bold text-foreground text-sm">
-            {paymentType === "booking_fee" ? "Upload Bukti Booking Fee (BF)" : "Upload Bukti Uang Muka (DP)"}
+            {"Upload Bukti " + paymentProofLabel}
           </h3>
           <p className="text-[10px] text-muted-foreground">{t("booking_proof.format")}</p>
         </div>
@@ -200,7 +217,7 @@ export default function BookingPaymentProofForm({ bookingId, paymentType }: Prop
           ) : (
             <>
               <Upload className="h-4 w-4" />
-              {paymentType === "booking_fee" ? "Upload Bukti Booking Fee" : "Upload Bukti Uang Muka"}
+              {"Upload Bukti " + paymentProofLabel}
             </>
           )}
         </Button>

@@ -19,10 +19,12 @@ import {
   unitStatusHistories,
 } from "@/db/schema/master";
 import { user as userTable } from "@/db/schema/auth";
-import { bookings } from "@/db/schema/marketing";
+import { materialRequests } from "@/db/schema/production";
+import { bookings, kprProcesses } from "@/db/schema/marketing";
 import { checkAndTransitionToConstruction } from "./marketing";
+import { getCashPemberkasanReadiness } from "@/server/services/booking-construction-readiness";
 import { attachments, notifications } from "@/db/schema/system";
-import { getCurrentUser, requireAuth, hasRole, getSessionRole } from "@/server/permissions";
+import { getCurrentUser, requireAuth, requireAnyRole, hasRole, getSessionRole } from "@/server/permissions";
 import { eq, and, desc, asc, sum, sql, inArray, lte, isNotNull, gte, count, ilike, or } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { cachedQuery } from "@/lib/cache";
@@ -393,7 +395,7 @@ export async function getInvoice(invoiceId: string) {
 }
 
 export async function createInvoice(data: unknown) {
-  const activeUser = await requireAuth();
+  const activeUser = await requireAnyRole(["Super Admin", "Admin Keuangan", "Admin Kantor", "Direksi / Manager"]);
   applyRateLimit(activeUser.id);
   const parsed = invoiceSchema.parse(data);
 
@@ -709,6 +711,13 @@ export async function verifyPayment(
     }
   }
 
+  // ── Proof guard: an approval must be backed by an uploaded proof attachment.
+  // Rejections do not require a proof. Legacy payments without proof cannot be
+  // approved and must be re-uploaded first. ──
+  if (isApproved && !prefetchPayment.proofAttachmentId) {
+    throw new Error("Bukti pembayaran wajib dilampirkan sebelum verifikasi.");
+  }
+
   let paymentNumber = "";
   let paymentAmount = 0;
   let shouldTransition = false;
@@ -748,13 +757,46 @@ export async function verifyPayment(
     // ── Task 6.1 Req 2.2: Overpayment guard (skip if invoiceId is null per Req 2.8) ──
     if (isApproved && payment.invoiceId) {
       const [targetInvoice] = await tx
-        .select({ id: invoices.id, amount: invoices.amount })
+        .select({
+          id: invoices.id,
+          amount: invoices.amount,
+          bookingId: invoices.bookingId,
+          type: invoices.type,
+          scheduleKind: invoices.scheduleKind,
+        })
         .from(invoices)
         .where(eq(invoices.id, payment.invoiceId))
         .limit(1)
         .all();
 
       if (targetInvoice) {
+        if (targetInvoice.bookingId) {
+          const booking = await tx
+            .select({ paymentScheme: bookings.paymentScheme })
+            .from(bookings)
+            .where(eq(bookings.id, targetInvoice.bookingId))
+            .get();
+
+          // Cash settlement AND Cash Bertahap (installment) termin payments both
+          // require the pemberkasan gate (BF + DP + KTP/KK verified) to pass
+          // before the follow-up invoice may be verified.
+          const isSettlementOrTermin =
+            (booking?.paymentScheme === "cash" || booking?.paymentScheme === "installment") &&
+            (targetInvoice.scheduleKind === "cash_settlement" ||
+              targetInvoice.scheduleKind === "installment" ||
+              targetInvoice.type === "installment");
+
+          if (isSettlementOrTermin) {
+            const pemberkasanReadiness = await getCashPemberkasanReadiness(tx, targetInvoice.bookingId);
+            if (!pemberkasanReadiness.eligible) {
+              const label = booking?.paymentScheme === "installment" ? "Termin Cash Bertahap" : "Pelunasan Cash";
+              throw new Error(
+                `${label} belum dapat diverifikasi. ${pemberkasanReadiness.reason}`
+              );
+            }
+          }
+        }
+
         const sumPayments = await tx
           .select({ total: sum(payments.amount) })
           .from(payments)
@@ -966,11 +1008,11 @@ export async function verifyPayment(
               .get();
 
             // Condition 1: paymentScheme ≠ kpr (KPR has its own path via realisasi)
-            // Condition 2: booking.status ∈ {akad, completed}
+            // Condition 2: PPJB/Akad harus sudah benar-benar selesai.
             if (
               bookingData &&
               bookingData.paymentScheme !== "kpr" &&
-              (bookingData.status === "akad" || bookingData.status === "completed") &&
+              bookingData.status === "completed" &&
               bookingData.unitId
             ) {
               // Condition 3: all invoices for this booking must be paid
@@ -1149,6 +1191,13 @@ async function triggerMenungguSerahTerima(
     return;
   }
 
+  if (!unit.isReadyStock) {
+    console.warn(
+      `[triggerMenungguSerahTerima] Skip: unit ${unit.code} belum melalui verifikasi BAST Vendor ke Developer.`
+    );
+    return;
+  }
+
   // For indent units: SPK must also be officially completed (BAST Vendor uploaded)
   // This ensures the vendor → developer handover is formally closed before consumer handover
   if (!unit.isReadyStock && unit.currentSpkId) {
@@ -1279,6 +1328,34 @@ export async function reversePayment(paymentId: string, reason: unknown) {
     if (payment.status === "pending") throw new Error("Pembayaran pending tidak perlu di-void. Gunakan hapus/reject.");
     if (payment.status === "rejected") throw new Error("Pembayaran yang sudah ditolak tidak dapat di-void.");
     if (payment.status !== "verified") throw new Error("Hanya pembayaran terverifikasi yang dapat di-void.");
+
+    // Pembayaran yang sudah menjadi dasar konstruksi, akad, atau serah-terima
+    // tidak boleh di-void secara langsung. Koreksi tahap lanjut memerlukan
+    // proses revisi/refund tersendiri agar status unit tidak terbelah.
+    if (payment.invoiceId) {
+      const invoice = await tx.select({ bookingId: invoices.bookingId }).from(invoices).where(eq(invoices.id, payment.invoiceId)).get();
+      if (invoice?.bookingId) {
+        const booking = await tx.select({ status: bookings.status, paymentScheme: bookings.paymentScheme, unitId: bookings.unitId })
+          .from(bookings)
+          .where(eq(bookings.id, invoice.bookingId))
+          .get();
+        const unit = booking
+          ? await tx.select({ status: units.status }).from(units).where(eq(units.id, booking.unitId)).get()
+          : null;
+        if (
+          booking &&
+          (booking.status !== "active" || ["construction", "construction_done", "sold", "menunggu_serah_terima", "handover_complete"].includes(unit?.status ?? ""))
+        ) {
+          throw new Error("Pembayaran tidak dapat di-void setelah unit memasuki konstruksi, akad, atau serah terima. Gunakan proses revisi/refund terkontrol.");
+        }
+        if (booking?.paymentScheme === "kpr") {
+          const kpr = await tx.select({ status: kprProcesses.status }).from(kprProcesses).where(eq(kprProcesses.bookingId, invoice.bookingId)).get();
+          if (kpr && !["bi_checking", "rejected"].includes(kpr.status)) {
+            throw new Error("Pembayaran KPR tidak dapat di-void setelah pipeline KPR berjalan. Gunakan proses revisi/refund terkontrol.");
+          }
+        }
+      }
+    }
 
     // 3.3 Find original income transaction for this payment (Req 4.7)
     const [originalIncome] = await tx.select().from(transactions)
@@ -1592,7 +1669,7 @@ export async function getTransactionsPaginated(params: {
 }
 
 export async function createExpenseRequest(data: unknown) {
-  const activeUser = await requireAuth();
+  const activeUser = await requireAnyRole(["Super Admin", "Admin Keuangan", "Admin Kantor", "Pengawas Lapangan", "Direksi / Manager"]);
   const parsed = expenseRequestSchema.parse(data);
 
   // ── Part B: Master data validation BEFORE inserting any record ──
@@ -1832,6 +1909,17 @@ export async function approveExpense(transactionId: string, notes?: string) {
       .where(eq(invoices.notes, `trxId:${transactionId}`))
       .run();
 
+    // Close the material-request loop: when this expense originates from a
+    // material request, propagate the approval back so production sees the
+    // request move out of "finance_pending". Normal expenses leave this null.
+    if (transaction.materialRequestId) {
+      await tx
+        .update(materialRequests)
+        .set({ status: "approved" })
+        .where(eq(materialRequests.id, transaction.materialRequestId))
+        .run();
+    }
+
     // Insert transactionApprovals record (Req 6.4)
     await tx.insert(transactionApprovals).values({
       id: crypto.randomUUID(),
@@ -2048,6 +2136,16 @@ export async function rejectExpense(transactionId: string, notes: string) {
       .where(eq(invoices.notes, `trxId:${transactionId}`))
       .run();
 
+    // Close the material-request loop on rejection so production sees the
+    // request move from "finance_pending" to "rejected". Normal expenses skip.
+    if (transaction.materialRequestId) {
+      await tx
+        .update(materialRequests)
+        .set({ status: "rejected" })
+        .where(eq(materialRequests.id, transaction.materialRequestId))
+        .run();
+    }
+
     // 8. Insert transactionApprovals record (Req 6.4)
     await tx.insert(transactionApprovals).values({
       id: crypto.randomUUID(),
@@ -2162,7 +2260,7 @@ export async function getBudgetDetails(budgetId: string) {
 }
 
 export async function createBudget(data: unknown) {
-  const activeUser = await requireAuth();
+  const activeUser = await requireAnyRole(["Super Admin", "Admin Keuangan", "Direksi / Manager"]);
   const parsed = budgetSchema.parse(data);
 
   // ── Req 8.1: Validate budget line allocations ──
@@ -2234,7 +2332,7 @@ export async function createBudget(data: unknown) {
 }
 
 export async function activateBudget(budgetId: string) {
-  const activeUser = await requireAuth();
+  await requireAnyRole(["Super Admin", "Admin Keuangan", "Direksi / Manager"]);
 
   // 1. Fetch budget
   const [budget] = await db.select().from(budgets).where(eq(budgets.id, budgetId)).limit(1);
@@ -2634,6 +2732,7 @@ export async function getFinancePageData() {
     transactionsList,
     budgetsList,
     usersList,
+    bookingProofAttachments,
   ] = await Promise.all([
     cachedQuery(
       () => db.select().from(projects),
@@ -2769,7 +2868,65 @@ export async function getFinancePageData() {
 
     // Users
     db.select({ id: userTable.id, name: userTable.name }).from(userTable),
+
+    // Bukti pembayaran pada halaman Booking dapat dipakai kembali oleh Finance
+    // sebagai fallback tampilan. Ini tidak mengubah relasi payment atau file.
+    db
+      .select({
+        bookingId: attachments.entityId,
+        entityType: attachments.entityType,
+        fileUrl: attachments.fileUrl,
+        fileName: attachments.fileName,
+        createdAt: attachments.createdAt,
+      })
+      .from(attachments)
+      .where(
+        inArray(attachments.entityType, [
+          "booking_bf",
+          "booking_dp",
+          "booking_cash_settlement",
+        ])
+      )
+      .orderBy(desc(attachments.createdAt)),
   ]);
+
+  // A payment proof that is directly attached to a payment remains the source
+  // of truth. The following mapping only fills the display gap for legacy
+  // booking uploads that are stored under the booking entity instead.
+  const bookingProofAttachmentByKey = new Map<
+    string,
+    (typeof bookingProofAttachments)[number]
+  >();
+  for (const attachment of bookingProofAttachments) {
+    const key = `${attachment.bookingId}:${attachment.entityType}`;
+    if (!bookingProofAttachmentByKey.has(key)) {
+      bookingProofAttachmentByKey.set(key, attachment);
+    }
+  }
+
+  const enrichedInvoices = invoicesList.map((invoice) => {
+    const bookingProofEntityType =
+      invoice.type === "booking_fee"
+        ? "booking_bf"
+        : invoice.type === "dp"
+          ? "booking_dp"
+          : invoice.scheduleKind === "cash_settlement"
+            ? "booking_cash_settlement"
+            : null;
+
+    const bookingProof =
+      invoice.bookingId && bookingProofEntityType
+        ? bookingProofAttachmentByKey.get(
+            `${invoice.bookingId}:${bookingProofEntityType}`
+          )
+        : undefined;
+
+    return {
+      ...invoice,
+      bookingProofFileUrl: bookingProof?.fileUrl ?? null,
+      bookingProofFileName: bookingProof?.fileName ?? null,
+    };
+  });
 
   // Enrich transactions: resolve approver/verifier names + link to invoice
   const enrichedTransactions = transactionsList.map((trx) => {
@@ -2828,7 +2985,7 @@ export async function getFinancePageData() {
     customers: customersList,
     accounts: enrichedAccounts,
     categories: categoriesList,
-    invoices: invoicesList,
+    invoices: enrichedInvoices,
     payments: paymentsList,
     transactions: enrichedTransactions,
     budgets: budgetsList,

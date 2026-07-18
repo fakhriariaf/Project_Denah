@@ -9,6 +9,8 @@ export interface KprTrackerData {
   isReadyStock: boolean;
   readyStockSource: string | null;
   constructionProgress: number;
+  /** Status BAST Developer ke Konsumen untuk booking KPR ini. */
+  bastCustomerStatus?: "uploaded" | "verified" | "rejected" | null;
 }
 
 export function KprMilestoneTracker({ 
@@ -51,8 +53,9 @@ export function KprMilestoneTracker({
   if (data.unitStatus === "handover_complete") {
     currentIndex = getIndex("handover_done");
   } else if (data.unitStatus === "menunggu_serah_terima") {
-    const bastExists = false; // tracker doesn't have doc data — show handover_waiting
-    currentIndex = getIndex("handover_waiting");
+    currentIndex = data.bastCustomerStatus
+      ? getIndex("bast_developer")
+      : getIndex("handover_waiting");
   } else if (data.kprStatus === "realisasi") {
     if (!isReady && !physicalReady) {
       currentIndex = getIndex("physical_waiting");

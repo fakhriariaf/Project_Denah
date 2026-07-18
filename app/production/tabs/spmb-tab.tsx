@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/select";
 import { Plus, Truck, AlertTriangle } from "lucide-react";
 import {
-  createMaterialRequest, submitMaterialRequest,
+  createMaterialRequest, submitMaterialRequest, markMaterialRequestPurchased,
 } from "@/server/actions/production";
 
 interface MaterialRequest {
@@ -101,6 +101,16 @@ export function SpmbTab({ materialRequests, spks }: SpmbTabProps) {
     finally { setIsSubmitting(false); }
   };
 
+  const handleMarkMaterialPurchased = async (requestId: string) => {
+    setIsSubmitting(true); setErrorMessage(null); setSuccessMessage(null);
+    try {
+      await markMaterialRequestPurchased(requestId);
+      setSuccessMessage(t("production.material_purchased_ok"));
+      router.refresh();
+    } catch (e: any) { setErrorMessage(e.message || "Gagal menandai material dibeli."); }
+    finally { setIsSubmitting(false); }
+  };
+
   return (
     <div className="space-y-6">
       {errorMessage && <div className="flex items-center gap-3 p-4 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm font-medium"><AlertTriangle className="h-5 w-5 shrink-0" /><span>{errorMessage}</span></div>}
@@ -144,11 +154,14 @@ export function SpmbTab({ materialRequests, spks }: SpmbTabProps) {
                   <TableCell className="font-bold text-foreground tabular-nums">Rp {m.estimatedAmount.toLocaleString()}</TableCell>
                   <TableCell className="text-muted-foreground text-xs">{new Date(m.createdAt).toLocaleDateString()}</TableCell>
                   <TableCell>
-                    <Badge className={`shadow-none font-semibold text-xs ${m.status === "approved" || m.status === "purchased" ? "bg-secondary text-primary border border-primary/30" : m.status === "finance_pending" ? "bg-amber-50 text-amber-700 border border-amber-200" : m.status === "rejected" ? "bg-red-50 text-red-700 border border-red-200" : "bg-gray-100 text-gray-700 border border-gray-200"}`}>
-                      {m.status === "approved" || m.status === "purchased" ? t("production.mat_status_approved") : m.status === "finance_pending" ? t("production.mat_status_pending") : m.status === "rejected" ? t("production.mat_status_rejected") : t("production.status_draft")}
+                    <Badge className={`shadow-none font-semibold text-xs ${m.status === "purchased" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : m.status === "approved" ? "bg-secondary text-primary border border-primary/30" : m.status === "finance_pending" ? "bg-amber-50 text-amber-700 border border-amber-200" : m.status === "submitted" ? "bg-blue-50 text-blue-700 border border-blue-200" : m.status === "rejected" ? "bg-red-50 text-red-700 border border-red-200" : "bg-gray-100 text-gray-700 border border-gray-200"}`}>
+                      {m.status === "purchased" ? t("production.mat_status_purchased") : m.status === "approved" ? t("production.mat_status_approved") : m.status === "finance_pending" ? t("production.mat_status_pending") : m.status === "submitted" ? t("production.mat_status_submitted") : m.status === "rejected" ? t("production.mat_status_rejected") : t("production.status_draft")}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-right">{m.status === "draft" && <Button size="sm" onClick={() => handleSubmitMaterialToFinance(m.id)} className="bg-primary hover:bg-primary text-primary-foreground font-semibold text-xs h-8">{t("production.btn_submit_to_finance")}</Button>}</TableCell>
+                  <TableCell className="text-right">
+                    {m.status === "draft" && <Button size="sm" onClick={() => handleSubmitMaterialToFinance(m.id)} className="bg-primary hover:bg-primary text-primary-foreground font-semibold text-xs h-8">{t("production.btn_submit_to_finance")}</Button>}
+                    {m.status === "approved" && <Button size="sm" onClick={() => handleMarkMaterialPurchased(m.id)} className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs h-8">{t("production.btn_mark_purchased")}</Button>}
+                  </TableCell>
                 </TableRow>
               ))
             )}

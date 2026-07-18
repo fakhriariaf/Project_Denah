@@ -116,6 +116,9 @@ export default async function PaymentDetailPage({
       verifiedAt: payments.verifiedAt,
       createdAt: payments.createdAt,
       invoiceNumber: invoices.invoiceNumber,
+      invoiceBookingId: invoices.bookingId,
+      invoiceType: invoices.type,
+      invoiceScheduleKind: invoices.scheduleKind,
       projectName: projects.name,
       customerName: customers.name,
       unitCode: units.code,
@@ -136,6 +139,36 @@ export default async function PaymentDetailPage({
   if (!payment) {
     notFound();
   }
+
+  // Booking BF/DP/Pelunasan Cash lama menyimpan file pada attachment Booking,
+  // bukan pada payment.proofAttachmentId. Tampilkan file itu untuk pembayaran
+  // terverifikasi yang terkait, tanpa mengubah relasi atau menduplikasi file.
+  const bookingProofEntityType =
+    payment.invoiceType === "booking_fee"
+      ? "booking_bf"
+      : payment.invoiceType === "dp"
+        ? "booking_dp"
+        : payment.invoiceScheduleKind === "cash_settlement"
+          ? "booking_cash_settlement"
+          : null;
+  const [bookingProof] =
+    payment.invoiceBookingId && bookingProofEntityType
+      ? await db
+          .select({
+            fileName: attachments.fileName,
+            fileUrl: attachments.fileUrl,
+            mimeType: attachments.mimeType,
+          })
+          .from(attachments)
+          .where(
+            and(
+              eq(attachments.entityId, payment.invoiceBookingId),
+              eq(attachments.entityType, bookingProofEntityType)
+            )
+          )
+          .orderBy(desc(attachments.createdAt))
+          .limit(1)
+      : [];
 
   const isRejected = payment.status === "rejected";
   const canRevise = isKeuangan || isSuperAdmin; // Req 6.5 mutation-visibility gate.
@@ -158,8 +191,14 @@ export default async function PaymentDetailPage({
     rejectionReason = rejectedRow?.reason ?? null;
   }
 
-  const proofKind = classifyProof(payment.proofMimeType, payment.proofFileUrl);
-  const hasProof = Boolean(payment.proofFileUrl);
+  const proofFileUrl =
+    payment.proofFileUrl ??
+    (payment.status === "verified" ? bookingProof?.fileUrl ?? null : null);
+  const proofFileName = payment.proofFileName ?? bookingProof?.fileName ?? null;
+  const proofMimeType = payment.proofMimeType ?? bookingProof?.mimeType ?? null;
+  const proofKind = classifyProof(proofMimeType, proofFileUrl);
+  const hasProof = Boolean(proofFileUrl);
+  const proofFromBooking = !payment.proofFileUrl && Boolean(proofFileUrl);
 
   // --- Summary cards (Req 2.3) ---
   const summary = (
@@ -302,11 +341,13 @@ export default async function PaymentDetailPage({
             Bukti Pembayaran
           </CardTitle>
           <CardDescription className="text-muted-foreground">
-            Lampiran bukti transfer / pembayaran
+            {proofFromBooking
+              ? "Lampiran bukti pembayaran yang diunggah dari Detail Booking"
+              : "Lampiran bukti transfer / pembayaran"}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {!hasProof || !payment.proofFileUrl ? (
+          {!hasProof || !proofFileUrl ? (
             // Placeholder when no proof uploaded (Req 6.2).
             <div className="rounded-md border border-dashed border-border bg-[#F7F8F3] px-4 py-10 text-center">
               <FileWarning className="mx-auto mb-2 h-8 w-8 text-muted-foreground/40" />
@@ -315,16 +356,16 @@ export default async function PaymentDetailPage({
           ) : proofKind === "image" ? (
             // Image preview for jpg/png/webp (Req 6.1).
             <div className="space-y-2">
-              <a href={payment.proofFileUrl} target="_blank" rel="noopener noreferrer" className="inline-block">
+              <a href={proofFileUrl} target="_blank" rel="noopener noreferrer" className="inline-block">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={payment.proofFileUrl}
-                  alt={payment.proofFileName ?? "Bukti pembayaran"}
+                  src={proofFileUrl}
+                  alt={proofFileName ?? "Bukti pembayaran"}
                   className="max-h-96 w-auto rounded-md border border-border object-contain"
                 />
               </a>
               <a
-                href={payment.proofFileUrl}
+                href={proofFileUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-sm font-medium text-[#4F6F52] hover:text-[#3D563F] hover:underline"
@@ -336,13 +377,13 @@ export default async function PaymentDetailPage({
           ) : (
             // PDF and other file types: open-in-new-tab link (Req 6.1).
             <a
-              href={payment.proofFileUrl}
+              href={proofFileUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 rounded-md border border-border bg-[#F7F8F3] px-4 py-3 text-sm font-medium text-[#4F6F52] hover:text-[#3D563F] hover:underline"
             >
               <FileText className="h-4 w-4" />
-              {payment.proofFileName ?? "Lihat Bukti (PDF)"}
+              {proofFileName ?? "Lihat Bukti (PDF)"}
               <ExternalLink className="h-4 w-4" />
             </a>
           )}

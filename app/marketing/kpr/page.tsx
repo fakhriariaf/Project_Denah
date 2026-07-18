@@ -12,12 +12,26 @@ import { attachments } from "@/db/schema/system";
 import { eq, desc } from "drizzle-orm";
 import { KprShell } from "./kpr-shell";
 import { requireAuth, getSessionRole } from "@/server/permissions";
+import { redirect } from "next/navigation";
 
 export const revalidate = 0;
 
 export default async function KprPipelinePage() {
   const activeUser = await requireAuth();
   const sessionRoleInfo = await getSessionRole(activeUser.id);
+
+  // Pipeline KPR memuat data konsumen, dokumen, dan keputusan bank. Batasi
+  // pembacaannya ke peran yang memang memiliki akses modul pemasaran/KPR.
+  const canAccessKprPipeline =
+    sessionRoleInfo.isSuperAdmin ||
+    sessionRoleInfo.isAdminKantor ||
+    sessionRoleInfo.isMarketing ||
+    sessionRoleInfo.isMarketingManager ||
+    sessionRoleInfo.isKeuangan ||
+    sessionRoleInfo.isDireksi;
+  if (!canAccessKprPipeline) {
+    redirect("/unauthorized");
+  }
   
   // Super Admin, Admin Kantor, Keuangan, Direksi can verify docs
   const canVerifyDocs = 

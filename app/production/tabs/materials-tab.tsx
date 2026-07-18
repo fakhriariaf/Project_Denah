@@ -36,12 +36,14 @@ interface MaterialsTabProps {
   materialRequests: MaterialRequest[];
   onNewMaterial: () => void;
   onSubmitToFinance: (requestId: string) => Promise<void>;
+  onMarkPurchased?: (requestId: string) => Promise<void>;
 }
 
 export function MaterialsTab({
   materialRequests,
   onNewMaterial,
   onSubmitToFinance,
+  onMarkPurchased,
 }: MaterialsTabProps) {
   const { t } = useI18n();
 
@@ -106,19 +108,27 @@ export function MaterialsTab({
                   <TableCell>
                     <Badge
                       className={`shadow-none font-semibold text-xs ${
-                        m.status === "approved" || m.status === "purchased"
+                        m.status === "purchased"
+                          ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                          : m.status === "approved"
                           ? "bg-secondary text-primary border border-primary/30"
                           : m.status === "finance_pending"
                           ? "bg-amber-50 text-amber-700 border border-amber-200"
+                          : m.status === "submitted"
+                          ? "bg-blue-50 text-blue-700 border border-blue-200"
                           : m.status === "rejected"
                           ? "bg-red-50 text-red-700 border border-red-200"
                           : "bg-gray-100 text-gray-700 border border-gray-200"
                       }`}
                     >
-                      {m.status === "approved" || m.status === "purchased"
+                      {m.status === "purchased"
+                        ? t("production.mat_status_purchased")
+                        : m.status === "approved"
                         ? t("production.mat_status_approved")
                         : m.status === "finance_pending"
                         ? t("production.mat_status_pending")
+                        : m.status === "submitted"
+                        ? t("production.mat_status_submitted")
                         : m.status === "rejected"
                         ? t("production.mat_status_rejected")
                         : t("production.status_draft")}
@@ -132,6 +142,15 @@ export function MaterialsTab({
                         className="bg-primary hover:bg-primary text-primary-foreground font-semibold text-xs h-8"
                       >
                         {t("production.btn_submit_to_finance")}
+                      </Button>
+                    )}
+                    {m.status === "approved" && onMarkPurchased && (
+                      <Button
+                        size="sm"
+                        onClick={() => onMarkPurchased(m.id)}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs h-8"
+                      >
+                        {t("production.btn_mark_purchased")}
                       </Button>
                     )}
                   </TableCell>

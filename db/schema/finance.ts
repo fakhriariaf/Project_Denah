@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, doublePrecision, integer, index, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, doublePrecision, integer, index, jsonb, uniqueIndex } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { projects, units, customers, financeAccounts, financeCategories } from "./master";
 import { bookings } from "./marketing";
@@ -94,6 +94,10 @@ export const transactions = pgTable("transactions", {
   updatedAt: defaultUpdatedAt(),
 }, (table) => ({
   createdAtIdx: index("idx_transactions_created_at").on(table.createdAt),
+  materialRequestIdx: index("idx_transactions_material_request").on(table.materialRequestId),
+  incomePerKprUnique: uniqueIndex("uniq_income_per_kpr")
+    .on(table.kprProcessId)
+    .where(sql`${table.kprProcessId} is not null and ${table.type} = 'income' and ${table.reversalOfTransactionId} is null`),
 }));
 
 export const transactionApprovals = pgTable("transaction_approvals", {

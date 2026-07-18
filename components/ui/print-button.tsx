@@ -8,9 +8,11 @@ import { useRouter } from "next/navigation";
 interface PrintButtonProps {
   /** Label teks tombol cetak. Default: "Cetak Kuitansi / STTB" */
   label?: string;
+  /** Tujuan kembali eksplisit, terutama bila halaman cetak dibuka pada tab baru. */
+  backHref?: string;
 }
 
-export function PrintButton({ label = "Cetak Kuitansi / STTB" }: PrintButtonProps) {
+export function PrintButton({ label = "Cetak Kuitansi / STTB", backHref }: PrintButtonProps) {
   const router = useRouter();
 
 
@@ -19,7 +21,7 @@ export function PrintButton({ label = "Cetak Kuitansi / STTB" }: PrintButtonProp
       <Button
         variant="outline"
         size="sm"
-        onClick={() => router.back()}
+        onClick={() => backHref ? router.push(backHref) : router.back()}
         className="rounded-xl border-[#D6DED2] text-[#66736A] hover:bg-[#F7F8F3] hover:text-[#4F6F52] transition-all font-medium text-xs flex items-center gap-1.5"
       >
         <ArrowLeft className="h-4 w-4" />
