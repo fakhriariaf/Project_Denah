@@ -20,11 +20,11 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   HardHat, Plus, Search, CheckCircle2, XCircle, FileText,
   AlertTriangle, Layers, Sparkles, Calendar, Wrench, TrendingUp,
-  ClipboardList, ChevronDown, ChevronUp, Clock, Loader2,
+  ClipboardList, ChevronDown, ChevronUp, Clock, Loader2, ExternalLink,
 } from "lucide-react";
 import {
   createSpk, activateSpk, checkOverdueSpks, deleteSpk, updateSpk,
-  getSpkDetails, completeVendorSpk,
+  getSpkDetails, completeVendorSpk, getBastAttachmentForSpk,
 } from "@/server/actions/production";
 import { getUnitStatusLabel } from "@/lib/label-helpers";
 
@@ -76,7 +76,7 @@ export interface SpkTabProps {
   units: Array<{ id: string; code: string; projectId: string | null; price: number; status: string; constructionProgress: number; readyStockSource?: string | null; isReadyStock?: boolean }>;
   vendors: Array<{ id: string; name: string; phone: string | null }>;
   workItems: Array<{ id: string; code: string; name: string; defaultWeightPct: number }>;
-  dpPaidUnitIds: string[];
+  spkEligibleUnitIds: string[];
   isSuperAdmin?: boolean;
   isPengawas?: boolean;
   isVendor?: boolean;
@@ -84,6 +84,7 @@ export interface SpkTabProps {
   onSearchChange: (q: string) => void;
   onOpenProgressDialog: (spkId: string, tab: string) => void;
   onOpenBastDialog: (unit: any, spk: any) => void;
+  detailRefreshKey?: number;
 }
 
 export function SpkTab({
@@ -93,7 +94,7 @@ export function SpkTab({
   units,
   vendors,
   workItems,
-  dpPaidUnitIds,
+  spkEligibleUnitIds,
   isSuperAdmin = false,
   isPengawas = false,
   isVendor = false,
@@ -101,10 +102,11 @@ export function SpkTab({
   onSearchChange,
   onOpenProgressDialog,
   onOpenBastDialog,
+  detailRefreshKey = 0,
 }: SpkTabProps) {
   const router = useRouter();
   const { t } = useI18n();
-  const dpPaidUnitIdsSet = React.useMemo(() => new Set(dpPaidUnitIds), [dpPaidUnitIds]);
+  const spkEligibleUnitIdsSet = React.useMemo(() => new Set(spkEligibleUnitIds), [spkEligibleUnitIds]);
 
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
@@ -113,6 +115,7 @@ export function SpkTab({
   // SPK Dialog states
   const [spkOpen, setSpkOpen] = React.useState(false);
   const [editingSpkId, setEditingSpkId] = React.useState<string | null>(null);
+  const [spkPurpose, setSpkPurpose] = React.useState<"customer" | "ready_stock">("customer");
   const [spkFormError, setSpkFormError] = React.useState<string | null>(null);
   const [formWeights, setFormWeights] = React.useState<Array<{ workItemId: string; weightPct: number }>>([]);
   const [vendorCompleteConfirmOpen, setVendorCompleteConfirmOpen] = React.useState(false);
@@ -122,6 +125,7 @@ export function SpkTab({
   const [selectedSpkId, setSelectedSpkId] = React.useState<string | null>(null);
   const [lastSelectedSpkId, setLastSelectedSpkId] = React.useState<string | null>(null);
   const [spkWeights, setSpkWeights] = React.useState<Array<{ workItemId: string; name: string; weightPct: number; currentProgress: number }>>([]);
+  const [bastVendorAttachment, setBastVendorAttachment] = React.useState<any | null>(null);
 
   React.useEffect(() => {
     if (selectedSpkId) setLastSelectedSpkId(selectedSpkId);
@@ -132,6 +136,19 @@ export function SpkTab({
     projectId: "", unitId: "", vendorId: "", title: "",
     workDescription: "", specification: "", rabAmount: "", startDate: "", targetEndDate: "",
   });
+  const selectableUnits = React.useMemo(
+    () => units.filter((unit) =>
+      unit.projectId === newSpk.projectId &&
+      (
+        (editingSpkId !== null && unit.id === newSpk.unitId) ||
+        (
+          spkEligibleUnitIdsSet.has(unit.id) &&
+          (spkPurpose === "ready_stock" ? unit.status === "belum_siap" : unit.status !== "belum_siap")
+        )
+      ),
+    ),
+    [editingSpkId, newSpk.projectId, newSpk.unitId, spkEligibleUnitIdsSet, spkPurpose, units],
+  );
 
   // Vendor Performance
   const vendorPerformance = React.useMemo(() => {
@@ -184,6 +201,7 @@ export function SpkTab({
 
   const handleEditSpkClick = async (s: any) => {
     setEditingSpkId(s.id);
+    setSpkPurpose(units.find((unit) => unit.id === s.unitId)?.status === "belum_siap" ? "ready_stock" : "customer");
     setNewSpk({ projectId: s.projectId || "", unitId: s.unitId || "", vendorId: s.vendorId || "", title: s.title || "", workDescription: s.workDescription || "", specification: s.specification || "", rabAmount: String(s.rabAmount || ""), startDate: new Date(s.startDate).toISOString().slice(0, 10), targetEndDate: new Date(s.targetEndDate).toISOString().slice(0, 10) });
     try {
       const details = await getSpkDetails(s.id);
@@ -207,6 +225,7 @@ export function SpkTab({
         setSuccessMessage(t("production.spk_created"));
       }
       setSpkFormError(null); setSpkOpen(false); setEditingSpkId(null);
+      setSpkPurpose("customer");
       setNewSpk({ projectId: "", unitId: "", vendorId: "", title: "", workDescription: "", specification: "", rabAmount: "", startDate: "", targetEndDate: "" });
       router.refresh();
     } catch (e: any) {
@@ -226,15 +245,41 @@ export function SpkTab({
   const handleViewSpkDetails = async (spkId: string) => {
     setSelectedSpkId(spkId);
     try {
-      const details = await getSpkDetails(spkId);
-      if (!details) return;
+      const [details, bastAttachment] = await Promise.all([
+        getSpkDetails(spkId),
+        getBastAttachmentForSpk(spkId),
+      ]);
+      setBastVendorAttachment(bastAttachment);
+      if (!details) {
+        setSpkWeights([]);
+        return;
+      }
       const items = details.weights.map(w => {
         const totalProgress = details.logs.filter(l => l.log.workItemId === w.weight.workItemId).reduce((sum, l) => sum + l.log.percentageAdded, 0);
         return { workItemId: w.workItem.id, name: w.workItem.name, weightPct: w.weight.weightPct, currentProgress: Math.min(100, totalProgress) };
       });
       setSpkWeights(items);
-    } catch (e) { setErrorMessage(e instanceof Error ? e.message : "Gagal memuat detail SPK."); }
+    } catch (e) {
+      setBastVendorAttachment(null);
+      setErrorMessage(e instanceof Error ? e.message : "Gagal memuat detail SPK.");
+    }
   };
+
+  React.useEffect(() => {
+    if (selectedSpkId) {
+      void handleViewSpkDetails(selectedSpkId);
+    }
+    // detailRefreshKey berubah hanya setelah progress berhasil tersimpan.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detailRefreshKey]);
+
+  React.useEffect(() => {
+    if (selectedSpkId) {
+      void handleViewSpkDetails(selectedSpkId);
+    }
+    // Server action revalidates data setelah revisi/hapus log; muat ulang detail terbuka.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spks]);
 
   const handleCompleteVendorSpk = async () => {
     if (!spkToCompleteVendor) return;
@@ -266,7 +311,7 @@ export function SpkTab({
         <Button onClick={handleRunOverdueScanner} disabled={isSubmitting} variant="outline" className="bg-white/90 backdrop-blur-sm border-border text-primary hover:bg-[#8FAF9A]/10 font-bold rounded-xl h-10 shadow-sm">
           <Calendar className="mr-2 h-4 w-4 text-primary" />{t("production.btn_scan_overdue")}
         </Button>
-        <Button onClick={() => { setEditingSpkId(null); setNewSpk({ projectId: "", unitId: "", vendorId: "", title: "", workDescription: "", specification: "", rabAmount: "", startDate: "", targetEndDate: "" }); setFormWeights(workItems.map(item => ({ workItemId: item.id, weightPct: item.defaultWeightPct }))); setSpkOpen(true); }} className="btn-premium bg-[#4F6F52] hover:bg-[#3D563F] text-white font-bold rounded-xl h-10 shadow-[0_4px_14px_rgba(79,111,82,0.3)] hover:scale-[1.02] active:scale-[0.98] transition-all">
+        <Button onClick={() => { setEditingSpkId(null); setSpkPurpose("customer"); setNewSpk({ projectId: "", unitId: "", vendorId: "", title: "", workDescription: "", specification: "", rabAmount: "", startDate: "", targetEndDate: "" }); setFormWeights(workItems.map(item => ({ workItemId: item.id, weightPct: item.defaultWeightPct }))); setSpkOpen(true); }} className="btn-premium bg-[#4F6F52] hover:bg-[#3D563F] text-white font-bold rounded-xl h-10 shadow-[0_4px_14px_rgba(79,111,82,0.3)] hover:scale-[1.02] active:scale-[0.98] transition-all">
           <Plus className="mr-2 h-4 w-4" />{t("production.btn_new_spk")}
         </Button>
       </div>
@@ -385,7 +430,12 @@ export function SpkTab({
                 </div>
                 <div className="flex items-center gap-2">
                   {(() => { const spkSpmb = spmbs.find(b => b.spkId === spk.id); return spkSpmb ? <a href={`/production/spmb/${spkSpmb.id}/print`} className="border border-amber-500/50 text-amber-700 hover:bg-amber-50 font-semibold text-xs h-9 px-4 rounded-md flex items-center justify-center gap-1.5 transition-colors bg-background"><FileText className="h-4 w-4 text-amber-600" />{t("production.btn_print_spmb")}</a> : null; })()}
-                  {(spk.status === "completed" || spk.status === "selesai_konstruksi") && <a href={`/production/spk/${spk.id}/bast/print`} className="border border-emerald-500/50 text-emerald-700 hover:bg-emerald-50 font-semibold text-xs h-9 px-4 rounded-md flex items-center justify-center gap-1.5 transition-colors bg-background"><CheckCircle2 className="h-4 w-4 text-emerald-600" />Cetak BAST</a>}
+                  {((spk.status === "completed" || spk.status === "selesai_konstruksi") || (spk.progressPct === 100 && (spk.status === "proses_konstruksi" || spk.status === "overdue"))) && (
+                    <a href={`/production/spk/${spk.id}/bast/print`} target="_blank" rel="noopener noreferrer" className={`font-semibold text-xs h-9 px-4 rounded-md flex items-center justify-center gap-1.5 transition-colors bg-background ${bastVendorAttachment ? "border border-emerald-500/50 text-emerald-700 hover:bg-emerald-50" : "border border-amber-500/50 text-amber-700 hover:bg-amber-50"}`}>
+                      <FileText className={`h-4 w-4 ${bastVendorAttachment ? "text-emerald-600" : "text-amber-600"}`} />
+                      {bastVendorAttachment ? "Cetak BAST Vendor" : "Cetak Draft BAST Vendor"}
+                    </a>
+                  )}
                   {spk.status === "active" && <Button size="sm" onClick={() => handleActivateSpk(spk.id)} className="bg-primary hover:bg-primary text-primary-foreground font-semibold text-xs h-9">{t("production.btn_start_work")}</Button>}
                   {(spk.status === "proses_konstruksi" || spk.status === "overdue") && (
                     <div className="flex flex-wrap items-center gap-2">
@@ -396,15 +446,13 @@ export function SpkTab({
 
                   {(() => {
                     const unit = units.find(u => u.id === spk.unitId);
-                    const isReadyToComplete = unit && (unit.status === "construction_done" || ((unit.status === "construction" || unit.status === "overdue") && unit.constructionProgress === 100));
                     if (isVendor) {
                       const canVendorDeclareComplete = spk.progressPct === 100 && (spk.status === "proses_konstruksi" || spk.status === "overdue");
                       if (canVendorDeclareComplete) return <Button size="sm" onClick={() => { setSpkToCompleteVendor(spk); setVendorCompleteConfirmOpen(true); }} className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs h-9 rounded-xl flex items-center gap-1.5 shadow-[0_4px_12px_rgba(16,185,129,0.25)] transition-all animate-pulse"><CheckCircle2 className="h-4 w-4" />Selesai Membangun (Vendor)</Button>;
                       return null;
                     }
-                    const showDirectComplete = isReadyToComplete && (spk.status === "proses_konstruksi" || spk.status === "overdue");
                     const showUploadBastOnly = spk.status === "selesai_konstruksi" && unit && unit.status !== "construction_done";
-                    if (showDirectComplete || showUploadBastOnly) return <Button size="sm" onClick={() => onOpenBastDialog(unit, spk)} className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs h-9 rounded-xl flex items-center gap-1.5 shadow-[0_4px_12px_rgba(16,185,129,0.25)] transition-all animate-pulse ml-2"><CheckCircle2 className="h-4 w-4" />{spk.status === "selesai_konstruksi" ? "Upload BAST & Selesaikan Unit" : "Selesai Membangun (Upload BAST)"}</Button>;
+                    if (showUploadBastOnly) return <Button size="sm" onClick={() => onOpenBastDialog(unit, spk)} className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs h-9 rounded-xl flex items-center gap-1.5 shadow-[0_4px_12px_rgba(16,185,129,0.25)] transition-all animate-pulse ml-2"><CheckCircle2 className="h-4 w-4" />Unggah BAST Vendor &amp; Verifikasi Unit</Button>;
                     return null;
                   })()}
                 </div>
@@ -426,6 +474,20 @@ export function SpkTab({
                     <div className="flex justify-between"><span className="text-muted-foreground">{t("production.info_duration")}:</span><span className="font-semibold text-foreground">{new Date(spk.startDate).toLocaleDateString("id-ID")} s/d {new Date(spk.targetEndDate).toLocaleDateString("id-ID")}</span></div>
                     {spk.specification && <div className="pt-2 border-t border-primary/50/10"><div className="text-muted-foreground mb-1">{t("production.info_spec")}:</div><p className="bg-[#8FAF9A]/5 p-2 rounded text-foreground italic font-medium leading-relaxed">{spk.specification}</p></div>}
                   </div>
+                  <div className="rounded-2xl border border-primary/20 bg-card p-4 text-xs shadow-[0_4px_16px_rgba(143,175,154,0.06)]">
+                    <div className="mb-3 flex items-center gap-2">
+                      <div className="rounded-lg bg-primary/10 p-1.5 text-primary"><FileText className="h-4 w-4" /></div>
+                      <div><p className="font-extrabold text-foreground">BAST Vendor ke Developer</p><p className="text-[10px] text-muted-foreground">Dokumen serah terima fisik konstruksi</p></div>
+                    </div>
+                    {bastVendorAttachment ? (
+                      <div className="flex items-center justify-between gap-2 rounded-xl border border-primary/15 bg-primary/5 p-2.5">
+                        <p className="min-w-0 flex-1 truncate font-mono text-[10px] font-semibold text-foreground" title={bastVendorAttachment.fileName}>{bastVendorAttachment.fileName}</p>
+                        <a href={bastVendorAttachment.fileUrl} target="_blank" rel="noopener noreferrer" className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-primary px-2.5 py-1.5 text-[10px] font-bold text-white transition-colors hover:bg-primary/90"><ExternalLink className="h-3 w-3" />Lihat PDF</a>
+                      </div>
+                    ) : (
+                      <p className="rounded-xl border border-dashed border-border bg-muted/20 p-2.5 text-[10px] leading-relaxed text-muted-foreground">Belum ada dokumen BAST Vendor yang diunggah untuk SPK ini.</p>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -434,7 +496,7 @@ export function SpkTab({
       </div>
 
       {/* Create/Edit SPK Dialog */}
-      <Dialog open={spkOpen} onOpenChange={(open) => { setSpkOpen(open); if (!open) { setEditingSpkId(null); setNewSpk({ projectId: "", unitId: "", vendorId: "", title: "", workDescription: "", specification: "", rabAmount: "", startDate: "", targetEndDate: "" }); setFormWeights([]); } if (open) setSpkFormError(null); }}>
+      <Dialog open={spkOpen} onOpenChange={(open) => { setSpkOpen(open); if (!open) { setEditingSpkId(null); setSpkPurpose("customer"); setNewSpk({ projectId: "", unitId: "", vendorId: "", title: "", workDescription: "", specification: "", rabAmount: "", startDate: "", targetEndDate: "" }); setFormWeights([]); } if (open) setSpkFormError(null); }}>
         <DialogContent className="sm:max-w-lg rounded-3xl bg-white/98 backdrop-blur-md border border-border shadow-[0_8px_30px_rgb(143,175,154,0.15)] p-0 overflow-hidden font-sans">
           <div className="bg-gradient-to-r from-[#DDE8D8]/70 via-white/80 to-transparent p-6 border-b border-border">
             <DialogHeader>
@@ -445,7 +507,21 @@ export function SpkTab({
           <form onSubmit={handleCreateSpk} className="p-6 space-y-4 pt-4 max-h-[75vh] overflow-y-auto">
             {spkFormError && <div className="w-full flex items-start gap-2.5 p-3.5 rounded-2xl bg-red-50 border border-red-200 text-red-700 text-xs font-semibold animate-in fade-in slide-in-from-top-2"><XCircle className="h-4 w-4 shrink-0 mt-0.5 text-destructive" /><span className="leading-relaxed">{spkFormError}</span></div>}
 
-            {newSpk.unitId && (() => { const selectedUnit = units.find(u => u.id === newSpk.unitId); const needsGate = selectedUnit && ["kpr_process", "booking"].includes(selectedUnit.status); if (!needsGate) return null; const dpPaid = dpPaidUnitIdsSet.has(newSpk.unitId); return dpPaid ? <div className="flex items-center gap-2 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold animate-in fade-in"><span className="h-5 w-5 rounded-full bg-emerald-500 text-white flex items-center justify-center shrink-0 text-[10px] font-bold">✓</span><span><strong>{t("production.dp_gate_paid")}</strong></span></div> : <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 border border-amber-300 text-amber-800 text-xs font-semibold animate-in fade-in"><AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" /><div><p className="font-bold text-amber-900">{t("production.dp_gate_warning")}</p><p className="text-amber-700 font-medium mt-0.5">{t("production.dp_gate_desc")}</p></div></div>; })()}
+            {newSpk.unitId && (() => {
+              const selectedUnit = units.find((unit) => unit.id === newSpk.unitId);
+              const eligible = Boolean(selectedUnit && spkEligibleUnitIdsSet.has(newSpk.unitId));
+              return eligible ? (
+                <div className="flex items-center gap-2 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold animate-in fade-in">
+                  <span className="h-5 w-5 rounded-full bg-emerald-500 text-white flex items-center justify-center shrink-0 text-[10px] font-bold">✓</span>
+                  <strong>Syarat penerbitan SPK telah terpenuhi.</strong>
+                </div>
+              ) : (
+                <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 border border-amber-300 text-amber-800 text-xs font-semibold animate-in fade-in">
+                  <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+                  <div><p className="font-bold text-amber-900">Unit ini tidak lagi memenuhi syarat penerbitan SPK.</p><p className="text-amber-700 font-medium mt-0.5">Pilih unit lain yang tersedia, atau perbarui data unit jika sedang mengubah SPK lama.</p></div>
+                </div>
+              );
+            })()}
 
             <div className="space-y-3 text-sm">
               <div className="space-y-1"><label className="font-semibold text-foreground text-xs">{t("production.spk_lbl_project")}</label>
@@ -455,10 +531,37 @@ export function SpkTab({
                 </Select>
               </div>
 
-              <div className="space-y-1"><label className="font-semibold text-foreground text-xs">{t("production.spk_lbl_unit")}</label>
-                <Select value={newSpk.unitId} onValueChange={(val: string | null) => setNewSpk(prev => ({ ...prev, unitId: val || "" }))} disabled={!newSpk.projectId} required items={units.map(u => ({ label: `${u.code} — ${getUnitStatusLabel(u.status, { isReadyStock: u.isReadyStock })}`, value: u.id }))}>
-                  <SelectTrigger className="w-full border-primary/30 focus:ring-primary"><SelectValue placeholder={t("production.spk_lbl_unit")}>{newSpk.unitId ? (() => { const u = units.find(unit => unit.id === newSpk.unitId); return u ? `${u.code} — ${getUnitStatusLabel(u.status, { isReadyStock: u.isReadyStock })}` : undefined; })() : undefined}</SelectValue></SelectTrigger>
-                  <SelectContent>{units.filter(u => (u.projectId === newSpk.projectId && !u.isReadyStock && u.status !== "belum_siap" && (u.status !== "construction" || !spks.some(s => s.unitId === u.id && s.status !== "cancelled")) && u.status !== "construction_done" && (u.constructionProgress || 0) < 100) || u.id === newSpk.unitId).map(u => <SelectItem key={u.id} value={u.id}>{u.code} &mdash; Progres {u.constructionProgress || 0}%</SelectItem>)}</SelectContent>
+              {!editingSpkId && (
+                <div className="space-y-1.5">
+                  <label className="font-semibold text-foreground text-xs">Jenis Pembangunan</label>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2" role="group" aria-label="Jenis pembangunan">
+                    <button
+                      type="button"
+                      aria-pressed={spkPurpose === "customer"}
+                      onClick={() => { setSpkPurpose("customer"); setNewSpk((prev) => ({ ...prev, unitId: "" })); }}
+                      className={`rounded-xl border p-3 text-left text-xs transition-colors ${spkPurpose === "customer" ? "border-primary bg-secondary text-primary" : "border-border bg-white text-muted-foreground hover:border-primary/50"}`}
+                    >
+                      <span className="block font-bold">Pembangunan Unit Konsumen</span>
+                      <span className="mt-0.5 block text-[11px]">Untuk unit booking/KPR yang sudah memenuhi syarat.</span>
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={spkPurpose === "ready_stock"}
+                      onClick={() => { setSpkPurpose("ready_stock"); setNewSpk((prev) => ({ ...prev, unitId: "" })); }}
+                      className={`rounded-xl border p-3 text-left text-xs transition-colors ${spkPurpose === "ready_stock" ? "border-primary bg-secondary text-primary" : "border-border bg-white text-muted-foreground hover:border-primary/50"}`}
+                    >
+                      <span className="block font-bold">Bangun Ready Stock</span>
+                      <span className="mt-0.5 block text-[11px]">Untuk unit internal berstatus Belum Siap tanpa booking.</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-1"><label className="font-semibold text-foreground text-xs">Unit / Kavling yang Siap Dibangun</label>
+                <p className="text-[11px] text-muted-foreground">{spkPurpose === "ready_stock" ? "Menampilkan unit Belum Siap yang akan dibangun sebagai Ready Stock." : "Menampilkan unit konsumen yang telah lolos seluruh syarat SPK."}</p>
+                <Select value={newSpk.unitId} onValueChange={(val: string | null) => setNewSpk(prev => ({ ...prev, unitId: val || "" }))} disabled={!newSpk.projectId} required items={selectableUnits.map(u => ({ label: `${u.code} — ${getUnitStatusLabel(u.status, { isReadyStock: u.isReadyStock })}`, value: u.id }))}>
+                  <SelectTrigger className="w-full border-primary/30 focus:ring-primary"><SelectValue placeholder={newSpk.projectId ? "Pilih unit yang siap dibangun" : "Pilih proyek terlebih dahulu"}>{newSpk.unitId ? (() => { const u = units.find(unit => unit.id === newSpk.unitId); return u ? `${u.code} — ${getUnitStatusLabel(u.status, { isReadyStock: u.isReadyStock })}` : undefined; })() : undefined}</SelectValue></SelectTrigger>
+                  <SelectContent>{selectableUnits.length > 0 ? selectableUnits.map(u => <SelectItem key={u.id} value={u.id}>{u.code} &mdash; Progres {u.constructionProgress || 0}%</SelectItem>) : <div className="px-3 py-2 text-xs text-muted-foreground">{spkPurpose === "ready_stock" ? "Tidak ada unit Ready Stock internal yang siap dibangun pada proyek ini." : "Tidak ada unit konsumen yang memenuhi syarat SPK pada proyek ini."}</div>}</SelectContent>
                 </Select>
               </div>
 
@@ -507,8 +610,8 @@ export function SpkTab({
             </div>
             <DialogFooter className="pt-2">
               <Button type="button" variant="ghost" onClick={() => setSpkOpen(false)} className="text-xs text-muted-foreground hover:text-foreground">{t("production.btn_cancel")}</Button>
-              <Button type="submit" disabled={isSubmitting || (() => { const u = units.find(unit => unit.id === newSpk.unitId); if (!u) return false; if (["kpr_process", "booking"].includes(u.status) && !dpPaidUnitIdsSet.has(newSpk.unitId)) return true; return false; })()} className="bg-primary hover:bg-primary text-primary-foreground font-semibold text-xs disabled:opacity-60 disabled:cursor-not-allowed">
-                {(() => { const u = units.find(unit => unit.id === newSpk.unitId); const blocked = u && ["kpr_process", "booking"].includes(u.status) && !dpPaidUnitIdsSet.has(newSpk.unitId); return blocked ? `🔒 ${t("production.btn_wait_dp")}` : (editingSpkId ? "Simpan Perubahan" : t("production.btn_publish_spk")); })()}
+              <Button type="submit" disabled={isSubmitting || (!editingSpkId && (!newSpk.unitId || !spkEligibleUnitIdsSet.has(newSpk.unitId)))} className="bg-primary hover:bg-primary text-primary-foreground font-semibold text-xs disabled:opacity-60 disabled:cursor-not-allowed">
+                {(!editingSpkId && (!newSpk.unitId || !spkEligibleUnitIdsSet.has(newSpk.unitId))) ? "Pilih unit yang siap dibangun" : (editingSpkId ? "Simpan Perubahan" : t("production.btn_publish_spk"))}
               </Button>
             </DialogFooter>
           </form>

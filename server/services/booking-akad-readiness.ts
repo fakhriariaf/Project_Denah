@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { bookings, kprProcesses } from "@/db/schema/marketing";
+import { bookings, customerDocuments, kprProcesses } from "@/db/schema/marketing";
 import { invoices } from "@/db/schema/finance";
 import { units } from "@/db/schema/master";
 import { spks } from "@/db/schema/production";
@@ -18,14 +18,22 @@ const SPK_NOT_DONE_STATUSES = ["active", "proses_konstruksi", "overdue"];
  * This action is for non-KPR Akad/PPJB. KPR has its own akad gate in the KPR
  * pipeline because it depends on SP3K/bank approval.
  */
-export async function getBookingAkadReadiness(bookingId: string): Promise<BookingAkadReadiness> {
+export async function getBookingAkadReadiness(
+  bookingId: string,
+  expectedBookingStatus: "active" | "akad" = "active"
+): Promise<BookingAkadReadiness> {
   const booking = await db.select().from(bookings).where(eq(bookings.id, bookingId)).get();
   if (!booking) {
     return { eligible: false, reason: "Booking tidak ditemukan." };
   }
 
-  if (booking.status !== "active") {
-    return { eligible: false, reason: "Hanya booking aktif yang bisa diproses ke Akad / PPJB." };
+  if (booking.status !== expectedBookingStatus) {
+    return {
+      eligible: false,
+      reason: expectedBookingStatus === "active"
+        ? "Hanya booking aktif yang bisa diproses ke Akad / PPJB."
+        : "Hanya booking yang sedang berstatus Akad / PPJB yang dapat diselesaikan ke tahap serah terima.",
+    };
   }
 
   if (booking.paymentScheme === "kpr") {
@@ -72,6 +80,42 @@ export async function getBookingAkadReadiness(bookingId: string): Promise<Bookin
     return { eligible: false, reason: "Seluruh invoice/tagihan booking harus lunas sebelum Akad / PPJB." };
   }
 
+  // Cash dan Cash Bertahap tidak membutuhkan dokumen bank. KTP serta KK harus
+  // sudah diverifikasi pada booking yang sama sebelum Akad / PPJB dilanjutkan.
+  const identityDocuments = await db
+    .select({ documentType: customerDocuments.documentType, status: customerDocuments.status })
+    .from(customerDocuments)
+    .where(eq(customerDocuments.bookingId, bookingId))
+    .all();
+  const missingIdentityDocuments = ["ktp", "kk"].filter(
+    (documentType) => !identityDocuments.some(
+      (document) => document.documentType === documentType && document.status === "verified"
+    )
+  );
+  if (missingIdentityDocuments.length > 0) {
+    const labels: Record<string, string> = { ktp: "KTP", kk: "Kartu Keluarga" };
+    return {
+      eligible: false,
+      reason: `Dokumen identitas belum terverifikasi: ${missingIdentityDocuments.map((type) => labels[type]).join(", ")}.`,
+    };
+  }
+
+  // Menyelesaikan Akad / PPJB berarti dokumen PPJB yang telah ditandatangani
+  // sudah tersedia dan lolos verifikasi. Gate ini tidak berlaku saat baru
+  // memulai proses akad, karena dokumen baru dapat diunggah setelah akad
+  // ditandatangani.
+  if (expectedBookingStatus === "akad") {
+    const ppjbDocument = identityDocuments.find(
+      (document) => document.documentType === "spjb"
+    );
+    if (!ppjbDocument || ppjbDocument.status !== "verified") {
+      return {
+        eligible: false,
+        reason: "Dokumen Akad / PPJB yang telah ditandatangani belum diunggah dan diverifikasi.",
+      };
+    }
+  }
+
   const unit = await db.select().from(units).where(eq(units.id, booking.unitId)).get();
   if (!unit) {
     return { eligible: false, reason: "Unit booking tidak ditemukan." };
@@ -90,6 +134,16 @@ export async function getBookingAkadReadiness(bookingId: string): Promise<Bookin
     return {
       eligible: false,
       reason: "Pembangunan fisik unit belum 100%. Selesaikan progress produksi terlebih dahulu.",
+    };
+  }
+
+  // Progress 100% adalah pernyataan vendor/lapangan, bukan persetujuan
+  // serah-terima fisik. completeConstruction() baru menetapkan isReadyStock
+  // setelah BAST Vendor ke Developer tersedia dan diverifikasi.
+  if (!unit.isReadyStock) {
+    return {
+      eligible: false,
+      reason: "BAST Vendor ke Developer belum diverifikasi. Selesaikan verifikasi fisik unit terlebih dahulu.",
     };
   }
 

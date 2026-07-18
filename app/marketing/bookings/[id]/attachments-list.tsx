@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { FileText, Eye, Trash2 } from "lucide-react";
 import { deleteBookingAttachment } from "@/server/actions/marketing";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -23,6 +24,7 @@ interface Props {
 
 export default function BookingAttachmentsList({ bookingId, initialAttachments, canDelete = false }: Props) {
   const { t } = useI18n();
+  const router = useRouter();
   const [attachmentsList, setAttachmentsList] = useState<Attachment[]>(initialAttachments);
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -47,6 +49,7 @@ export default function BookingAttachmentsList({ bookingId, initialAttachments, 
       const res = await deleteBookingAttachment(attId);
       if (res.success) {
         setAttachmentsList((prev) => prev.filter((att) => att.id !== attId));
+        router.refresh();
       }
     } catch (err: any) {
       setError(err.message || t("booking_proof.error_delete"));

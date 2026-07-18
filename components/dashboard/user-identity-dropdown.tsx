@@ -73,22 +73,23 @@ export function UserIdentityDropdown() {
     });
   };
 
-  if (!user) return null;
-
-  // Render a stable neutral placeholder before client mount to avoid hydration mismatch
-  // (theme state from localStorage differs between server and client)
+  // authClient.useSession() can resolve before the first client render while the
+  // server has no session snapshot. Render this exact neutral shape on both
+  // sides of hydration; only read session-derived content after mounting.
   if (!isMounted) {
     return (
-      <div className="relative">
+      <div className="relative" aria-hidden="true">
         <div className="flex items-center gap-2 pl-1.5 pr-2.5 py-1.5 rounded-xl border border-border bg-card">
           <div className="h-7 w-7 rounded-full bg-secondary flex items-center justify-center font-black text-[10px] shrink-0 border border-primary/30">
-            {initials}
+            ?
           </div>
           <ChevronDown className="h-3 w-3 text-primary shrink-0" />
         </div>
       </div>
     );
   }
+
+  if (!user) return null;
 
   return (
     <div className="relative" ref={dropdownRef}>

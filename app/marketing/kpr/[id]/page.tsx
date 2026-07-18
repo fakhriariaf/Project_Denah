@@ -145,7 +145,11 @@ export default async function KprDetailPage({ params }: KprDetailPageProps) {
     })
     .from(documentsTable)
     .innerJoin(attachments, eq(documentsTable.attachmentId, attachments.id))
-    .where(eq(documentsTable.customerId, kprData.customerId));
+    .where(eq(documentsTable.bookingId, kprData.bookingId));
+
+  const bastCustomerStatus = customerDocs.find(
+    (document) => document.documentType === "bast"
+  )?.status ?? null;
 
   // SLA calculation
   const now = new Date();
@@ -205,6 +209,7 @@ export default async function KprDetailPage({ params }: KprDetailPageProps) {
               isReadyStock: kprData.isReadyStock,
               readyStockSource: kprData.readyStockSource,
               constructionProgress: kprData.constructionProgress ?? 0,
+              bastCustomerStatus,
             }}
             orientation="horizontal"
           />

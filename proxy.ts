@@ -41,6 +41,10 @@ function buildLoginRedirectUrl(request: NextRequest): URL {
   const { pathname, search } = request.nextUrl;
   const originalPath = pathname + search;
   const loginUrl = new URL("/login", request.url);
+  // Tidak ada cookie pada route terproteksi berarti sesi sebelumnya sudah tidak
+  // tersedia (logout atau kedaluwarsa). Sertakan reason agar login menampilkan
+  // dialog yang menjelaskan mengapa pengguna perlu masuk kembali.
+  loginUrl.searchParams.set("reason", "session-expired");
   loginUrl.searchParams.set("callbackUrl", originalPath);
   return loginUrl;
 }

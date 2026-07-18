@@ -66,6 +66,8 @@ type InvoiceListItem = {
   scheduleKind: string | null;
   scheduleSequence: number | null;
   scheduleLabel: string | null;
+  bookingProofFileUrl: string | null;
+  bookingProofFileName: string | null;
 };
 
 interface InvoicesTabProps {
@@ -91,6 +93,8 @@ interface InvoicesTabProps {
     scheduleKind: string | null;
     scheduleSequence: number | null;
     scheduleLabel: string | null;
+    bookingProofFileUrl: string | null;
+    bookingProofFileName: string | null;
   }>;
   initialPayments: Array<{
     id: string;
@@ -134,6 +138,35 @@ export function InvoicesTab({
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
   const [printInvoice, setPrintInvoice] = React.useState<typeof initialInvoices[0] | null>(null);
+
+  // Use a proof attached directly to the payment first. Older flows upload
+  // the same file to Booking, so BF, DP, and Pelunasan Cash then fall back to
+  // that matching booking attachment without duplicating data.
+  const proofByInvoiceId = React.useMemo(() => {
+    const proofByInvoice = new Map<
+      string,
+      { fileUrl: string; paymentNumber: string | null; source: "payment" | "booking" }
+    >();
+    for (const payment of initialPayments) {
+      if (payment.invoiceId && payment.proofFileUrl && !proofByInvoice.has(payment.invoiceId)) {
+        proofByInvoice.set(payment.invoiceId, {
+          fileUrl: payment.proofFileUrl,
+          paymentNumber: payment.paymentNumber,
+          source: "payment",
+        });
+      }
+    }
+    for (const invoice of initialInvoices) {
+      if (!proofByInvoice.has(invoice.id) && invoice.bookingProofFileUrl) {
+        proofByInvoice.set(invoice.id, {
+          fileUrl: invoice.bookingProofFileUrl,
+          paymentNumber: null,
+          source: "booking",
+        });
+      }
+    }
+    return proofByInvoice;
+  }, [initialInvoices, initialPayments]);
 
   const [invoiceForm, setInvoiceForm] = React.useState({
     projectId: "",
@@ -480,7 +513,7 @@ export function InvoicesTab({
                       Rp {inv.amount.toLocaleString("id-ID")}
                     </TableCell>
                     <TableCell className="text-center">
-                      <div className="flex flex-col items-center justify-center gap-1">
+                      <div className="flex items-center justify-center">
                         <Badge
                           className={
                             inv.status === "paid"
@@ -496,26 +529,39 @@ export function InvoicesTab({
                             ? t("finance.status_partial")
                             : t("finance.status_unpaid")}
                         </Badge>
-                        {(() => {
-                          const matchingPayment = initialPayments.find(p => p.invoiceId === inv.id && p.proofFileUrl);
-                          if (matchingPayment?.proofFileUrl) {
-                            return (
-                              <a
-                                href={matchingPayment.proofFileUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-[10px] text-primary hover:text-[#3D563F] underline font-bold inline-flex items-center gap-1 mt-0.5"
-                              >
-                                <Eye className="h-3 w-3" /> {t("finance.view_proof")}
-                              </a>
-                            );
-                          }
-                          return null;
-                        })()}
                       </div>
                     </TableCell>
                     <TableCell className="text-center">
                       <div className="flex items-center justify-center gap-1.5">
+                        {(() => {
+                          const proof = proofByInvoiceId.get(inv.id);
+                          return proof ? (
+                            <a
+                              href={proof.fileUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title={
+                                proof.source === "booking"
+                                  ? "Lihat bukti pembayaran yang diunggah dari Booking"
+                                  : `Lihat bukti pembayaran ${proof.paymentNumber}`
+                              }
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-sky-50 hover:bg-sky-600 text-sky-700 hover:text-white text-[11px] font-semibold transition-all duration-200 hover:scale-105 border border-sky-200"
+                            >
+                              <Eye className="h-3 w-3" />
+                              Bukti
+                            </a>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled
+                              title="Bukti pembayaran belum tersedia"
+                              className="inline-flex cursor-not-allowed items-center gap-1 rounded-lg border border-border bg-muted px-2.5 py-1 text-[11px] font-semibold text-muted-foreground opacity-60"
+                            >
+                              <Eye className="h-3 w-3" />
+                              Bukti
+                            </button>
+                          );
+                        })()}
                         <button
                           onClick={() => {
                             const fullInvoice = initialInvoices.find(i => i.id === inv.id);

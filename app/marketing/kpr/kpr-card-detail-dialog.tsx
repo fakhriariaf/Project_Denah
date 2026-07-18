@@ -887,7 +887,10 @@ export default function KprCardDetailDialog({
                     kprStatus: kpr.status,
                     isReadyStock: kpr.isReadyStock,
                     readyStockSource: kpr.readyStockSource || null,
-                    constructionProgress: kpr.constructionProgress
+                    constructionProgress: kpr.constructionProgress,
+                    bastCustomerStatus: docsList.find(
+                      (document) => document.bookingId === kpr.bookingId && document.documentType === "bast"
+                    )?.status ?? null,
                   }}
                   orientation="horizontal"
                 />

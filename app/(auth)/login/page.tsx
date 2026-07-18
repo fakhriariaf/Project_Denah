@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { toast } from "sonner";
@@ -36,6 +36,15 @@ function LoginPageContent() {
   const [sessionExpiredOpen, setSessionExpiredOpen] = useState(
     reason === "session-expired"
   );
+
+  // App Router dapat mempertahankan instance halaman saat query string berubah.
+  // Sinkronkan dialog agar redirect ke /login?reason=session-expired selalu
+  // memberi notifikasi, bukan hanya saat mount pertama.
+  useEffect(() => {
+    if (reason === "session-expired") {
+      setSessionExpiredOpen(true);
+    }
+  }, [reason]);
 
   const handleLogin = async (event: React.FormEvent) => {
     event.preventDefault();

@@ -2,7 +2,7 @@ import { db } from "@/db"
 import { projects, siteplans, siteplanShapes, units, customers, vendors } from "@/db/schema/master"
 import { user as userTable } from "@/db/schema/auth"
 import { roles as rolesTable } from "@/db/schema/access"
-import { leads as leadsTable, bookings as bookingsTable, kprProcesses as kprProcessesTable } from "@/db/schema/marketing"
+import { leads as leadsTable, bookings as bookingsTable, customerDocuments, kprProcesses as kprProcessesTable } from "@/db/schema/marketing"
 import { invoices as invoicesTable } from "@/db/schema/finance"
 import { requireAuth, getSessionRole } from "@/server/permissions"
 import { getProgressPhotosForProject } from "@/server/actions/production"
@@ -68,6 +68,22 @@ export default async function SiteplanProjectPage({
     paymentScheme: bookingsTable.paymentScheme,
     status: bookingsTable.status,
   }).from(bookingsTable)
+
+  const cashDocumentRows = await db.select({
+    bookingId: customerDocuments.bookingId,
+    documentType: customerDocuments.documentType,
+    status: customerDocuments.status,
+  }).from(customerDocuments)
+
+  const cashDocumentReadiness = bookingsList.map((booking) => {
+    const documents = cashDocumentRows.filter((document) => document.bookingId === booking.id)
+    return {
+      bookingId: booking.id,
+      identityComplete: ["ktp", "kk"].every((documentType) =>
+        documents.some((document) => document.documentType === documentType && document.status === "verified")
+      ),
+    }
+  })
 
   const invoicesList = await db.select({
     id: invoicesTable.id,
@@ -333,6 +349,7 @@ export default async function SiteplanProjectPage({
               leads={leadsList}
               bookings={bookingsList}
               invoices={invoicesList}
+              cashDocumentReadiness={cashDocumentReadiness}
               kprProcesses={kprProcessesList}
               marketings={marketingsList.length > 0 ? marketingsList : marketingsRaw.filter(m => m.roleName?.includes("Marketing"))}
               currentUser={{ id: activeUser.id, name: activeUser.name || "", role: sessionRoleInfo.role }}

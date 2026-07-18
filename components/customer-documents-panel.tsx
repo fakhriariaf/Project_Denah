@@ -48,10 +48,49 @@ const DOC_TYPE_LABELS: Record<string, string> = {
   npwp: "NPWP",
   slip_gaji: "Slip Gaji",
   kk: "Kartu Keluarga",
-  spjb: "SPJB",
-  kpr_doc: "Dokumen KPR",
+  spjb: "Dokumen Akad / PPJB",
+  kpr_doc: "Dokumen Pendukung Bank",
   other: "Lainnya",
 };
+
+type PaymentScheme = "cash" | "installment" | "kpr";
+
+type DocumentFlow = {
+  completionTitle: string;
+  uploadTitle: string;
+  emptyDescription: string;
+  requiredTypes: string[];
+  allowedTypes: string[];
+  hasAkadSection: boolean;
+};
+
+const CASH_DOCUMENT_FLOW: DocumentFlow = {
+  completionTitle: "Verifikasi Dokumen Wajib",
+  uploadTitle: "Upload Dokumen Cash",
+  emptyDescription: "Unggah KTP atau Kartu Keluarga konsumen untuk booking ini.",
+  requiredTypes: ["ktp", "kk"],
+  allowedTypes: ["ktp", "kk", "npwp", "spjb"],
+  hasAkadSection: true,
+};
+
+const INSTALLMENT_DOCUMENT_FLOW: DocumentFlow = {
+  ...CASH_DOCUMENT_FLOW,
+  uploadTitle: "Upload Dokumen Cash Bertahap",
+};
+
+const KPR_DOCUMENT_FLOW: DocumentFlow = {
+  completionTitle: "Kelengkapan Berkas KPR",
+  uploadTitle: "Upload Berkas KPR",
+  emptyDescription: "Unggah berkas persyaratan pengajuan KPR konsumen di atas.",
+  requiredTypes: ["ktp", "kk", "npwp", "slip_gaji"],
+  allowedTypes: ["ktp", "kk", "npwp", "slip_gaji", "kpr_doc"],
+  hasAkadSection: false,
+};
+
+function getDocumentFlow(paymentScheme: PaymentScheme): DocumentFlow {
+  if (paymentScheme === "kpr") return KPR_DOCUMENT_FLOW;
+  return paymentScheme === "installment" ? INSTALLMENT_DOCUMENT_FLOW : CASH_DOCUMENT_FLOW;
+}
 
 const STATUS_CONFIG: Record<string, { label: string; icon: React.ElementType; className: string }> = {
   uploaded: { label: "Menunggu Verifikasi", icon: Clock, className: "bg-amber-50 border-amber-100 text-amber-700" },
@@ -62,6 +101,7 @@ const STATUS_CONFIG: Record<string, { label: string; icon: React.ElementType; cl
 interface Props {
   customerId: string;
   bookingId?: string;
+  paymentScheme: PaymentScheme;
   initialDocs: CustomerDoc[];
   canVerify?: boolean;
   canUpload?: boolean;
@@ -76,17 +116,19 @@ function formatFileSize(bytes: number) {
 export function CustomerDocumentsPanel({
   customerId,
   bookingId,
+  paymentScheme,
   initialDocs,
   canVerify = false,
   canUpload = true,
 }: Props) {
+  const documentFlow = getDocumentFlow(paymentScheme);
   const router = useRouter();
   const [docs, setDocs] = useState<CustomerDoc[]>(initialDocs);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [selectedDocType, setSelectedDocType] = useState<string>("ktp");
+  const [selectedDocType, setSelectedDocType] = useState<string>(documentFlow.requiredTypes[0]);
   const [isDragOver, setIsDragOver] = useState(false);
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CustomerDoc | null>(null);
@@ -105,11 +147,11 @@ export function CustomerDocumentsPanel({
 
   useEffect(() => {
     const uploadedTypes = new Set(docs.map((d) => d.customer_documents.documentType));
-    if (selectedDocType !== "other" && uploadedTypes.has(selectedDocType)) {
-      const nextAvailable = Object.keys(DOC_TYPE_LABELS).find(type => type === "other" || !uploadedTypes.has(type));
-      setSelectedDocType(nextAvailable || "other");
+    if (!documentFlow.allowedTypes.includes(selectedDocType) || uploadedTypes.has(selectedDocType)) {
+      const nextAvailable = documentFlow.allowedTypes.find((type) => !uploadedTypes.has(type));
+      setSelectedDocType(nextAvailable || documentFlow.allowedTypes[0]);
     }
-  }, [docs, selectedDocType]);
+  }, [docs, selectedDocType, documentFlow]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -261,16 +303,23 @@ export function CustomerDocumentsPanel({
     }
   };
 
-  // Group docs by type to show which are missing
-  const uploadedTypes = new Set(docs.map((d) => d.customer_documents.documentType));
-  const activeUploadedTypes = new Set(
-    docs
-      .filter((d) => d.customer_documents.status !== "rejected")
+  // Dokumen dibatasi sesuai skema booking. Riwayat skema lain tetap aman di
+  // database, tetapi tidak tampil dan tidak bisa diunggah pada alur ini.
+  const visibleDocs = docs.filter((doc) => documentFlow.allowedTypes.includes(doc.customer_documents.documentType));
+  const uploadedTypes = new Set(visibleDocs.map((d) => d.customer_documents.documentType));
+  const verifiedTypes = new Set(
+    visibleDocs
+      .filter((d) => d.customer_documents.status === "verified")
       .map((d) => d.customer_documents.documentType)
   );
-  const requiredTypes = ["ktp", "kk", "npwp", "slip_gaji"];
+  const requiredTypes = documentFlow.requiredTypes;
   const completionPct = Math.round(
-    (requiredTypes.filter((t) => activeUploadedTypes.has(t)).length / requiredTypes.length) * 100
+    (requiredTypes.filter((t) => verifiedTypes.has(t)).length / requiredTypes.length) * 100
+  );
+  const primaryDocs = visibleDocs.filter((doc) => doc.customer_documents.documentType !== "spjb");
+  const akadDocs = visibleDocs.filter((doc) => doc.customer_documents.documentType === "spjb");
+  const hasUploadableDocumentType = documentFlow.allowedTypes.some(
+    (documentType) => !uploadedTypes.has(documentType)
   );
 
   return (
@@ -280,7 +329,7 @@ export function CustomerDocumentsPanel({
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-4 w-4 text-[#4F6F52]" />
-            <span className="text-sm font-bold text-[#243028]">Kelengkapan Dokumen KPR</span>
+            <span className="text-sm font-bold text-[#243028]">{documentFlow.completionTitle}</span>
           </div>
           <span className="text-sm font-mono font-bold text-[#4F6F52]">{completionPct}%</span>
         </div>
@@ -302,9 +351,12 @@ export function CustomerDocumentsPanel({
               if (status === "rejected") {
                 pillClass = "bg-rose-50 border-rose-100 text-rose-700";
                 pillIcon = "✗";
-              } else {
+              } else if (status === "verified") {
                 pillClass = "bg-emerald-50 border-emerald-100 text-emerald-700";
                 pillIcon = "✓";
+              } else {
+                pillClass = "bg-amber-50 border-amber-100 text-amber-700";
+                pillIcon = "◷";
               }
             }
             
@@ -328,7 +380,7 @@ export function CustomerDocumentsPanel({
               <FilePlus className="h-4 w-4" />
             </div>
             <div>
-              <h3 className="font-bold text-[#243028] text-sm">Upload Dokumen Konsumen</h3>
+              <h3 className="font-bold text-[#243028] text-sm">{documentFlow.uploadTitle}</h3>
               <p className="text-[10px] text-[#66736A]">Format: JPG, PNG, PDF. Maks 10MB per file.</p>
             </div>
           </div>
@@ -350,20 +402,29 @@ export function CustomerDocumentsPanel({
             {/* Doc Type Selector */}
             <div>
               <label className="text-xs font-medium text-[#243028] mb-1 block">Jenis Dokumen</label>
-              <Select value={selectedDocType} onValueChange={(val: string | null) => setSelectedDocType(val ?? "ktp")}>
+              <Select
+                value={selectedDocType}
+                onValueChange={(val: string | null) => setSelectedDocType(val ?? "ktp")}
+                disabled={!hasUploadableDocumentType}
+              >
                 <SelectTrigger className="border-[#D6DED2] focus:ring-ring/50 focus:border-[#8FAF9A]">
                   <SelectValue>
                     {DOC_TYPE_LABELS[selectedDocType] ?? selectedDocType}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent className="rounded-xl border-[#D6DED2] bg-white/95 backdrop-blur-md">
-                  {Object.entries(DOC_TYPE_LABELS)
-                    .filter(([type]) => type === "other" || !uploadedTypes.has(type))
-                    .map(([v, label]) => (
-                      <SelectItem key={v} value={v}>{label}</SelectItem>
+                  {documentFlow.allowedTypes
+                    .filter((type) => !uploadedTypes.has(type))
+                    .map((v) => (
+                      <SelectItem key={v} value={v}>{DOC_TYPE_LABELS[v]}</SelectItem>
                     ))}
                 </SelectContent>
               </Select>
+              {!hasUploadableDocumentType && (
+                <p className="mt-1.5 text-[11px] text-[#66736A]">
+                  Semua jenis dokumen pada alur ini sudah diunggah. Hapus atau unggah ulang dokumen yang ditolak bila perlu.
+                </p>
+              )}
             </div>
 
             {/* Drag & Drop */}
@@ -405,7 +466,7 @@ export function CustomerDocumentsPanel({
 
             <Button
               type="submit"
-              disabled={loading || !selectedFile}
+              disabled={loading || !selectedFile || !hasUploadableDocumentType}
               className="w-full btn-premium bg-[#4F6F52] hover:bg-[#3D563F] text-white gap-2"
             >
               {loading ? (
@@ -422,20 +483,20 @@ export function CustomerDocumentsPanel({
       <div className="bg-white border border-[#D6DED2] rounded-2xl overflow-hidden shadow-sage">
         <div className="px-5 py-3.5 border-b border-[#D6DED2] bg-[#F7F8F3]/70">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-[#66736A] uppercase tracking-wider">Dokumen Terupload</span>
-            <span className="text-xs font-mono text-[#8FAF9A] tabular-nums">{docs.length} file</span>
+            <span className="text-xs font-bold text-[#66736A] uppercase tracking-wider">Dokumen Identitas & Pendukung</span>
+            <span className="text-xs font-mono text-[#8FAF9A] tabular-nums">{primaryDocs.length} file</span>
           </div>
         </div>
 
-        {docs.length === 0 ? (
+        {primaryDocs.length === 0 ? (
           <div className="py-12 text-center">
             <FileText className="h-10 w-10 text-[#8FAF9A] mx-auto mb-3 opacity-60" />
             <p className="text-sm font-semibold text-[#243028]">Belum Ada Dokumen</p>
-            <p className="text-xs text-[#66736A] mt-1">Upload dokumen persyaratan KPR konsumen di atas.</p>
+            <p className="text-xs text-[#66736A] mt-1">{documentFlow.emptyDescription}</p>
           </div>
         ) : (
           <div className="divide-y divide-[#D6DED2]/60">
-            {docs.map((doc) => {
+            {primaryDocs.map((doc) => {
               const statusCfg = STATUS_CONFIG[doc.customer_documents.status];
               const StatusIcon = statusCfg?.icon ?? Clock;
               return (
@@ -522,13 +583,77 @@ export function CustomerDocumentsPanel({
         )}
       </div>
 
+      {documentFlow.hasAkadSection && (
+        <div className="bg-white border border-[#D6DED2] rounded-2xl overflow-hidden shadow-sage">
+          <div className="px-5 py-3.5 border-b border-[#D6DED2] bg-[#F7F8F3]/70">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-xs font-bold text-[#66736A] uppercase tracking-wider">Dokumen Akad / PPJB</span>
+              <span className="text-[10px] text-[#8FAF9A]">Unggah setelah PPJB ditandatangani</span>
+            </div>
+          </div>
+          {akadDocs.length === 0 ? (
+            <div className="px-5 py-5 text-xs text-[#66736A]">Belum ada PPJB yang diunggah untuk booking ini.</div>
+          ) : (
+            <div className="divide-y divide-[#D6DED2]/60">
+              {akadDocs.map((doc) => {
+                const statusCfg = STATUS_CONFIG[doc.customer_documents.status];
+                const StatusIcon = statusCfg?.icon ?? Clock;
+                return (
+                  <div key={doc.customer_documents.id} className="flex items-center gap-3 px-5 py-3.5 hover:bg-[#F7F8F3]/60 transition-colors">
+                    <div className="h-9 w-9 rounded-xl bg-[#DDE8D8] flex items-center justify-center shrink-0">
+                      <FileText className="h-4 w-4 text-[#4F6F52]" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-bold text-[#243028]">Dokumen Akad / PPJB</p>
+                        <Badge className={`border text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${statusCfg?.className}`}>
+                          <StatusIcon className="h-3 w-3" />
+                          {statusCfg?.label}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-[#66736A] truncate">{doc.attachments.fileName}</p>
+                      {doc.customer_documents.notes && <p className="text-[10px] text-amber-600 mt-0.5">{doc.customer_documents.notes}</p>}
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <a href={doc.attachments.fileUrl} target="_blank" rel="noopener noreferrer" className="h-7 w-7 rounded-lg bg-sky-50 text-sky-600 hover:bg-sky-100 flex items-center justify-center" aria-label="Lihat Dokumen Akad / PPJB">
+                        <Eye className="h-3.5 w-3.5" />
+                      </a>
+                      {doc.customer_documents.status === "rejected" && (
+                        <button type="button" onClick={() => handleReupload(doc)} disabled={loading} className="h-7 px-2 rounded-lg bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200/50 flex items-center justify-center font-bold text-[10px] gap-1" title="Upload ulang berkas">
+                          <Upload className="h-3.5 w-3.5" /><span>Upload Ulang</span>
+                        </button>
+                      )}
+                      {canVerify && doc.customer_documents.status === "uploaded" && (
+                        <>
+                          <button onClick={() => handleVerify(doc.customer_documents.id, "verified")} disabled={verifyingId === doc.customer_documents.id} className="h-7 w-7 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 flex items-center justify-center disabled:opacity-50" title="Verifikasi">
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                          </button>
+                          <button onClick={() => handleRejectClick(doc)} disabled={verifyingId === doc.customer_documents.id} className="h-7 w-7 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 flex items-center justify-center disabled:opacity-50" title="Tolak">
+                            <XCircle className="h-3.5 w-3.5" />
+                          </button>
+                        </>
+                      )}
+                      {doc.customer_documents.status !== "verified" && (
+                        <button onClick={() => handleDeleteClick(doc)} className="h-7 w-7 rounded-lg bg-rose-50 text-rose-500 hover:bg-rose-100 flex items-center justify-center" title="Hapus">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Dialog Konfirmasi Hapus */}
       <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <DialogContent className="max-w-md bg-white p-6 rounded-3xl border border-[#D6DED2] shadow-sage-lg z-[150]">
           <DialogHeader>
             <DialogTitle className="text-lg font-bold text-[#243028] tracking-tight">Konfirmasi Hapus</DialogTitle>
             <DialogDescription className="text-xs text-[#66736A] mt-2 leading-relaxed">
-              Apakah Anda yakin ingin menghapus berkas dokumen KPR <strong>"{deleteTarget ? DOC_TYPE_LABELS[deleteTarget.customer_documents.documentType] : ""}"</strong>? Tindakan ini tidak dapat dibatalkan.
+              Apakah Anda yakin ingin menghapus berkas <strong>"{deleteTarget ? DOC_TYPE_LABELS[deleteTarget.customer_documents.documentType] : ""}"</strong>? Tindakan ini tidak dapat dibatalkan.
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-end gap-2 mt-4">
@@ -549,13 +674,13 @@ export function CustomerDocumentsPanel({
         </DialogContent>
       </Dialog>
 
-      {/* Dialog Penolakan Berkas KPR */}
+      {/* Dialog Penolakan Berkas */}
       <Dialog open={!!rejectTarget} onOpenChange={(open) => !open && setRejectTarget(null)}>
         <DialogContent className="max-w-md bg-white p-6 rounded-3xl border border-[#D6DED2] shadow-sage-lg z-[150]">
           <DialogHeader>
             <DialogTitle className="text-lg font-bold text-rose-800 tracking-tight flex items-center gap-2">
               <XCircle className="h-5 w-5 text-rose-600" />
-              Tolak Dokumen KPR
+              Tolak Dokumen
             </DialogTitle>
             <DialogDescription className="text-xs text-[#66736A] mt-2 leading-relaxed">
               Silakan masukkan alasan penolakan dokumen <strong>"{rejectTarget ? DOC_TYPE_LABELS[rejectTarget.customer_documents.documentType] : ""}"</strong> milik konsumen ini. Catatan revisi wajib diisi agar staf marketing dapat mengetahui penyebab penolakan berkas.

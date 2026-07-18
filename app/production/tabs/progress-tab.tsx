@@ -46,6 +46,10 @@ interface Unit {
   constructionProgress: number; readyStockSource?: string | null; isReadyStock?: boolean;
 }
 
+type PendingDeletion =
+  | { kind: "customer_bast"; documentId: string; unitId: string }
+  | { kind: "progress_log"; logId: string; unitId: string | null; workItemName: string; percentageAdded: number };
+
 export interface ProgressTabProps {
   spks: Spk[];
   units: Unit[];
@@ -57,12 +61,14 @@ export interface ProgressTabProps {
   externalProgressSpkId?: string | null;
   externalProgressTab?: string | null;
   onExternalProgressHandled?: () => void;
+  /** Notifies the open SPK detail to reload its component progress after saving. */
+  onProgressSaved?: () => void;
 }
 
 export function ProgressTab({
   spks, units, workItems,
   isSuperAdmin = false, isPengawas = false, isVendor: _isVendor = false,
-  externalProgressSpkId, externalProgressTab, onExternalProgressHandled,
+  externalProgressSpkId, externalProgressTab, onExternalProgressHandled, onProgressSaved,
 }: ProgressTabProps) {
   const router = useRouter();
   const { t } = useI18n();
@@ -79,6 +85,7 @@ export function ProgressTab({
   const [handoverEstimations, setHandoverEstimations] = React.useState<Array<any>>([]);
   const [activeUnitBast, setActiveUnitBast] = React.useState<any | null>(null);
   const [customerBast, setCustomerBast] = React.useState<any | null>(null);
+  const [pendingDeletion, setPendingDeletion] = React.useState<PendingDeletion | null>(null);
 
   // BAST Upload Dialog
   const [bastDialogOpen, setBastDialogOpen] = React.useState(false);
@@ -150,16 +157,53 @@ export function ProgressTab({
     } catch (e) { console.error("Gagal memuat detail SPK:", e); }
   }, []);
 
-  // Handle external progress dialog trigger from SPK tab
+  // Handle external dialog trigger from SPK tab. ProgressTab menjadi penyedia
+  // dialog lewat portal; jangan memaksa pengguna berpindah dari tab SPK.
   React.useEffect(() => {
     if (externalProgressSpkId) {
-      setNewProgress(prev => ({ ...prev, spkId: externalProgressSpkId }));
-      handleLoadSpkWeights(externalProgressSpkId);
-      setProgressTab(externalProgressTab || "form");
-      setProgressOpen(true);
+      if (externalProgressTab === "bast") {
+        const spk = spks.find((item) => item.id === externalProgressSpkId);
+        const unit = spk ? units.find((item) => item.id === spk.unitId) : null;
+
+        if (!spk || !unit) {
+          setErrorMessage("Data SPK atau unit untuk penyelesaian pembangunan tidak ditemukan.");
+        } else {
+          setBastSpk(spk);
+          setBastUnit(unit);
+          setBastPdfFile(null);
+          setBastDialogOpen(true);
+        }
+      } else {
+        setNewProgress(prev => ({ ...prev, spkId: externalProgressSpkId }));
+        handleLoadSpkWeights(externalProgressSpkId);
+        setProgressTab(externalProgressTab === "history" ? "history" : "form");
+        setProgressOpen(true);
+      }
       onExternalProgressHandled?.();
     }
-  }, [externalProgressSpkId, externalProgressTab, handleLoadSpkWeights, onExternalProgressHandled]);
+  }, [externalProgressSpkId, externalProgressTab, handleLoadSpkWeights, onExternalProgressHandled, spks, units]);
+
+  React.useEffect(() => {
+    if (!newProgress.spkId) return;
+
+    void getSpkDetails(newProgress.spkId).then((details) => {
+      if (!details) return;
+      setSpkLogs(details.logs || []);
+      setSpkWeights(details.weights.map((weight) => {
+        const totalProgress = details.logs
+          .filter((log) => log.log.workItemId === weight.weight.workItemId)
+          .reduce((sum, log) => sum + log.log.percentageAdded, 0);
+        return {
+          workItemId: weight.workItem.id,
+          name: weight.workItem.name,
+          weightPct: weight.weight.weightPct,
+          currentProgress: Math.min(100, totalProgress),
+        };
+      }));
+    }).catch((error) => {
+      console.error("Gagal menyegarkan riwayat progres SPK:", error);
+    });
+  }, [spks, newProgress.spkId]);
 
   const handleViewUnitProgress = async (unitId: string) => {
     setSelectedUnitId(unitId);
@@ -204,6 +248,7 @@ export function ProgressTab({
       setProgressOpen(false); setUploadedPhotos([]); setSelectedFiles([]);
       if (selectedUnitId === spks.find(s => s.id === newProgress.spkId)?.unitId) { handleViewUnitProgress(selectedUnitId!); }
       setNewProgress({ spkId: "", workItemId: "", percentageAdded: 10, progressDate: new Date().toISOString().slice(0, 10), notes: "" });
+      onProgressSaved?.();
       router.refresh();
     } catch (e: any) { setErrorMessage(e.message || "Gagal menginput progress."); }
     finally { setIsSubmitting(false); }
@@ -234,9 +279,40 @@ export function ProgressTab({
       const attachmentRes = await uploadBastAttachment(bastSpk.id, { fileName: bastPdfFile.name, fileUrl: fileData.url, mimeType: bastPdfFile.type, fileSize: bastPdfFile.size });
       if (!attachmentRes.success) throw new Error("Gagal menyimpan metadata BAST ke database.");
       const res = await completeConstruction(bastUnit.id, attachmentRes.attachmentId);
-      if (res.success) { setSuccessMessage(`Unit "${bastUnit.code}" berhasil dinyatakan selesai pembangunan dan status berubah menjadi Tersedia Siap Huni!`); setBastDialogOpen(false); setBastUnit(null); setBastSpk(null); setBastPdfFile(null); router.refresh(); }
+      if (res.success) { setSuccessMessage(`BAST Vendor telah diverifikasi. Unit "${bastUnit.code}" kini berstatus Tersedia Siap Huni.`); setBastDialogOpen(false); setBastUnit(null); setBastSpk(null); setBastPdfFile(null); router.refresh(); }
     } catch (e: any) { setErrorMessage(e.message || "Gagal menyelesaikan pembangunan unit."); }
     finally { setIsSubmitting(false); }
+  };
+
+  const handleConfirmDeletion = async () => {
+    const target = pendingDeletion;
+    if (!target) return;
+
+    setIsSubmitting(true);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    try {
+      if (target.kind === "customer_bast") {
+        const result = await deleteCustomerBastDocument(target.documentId);
+        if (result.success) {
+          setSuccessMessage("Dokumen BAST Konsumen berhasil dihapus.");
+          await handleViewUnitProgress(target.unitId);
+        }
+      } else {
+        const result = await deleteProgressLog(target.logId);
+        if (result.success) {
+          setSuccessMessage("Log progres berhasil dihapus dan progres unit dihitung ulang.");
+          if (target.unitId) await handleViewUnitProgress(target.unitId);
+          onProgressSaved?.();
+          router.refresh();
+        }
+      }
+      setPendingDeletion(null);
+    } catch (error: any) {
+      setErrorMessage(error.message || "Gagal menghapus data.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -293,8 +369,8 @@ export function ProgressTab({
                       {unit.isReadyStock ? <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-extrabold px-2 py-0.5 rounded-lg">✓ Siap Huni</span> : <span className="bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-extrabold px-2 py-0.5 rounded-lg">Indent</span>}
                     </div>
                   </div>
-                  {((unit.status === "construction_done") || ((unit.status === "construction" || unit.status === "overdue") && unit.constructionProgress === 100)) && (
-                    <Button size="sm" disabled={isSubmitting} onClick={() => { setBastUnit(unit); setBastSpk(spk); setBastPdfFile(null); setBastDialogOpen(true); }} className="bg-primary hover:bg-primary/90 text-white font-extrabold text-xs h-9 rounded-xl flex items-center gap-1.5 shadow-[0_4px_12px_rgba(79,111,82,0.25)] transition-all"><CheckCircle2 className="h-4 w-4 text-white" />Selesai Pembangunan</Button>
+                  {spk?.status === "selesai_konstruksi" && unit.status !== "construction_done" && (
+                    <Button size="sm" disabled={isSubmitting} onClick={() => { setBastUnit(unit); setBastSpk(spk); setBastPdfFile(null); setBastDialogOpen(true); }} className="bg-primary hover:bg-primary/90 text-white font-extrabold text-xs h-9 rounded-xl flex items-center gap-1.5 shadow-[0_4px_12px_rgba(79,111,82,0.25)] transition-all"><CheckCircle2 className="h-4 w-4 text-white" />Unggah BAST Vendor</Button>
                   )}
                 </div>
 
@@ -334,7 +410,7 @@ export function ProgressTab({
                             <div className={`p-3 border rounded-xl flex items-center justify-between text-xs ${docStatus === "verified" ? "bg-emerald-50/50 border-emerald-200" : docStatus === "rejected" ? "bg-rose-50/50 border-rose-200" : "bg-muted/30 border-border"}`}>
                               <div className="flex items-center gap-2.5 min-w-0"><div className={`p-2 rounded-xl shrink-0 ${docStatus === "verified" ? "bg-emerald-100 text-emerald-800" : docStatus === "rejected" ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-800"}`}><FileText className="h-4 w-4" /></div><div className="min-w-0 flex-1"><p className="font-extrabold text-foreground truncate text-xs">BAST Konsumen Terunggah</p><p className="text-[10px] text-muted-foreground font-mono truncate max-w-[160px] mt-0.5">{customerBast.fileName}</p></div></div>
                               <div className="flex flex-col gap-1.5 shrink-0 ml-2"><a href={customerBast.fileUrl} target="_blank" rel="noopener noreferrer" className="bg-primary hover:bg-primary/90 text-white font-extrabold text-[10px] px-2.5 py-1.5 rounded-lg shadow-sm transition-all text-center flex items-center justify-center gap-1 hover:scale-[1.02]"><ExternalLink className="h-3 w-3 text-white" />Unduh</a>
-                                {canManageBast && docStatus !== "verified" && customerBast.docId && <button type="button" title="Hapus dokumen BAST Konsumen" className="bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-[10px] px-2.5 py-1.5 rounded-lg shadow-sm transition-all text-center flex items-center justify-center gap-1 hover:scale-[1.02] disabled:opacity-60 disabled:cursor-not-allowed" disabled={isSubmitting} onClick={async () => { const confirmed = window.confirm("Apakah Anda yakin ingin menghapus dokumen BAST Konsumen ini?\n\nTindakan ini tidak dapat dibatalkan."); if (!confirmed) return; setIsSubmitting(true); setErrorMessage(null); setSuccessMessage(null); try { const res = await deleteCustomerBastDocument(customerBast.docId); if (res.success) { setSuccessMessage("✓ Dokumen BAST Konsumen berhasil dihapus."); await handleViewUnitProgress(unit.id); } } catch (err: any) { setErrorMessage(err.message || "Gagal menghapus dokumen BAST."); } finally { setIsSubmitting(false); } }}><Trash2 className="h-3 w-3" />Hapus</button>}
+                                {canManageBast && docStatus !== "verified" && customerBast.docId && <button type="button" title="Hapus dokumen BAST Konsumen" className="bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-[10px] px-2.5 py-1.5 rounded-lg shadow-sm transition-all text-center flex items-center justify-center gap-1 hover:scale-[1.02] disabled:opacity-60 disabled:cursor-not-allowed" disabled={isSubmitting} onClick={() => setPendingDeletion({ kind: "customer_bast", documentId: customerBast.docId, unitId: unit.id })}><Trash2 className="h-3 w-3" />Hapus</button>}
                               </div>
                             </div>
                           </div>
@@ -373,6 +449,34 @@ export function ProgressTab({
           )}
         </div>
       </div>
+
+      <Dialog
+        open={Boolean(pendingDeletion)}
+        onOpenChange={(open) => {
+          if (!open && !isSubmitting) setPendingDeletion(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-md rounded-3xl border-border bg-card">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-rose-700">
+              <AlertTriangle className="h-5 w-5" /> Konfirmasi penghapusan
+            </DialogTitle>
+            <DialogDescription className="text-sm leading-relaxed">
+              {pendingDeletion?.kind === "progress_log"
+                ? `Log progres +${pendingDeletion.percentageAdded}% untuk ${pendingDeletion.workItemName} akan dihapus. Progres komponen dan unit akan dihitung ulang.`
+                : "Dokumen BAST Konsumen akan dihapus. Serah terima tidak akan diselesaikan otomatis sampai dokumen pengganti diunggah dan diverifikasi."}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={isSubmitting} onClick={() => setPendingDeletion(null)}>
+              Batal
+            </Button>
+            <Button type="button" variant="destructive" disabled={isSubmitting} onClick={handleConfirmDeletion}>
+              {isSubmitting ? "Menghapus..." : "Hapus"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Progress Input Dialog */}
       <Dialog open={progressOpen} onOpenChange={(open) => { setProgressOpen(open); if (!open) { setUploadedPhotos([]); setSelectedFiles([]); } }}>
@@ -423,7 +527,7 @@ export function ProgressTab({
                 const currentSpk = spks.find(s => s.id === newProgress.spkId);
                 const filteredLogs = newProgress.workItemId ? spkLogs.filter(l => l.log.workItemId === newProgress.workItemId) : spkLogs;
                 if (filteredLogs.length === 0) return <div className="text-center py-10 border border-dashed border-primary/30 rounded-2xl text-xs text-muted-foreground">Belum ada riwayat progres untuk komponen yang dipilih.</div>;
-                return <div className="space-y-3 pt-1">{filteredLogs.map((item: any) => <div key={item.log.id} className="p-3.5 bg-[#8FAF9A]/5 border border-primary/20 rounded-xl space-y-2 text-xs"><div className="flex justify-between items-center font-bold text-foreground"><span className="text-primary">{item.workItem?.name || "Komponen Pekerjaan"}</span><div className="flex items-center gap-2"><Badge className="bg-secondary text-primary font-semibold border border-primary/50/25 rounded-md hover:bg-secondary">+{item.log.percentageAdded}% &rarr; {item.log.currentTotalPct}%</Badge>{currentSpk && (currentSpk.status === "active" || currentSpk.status === "proses_konstruksi" || currentSpk.status === "overdue") && <button type="button" title="Hapus log progres" onClick={async () => { const confirmed = window.confirm(`Hapus log +${item.log.percentageAdded}% untuk "${item.workItem?.name}"?`); if (!confirmed) return; setIsSubmitting(true); try { const res = await deleteProgressLog(item.log.id); if (res.success) { setSuccessMessage("✓ Log progres berhasil dihapus."); if (currentSpk.unitId) await handleViewUnitProgress(currentSpk.unitId); } } catch (err: any) { setErrorMessage(err.message || "Gagal menghapus log."); } finally { setIsSubmitting(false); } }} disabled={isSubmitting} className="p-1 text-slate-400 hover:text-rose-600 transition-colors rounded-lg hover:bg-slate-100 disabled:opacity-50"><Trash2 className="h-3.5 w-3.5" /></button>}</div></div><div className="text-muted-foreground leading-relaxed">{item.log.notes ? `"${item.log.notes}"` : <span className="italic">Tidak ada catatan.</span>}</div>{((item.attachments && item.attachments.length > 0) || (item.attachment && item.attachment.fileUrl)) && <div className="pt-1.5"><span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1.5">Bukti Foto</span><div className="flex flex-wrap gap-2">{item.attachments && item.attachments.length > 0 ? item.attachments.map((att: any, idx: number) => <div key={att.id || idx} className="relative h-24 w-36 rounded-lg overflow-hidden border border-primary/30 group shadow-sm bg-card cursor-zoom-in"><a href={att.fileUrl} target="_blank" rel="noopener noreferrer"><Image src={att.fileUrl} alt={`Bukti ${idx + 1}`} fill className="object-cover group-hover:scale-105 transition-transform duration-200" /></a></div>) : <div className="relative h-24 w-36 rounded-lg overflow-hidden border border-primary/30 group shadow-sm bg-card cursor-zoom-in"><a href={item.attachment.fileUrl} target="_blank" rel="noopener noreferrer"><Image src={item.attachment.fileUrl} alt="Bukti Progress" fill className="object-cover group-hover:scale-105 transition-transform duration-200" /></a></div>}</div></div>}<div className="text-[10px] text-muted-foreground pt-1 text-right font-medium">Dicatat: {new Date(item.log.progressDate).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}</div></div>)}</div>;
+                return <div className="space-y-3 pt-1">{filteredLogs.map((item: any) => <div key={item.log.id} className="p-3.5 bg-[#8FAF9A]/5 border border-primary/20 rounded-xl space-y-2 text-xs"><div className="flex justify-between items-center font-bold text-foreground"><span className="text-primary">{item.workItem?.name || "Komponen Pekerjaan"}</span><div className="flex items-center gap-2"><Badge className="bg-secondary text-primary font-semibold border border-primary/50/25 rounded-md hover:bg-secondary">+{item.log.percentageAdded}% &rarr; {item.log.currentTotalPct}%</Badge>{currentSpk && (currentSpk.status === "active" || currentSpk.status === "proses_konstruksi" || currentSpk.status === "overdue") && <button type="button" title="Hapus log progres" onClick={() => setPendingDeletion({ kind: "progress_log", logId: item.log.id, unitId: currentSpk.unitId, workItemName: item.workItem?.name || "Komponen Pekerjaan", percentageAdded: item.log.percentageAdded })} disabled={isSubmitting} className="p-1 text-slate-400 hover:text-rose-600 transition-colors rounded-lg hover:bg-slate-100 disabled:opacity-50"><Trash2 className="h-3.5 w-3.5" /></button>}</div></div><div className="text-muted-foreground leading-relaxed">{item.log.notes ? `"${item.log.notes}"` : <span className="italic">Tidak ada catatan.</span>}</div>{((item.attachments && item.attachments.length > 0) || (item.attachment && item.attachment.fileUrl)) && <div className="pt-1.5"><span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1.5">Bukti Foto</span><div className="flex flex-wrap gap-2">{item.attachments && item.attachments.length > 0 ? item.attachments.map((att: any, idx: number) => <div key={att.id || idx} className="relative h-24 w-36 rounded-lg overflow-hidden border border-primary/30 group shadow-sm bg-card cursor-zoom-in"><a href={att.fileUrl} target="_blank" rel="noopener noreferrer"><Image src={att.fileUrl} alt={`Bukti ${idx + 1}`} fill className="object-cover group-hover:scale-105 transition-transform duration-200" /></a></div>) : <div className="relative h-24 w-36 rounded-lg overflow-hidden border border-primary/30 group shadow-sm bg-card cursor-zoom-in"><a href={item.attachment.fileUrl} target="_blank" rel="noopener noreferrer"><Image src={item.attachment.fileUrl} alt="Bukti Progress" fill className="object-cover group-hover:scale-105 transition-transform duration-200" /></a></div>}</div></div>}<div className="text-[10px] text-muted-foreground pt-1 text-right font-medium">Dicatat: {new Date(item.log.progressDate).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}</div></div>)}</div>;
               })() : <div className="text-center py-10 border border-dashed border-primary/30 rounded-2xl text-xs text-muted-foreground">Belum ada log progres pembangunan untuk SPK ini.</div>}
             </TabsContent>
           </Tabs>
@@ -460,11 +564,11 @@ export function ProgressTab({
       {/* BAST Upload Dialog */}
       <Dialog open={bastDialogOpen} onOpenChange={setBastDialogOpen}>
         <DialogContent className="sm:max-w-md rounded-3xl bg-white/98 backdrop-blur-md border border-border shadow-[0_8px_30px_rgb(143,175,154,0.15)] p-0 overflow-hidden font-sans">
-          <div className="bg-gradient-to-r from-[#DDE8D8]/70 via-white/80 to-transparent p-6 border-b border-border"><DialogHeader><DialogTitle className="text-primary font-bold text-lg flex items-center gap-2"><CheckCircle2 className="h-5 w-5" />Konfirmasi Selesai Pembangunan</DialogTitle><DialogDescription className="text-xs">Unggah dokumen BAST fisik untuk menyelesaikan unit.</DialogDescription></DialogHeader></div>
+          <div className="bg-gradient-to-r from-[#DDE8D8]/70 via-white/80 to-transparent p-6 border-b border-border"><DialogHeader><DialogTitle className="text-primary font-bold text-lg flex items-center gap-2"><CheckCircle2 className="h-5 w-5" />Unggah BAST Vendor ke Developer</DialogTitle><DialogDescription className="text-xs">Vendor sudah menyatakan SPK selesai. Unggah BAST yang telah ditandatangani agar Pengawas/Admin dapat memverifikasi fisik dan menetapkan unit Siap Huni.</DialogDescription></DialogHeader></div>
           <form onSubmit={handleCompleteConstructionWithBast} className="p-6 space-y-4 pt-4">
             {bastUnit && <div className="p-3.5 bg-[#8FAF9A]/5 border border-primary/20 rounded-2xl space-y-2 text-xs font-semibold text-foreground"><div className="flex justify-between"><span className="text-muted-foreground">Kavling / Unit:</span><span className="font-mono text-primary font-bold">{bastUnit.code}</span></div>{bastSpk && <div className="flex justify-between border-t border-primary/50/10 pt-1.5"><span className="text-muted-foreground">SPK Terkait:</span><span className="font-mono">{bastSpk.spkNumber}</span></div>}</div>}
-            <div className="space-y-1.5"><label className="font-semibold text-foreground text-xs">Unggah File PDF BAST</label><div onClick={() => document.getElementById('bast-pdf-upload-tab')?.click()} className="border-2 border-dashed border-primary/30 hover:border-primary/50 bg-muted/30/60 hover:bg-[#8FAF9A]/5 rounded-2xl p-6 text-center cursor-pointer transition-all duration-150 group"><input id="bast-pdf-upload-tab" type="file" accept="application/pdf" className="hidden" required onChange={(e) => { if (e.target.files && e.target.files.length > 0) setBastPdfFile(e.target.files[0]); }} /><div className="flex flex-col items-center justify-center space-y-2"><div className="p-2.5 bg-card rounded-full shadow-sm text-primary group-hover:scale-110 transition-transform duration-200"><UploadCloud className="h-5 w-5" /></div><span className="text-xs font-bold text-foreground">{bastPdfFile ? bastPdfFile.name : "Pilih File PDF BAST"}</span><span className="text-[10px] text-muted-foreground">{bastPdfFile ? `Ukuran: ${(bastPdfFile.size / 1024 / 1024).toFixed(2)} MB` : "Format PDF (Maks. 10MB)"}</span></div></div></div>
-            <DialogFooter className="pt-2 border-t border-primary/50/10 mt-4"><Button type="button" variant="ghost" onClick={() => setBastDialogOpen(false)} className="text-xs text-muted-foreground hover:text-foreground rounded-xl">Batal</Button><Button type="submit" disabled={isSubmitting || !bastPdfFile} className="bg-primary hover:bg-primary/90 text-white font-extrabold text-xs rounded-xl shadow-sm px-4 flex items-center gap-1.5">{isSubmitting ? <span className="flex items-center gap-1"><span className="h-3 w-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />Memproses...</span> : <><CheckCircle2 className="h-4 w-4 text-white" />Selesai & Jadikan Siap Huni</>}</Button></DialogFooter>
+            <div className="space-y-1.5"><label className="font-semibold text-foreground text-xs">File BAST Vendor ke Developer (PDF)</label><div onClick={() => document.getElementById('bast-pdf-upload-tab')?.click()} className="border-2 border-dashed border-primary/30 hover:border-primary/50 bg-muted/30/60 hover:bg-[#8FAF9A]/5 rounded-2xl p-6 text-center cursor-pointer transition-all duration-150 group"><input id="bast-pdf-upload-tab" type="file" accept="application/pdf" className="hidden" required onChange={(e) => { if (e.target.files && e.target.files.length > 0) setBastPdfFile(e.target.files[0]); }} /><div className="flex flex-col items-center justify-center space-y-2"><div className="p-2.5 bg-card rounded-full shadow-sm text-primary group-hover:scale-110 transition-transform duration-200"><UploadCloud className="h-5 w-5" /></div><span className="text-xs font-bold text-foreground">{bastPdfFile ? bastPdfFile.name : "Pilih File PDF BAST Vendor"}</span><span className="text-[10px] text-muted-foreground">{bastPdfFile ? `Ukuran: ${(bastPdfFile.size / 1024 / 1024).toFixed(2)} MB` : "Format PDF (Maks. 10MB)"}</span></div></div></div>
+            <DialogFooter className="pt-2 border-t border-primary/50/10 mt-4"><Button type="button" variant="ghost" onClick={() => setBastDialogOpen(false)} className="text-xs text-muted-foreground hover:text-foreground rounded-xl">Batal</Button><Button type="submit" disabled={isSubmitting || !bastPdfFile} className="bg-primary hover:bg-primary/90 text-white font-extrabold text-xs rounded-xl shadow-sm px-4 flex items-center gap-1.5">{isSubmitting ? <span className="flex items-center gap-1"><span className="h-3 w-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />Memproses...</span> : <><CheckCircle2 className="h-4 w-4 text-white" />Unggah &amp; Verifikasi Unit</>}</Button></DialogFooter>
           </form>
         </DialogContent>
       </Dialog>

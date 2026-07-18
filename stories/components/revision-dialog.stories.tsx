@@ -61,6 +61,14 @@ const meta = {
   component: RevisionDialog,
   parameters: {
     layout: "centered",
+    // RevisionDialog calls useRouter(). Enable the Next.js App Router mock so
+    // the story behaves like the application instead of throwing at render.
+    nextjs: {
+      appDirectory: true,
+      navigation: {
+        pathname: "/finance/payments/pay-001",
+      },
+    },
     docs: {
       description: {
         component:

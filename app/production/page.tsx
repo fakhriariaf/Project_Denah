@@ -14,9 +14,9 @@ import {
   complaints as complaintsTable,
 } from "@/db/schema/production";
 import { desc, eq, and, inArray } from "drizzle-orm";
-import { invoices as invoicesTable } from "@/db/schema/finance";
 import { vendorProfiles } from "@/db/schema/auth";
 import { requireAuth, getSessionRole } from "@/server/permissions";
+import { getSpkUnitEligibility } from "@/server/services/spk-unit-eligibility";
 import ProductionShell from "./production-shell";
 
 export const revalidate = 0;
@@ -218,22 +218,18 @@ export default async function ProductionPage({
 
 
   // Fetch paid DP invoices — used for DP Gate validation in SPK form
-  const paidDpInvoices = await db
-    .select({ unitId: invoicesTable.unitId })
-    .from(invoicesTable)
-    .where(
-      and(
-        eq(invoicesTable.type, "dp"),
-        eq(invoicesTable.status, "paid")
-      )
-    );
-
-  // Build Array of unitIds that have a paid DP invoice
-  const dpPaidUnitIds = Array.from(new Set(
-    paidDpInvoices
-      .map(r => r.unitId)
-      .filter(Boolean) as string[]
-  ));
+  const spkEligibility = await Promise.all(
+    unitsList.map(async (unit) => ({
+      unitId: unit.id,
+      result: await getSpkUnitEligibility(db, {
+        unitId: unit.id,
+        projectId: unit.projectId ?? undefined,
+      }),
+    })),
+  );
+  const spkEligibleUnitIds = spkEligibility
+    .filter(({ result }) => result.eligible)
+    .map(({ unitId }) => unitId);
 
   return (
     <ProductionShell
@@ -250,7 +246,7 @@ export default async function ProductionPage({
       spmbs={spmbsList}
       materialRequests={materialRequestsList}
       complaints={complaintsList}
-      dpPaidUnitIds={dpPaidUnitIds}
+      spkEligibleUnitIds={spkEligibleUnitIds}
       defaultTab={tab as any}
     />
   );

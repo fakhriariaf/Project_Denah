@@ -86,22 +86,21 @@ async function executeBulkDelete(
   const toDelete: string[] = [];
 
   if (entityType === "booking") {
-    // Query all bookings by provided IDs to check their status
+    // Booking bukan entitas yang aman untuk hard-delete: ia dapat memiliki
+    // invoice, pembayaran, KPR, serta status unit. Semua pembatalan wajib
+    // melalui cancelBooking() agar guard dan riwayat status berjalan.
     const items = await db
       .select({ id: bookings.id, status: bookings.status })
       .from(bookings)
       .where(inArray(bookings.id, ids));
 
-    // Separate items: exclude completed/akad
+    // Bulk delete booking sengaja dinonaktifkan; jangan pernah melewati guard
+    // pembatalan hanya karena aksi berasal dari tabel massal.
     for (const item of items) {
-      if (item.status === "completed" || item.status === "akad") {
-        skipped.push({
-          id: item.id,
-          reason: "Item dengan status completed/akad tidak dapat dihapus",
-        });
-      } else {
-        toDelete.push(item.id);
-      }
+      skipped.push({
+        id: item.id,
+        reason: "Booking tidak dapat dihapus massal. Gunakan aksi Batalkan Booking agar pembayaran, unit, dan riwayat tetap konsisten.",
+      });
     }
 
     // Also track IDs that were provided but not found in the database
@@ -115,12 +114,6 @@ async function executeBulkDelete(
       }
     }
 
-    // Execute deletion in a single transaction for atomicity
-    if (toDelete.length > 0) {
-      await db.transaction(async (tx) => {
-        await tx.delete(bookings).where(inArray(bookings.id, toDelete));
-      });
-    }
   } else {
     // entityType === "lead"
     // Leads don't have "completed"/"akad" status, but we still check for "converted" as a safety measure

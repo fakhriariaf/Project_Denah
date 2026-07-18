@@ -2,6 +2,7 @@ import { db } from "@/db";
 import { spks, spkWorkItemWeights } from "@/db/schema/production";
 import { projects as projectsTable, units as unitsTable, vendors as vendorsTable, projectUsers } from "@/db/schema/master";
 import { appSettings } from "@/db/schema/system";
+import { attachments } from "@/db/schema/system";
 import { user as userTable } from "@/db/schema/auth";
 import { workItems } from "@/db/schema/production";
 import { eq, and } from "drizzle-orm";
@@ -46,6 +47,7 @@ export default async function PrintBastPage({ params }: Props) {
       workDescription: spks.workDescription,
       rabAmount: spks.rabAmount,
       status: spks.status,
+      progressPct: spks.progressPct,
       startDate: spks.startDate,
       targetEndDate: spks.targetEndDate,
       actualEndDate: spks.actualEndDate,
@@ -86,10 +88,21 @@ export default async function PrintBastPage({ params }: Props) {
 
   const supervisorName = supervisor?.name || spk.createdByName || "Pengawas Lapangan";
   
-  // Enforce BAST can only be issued for completed SPKs (100% progress)
-  if (spk.status !== "completed" && spk.status !== "selesai_konstruksi") {
+  // Draft BAST boleh dicetak saat progres fisik sudah 100% agar dapat ditandatangani
+  // dan diunggah kembali. Penanda final hanya diberikan bila PDF BAST bertanda tangan
+  // telah tersimpan sebagai lampiran SPK.
+  const hasCompletionStatus = spk.status === "completed" || spk.status === "selesai_konstruksi";
+  const isDraftBastReady = spk.progressPct === 100 && ["proses_konstruksi", "overdue", "selesai_konstruksi"].includes(spk.status);
+  if (!hasCompletionStatus && !isDraftBastReady) {
     throw new Error("⚠️ Dokumen BAST (Berita Acara Serah Terima) hanya dapat diterbitkan untuk pembangunan yang sudah selesai 100% (Status: Selesai Konstruksi).");
   }
+
+  const [uploadedBast] = await db
+    .select({ id: attachments.id })
+    .from(attachments)
+    .where(and(eq(attachments.entityId, spk.id), eq(attachments.entityType, "bast_vendor_to_developer")))
+    .limit(1);
+  const isFinalBast = Boolean(uploadedBast);
 
   // Get completed work items
   const weights = await db
@@ -155,10 +168,15 @@ export default async function PrintBastPage({ params }: Props) {
         }
       `}} />
 
-      <PrintButton label="Cetak Dokumen BAST" />
+      <PrintButton label={isFinalBast ? "Cetak BAST Vendor" : "Cetak Draft BAST Vendor"} />
 
       <div className="print-area max-w-4xl mx-auto mt-6 bg-card border border-border rounded-3xl shadow-sage p-8 md:p-12">
         <div className="space-y-8 bg-transparent">
+          {!isFinalBast && (
+            <div className="rounded-xl border-2 border-dashed border-amber-400 bg-amber-50 px-4 py-3 text-center text-xs font-bold text-amber-800 print:border-black print:bg-white print:text-black">
+              DRAFT BAST VENDOR — Cetak, tandatangani bersama vendor, lalu unggah kembali sebagai bukti penyelesaian pembangunan.
+            </div>
+          )}
           
           {/* KOP SURAT */}
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center pb-6 border-b-2 border-[#4F6F52]/30 print-border-dark gap-6">

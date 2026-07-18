@@ -185,6 +185,16 @@ export async function createUnit(data: unknown) {
   const id = crypto.randomUUID();
   const { readyStockVendorId, ...unitData } = parsed;
 
+  if (parsed.isReadyStock && parsed.readyStockSource === "construction_flow") {
+    throw new Error("Unit tidak boleh langsung dibuat sebagai Siap Huni dari alur konstruksi. Buat sebagai Belum Siap, lalu selesaikan SPK dan verifikasi BAST Vendor.");
+  }
+  if (parsed.isReadyStock && parsed.readyStockSource === "manual_ready_stock") {
+    await requireRole("Super Admin");
+    if (!parsed.notes || parsed.notes.trim().length < 10) {
+      throw new Error("Alasan pencatatan Unit Siap Huni manual wajib diisi minimal 10 karakter untuk audit.");
+    }
+  }
+
   if (!parsed.isReadyStock) {
     const ALLOWED_INITIAL_STATUSES = ["available", "belum_siap", "cancelled"];
     if (!ALLOWED_INITIAL_STATUSES.includes(parsed.status)) {
@@ -203,8 +213,10 @@ export async function createUnit(data: unknown) {
       updatedAt: new Date() 
     }).run();
 
-    // 2. Auto-generate SPK & SPMB if Ready Stock
-    if (parsed.isReadyStock && readyStockVendorId && (parsed.status === "available" || parsed.status === "construction")) {
+    // Unit legacy/manual adalah data fisik yang sudah ada di luar alur ERP.
+    // Jangan membuat SPK/progres 100% fiktif; hanya alur Production yang boleh
+    // menerbitkan SPK dan menetapkan konstruksi selesai.
+    if (parsed.isReadyStock && parsed.readyStockSource === "construction_flow" && readyStockVendorId && (parsed.status === "available" || parsed.status === "construction")) {
       newSpkId = crypto.randomUUID();
       const spmbId = crypto.randomUUID();
       const timestamp = Date.now();
@@ -282,6 +294,13 @@ export async function updateUnit(id: string, data: unknown) {
     const existingUnit = await tx.select().from(units).where(eq(units.id, id)).get();
     if (!existingUnit) throw new Error("Unit not found");
 
+    if (
+      existingUnit.isReadyStock !== parsed.isReadyStock ||
+      existingUnit.readyStockSource !== parsed.readyStockSource
+    ) {
+      throw new Error("Status fisik Siap Huni tidak dapat diubah dari Master Unit. Gunakan alur SPK, progres, dan verifikasi BAST Vendor.");
+    }
+
     const TRANSACTIONAL_STATUSES = [
       "booking",
       "kpr_process",
@@ -346,7 +365,7 @@ export async function updateUnit(id: string, data: unknown) {
 
     let finalSpkId = existingUnit.currentSpkId;
 
-    if (parsed.isReadyStock && readyStockVendorId && (parsed.status === "available" || parsed.status === "construction") && !existingUnit.currentSpkId) {
+    if (parsed.isReadyStock && parsed.readyStockSource === "construction_flow" && readyStockVendorId && (parsed.status === "available" || parsed.status === "construction") && !existingUnit.currentSpkId) {
       newSpkId = crypto.randomUUID();
       finalSpkId = newSpkId;
       const spmbId = crypto.randomUUID();

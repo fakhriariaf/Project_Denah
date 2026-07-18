@@ -23,6 +23,7 @@ import {
   CheckCircle2,
   Hammer,
   HardHat,
+  Home,
   Clock,
   HelpCircle,
   User,
@@ -58,6 +59,21 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { updateShape } from "@/server/actions/siteplan";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { UnitTimeline } from "@/app/siteplan/[projectId]/unit-timeline";
+
+/**
+ * Siteplan memakai label penjualan yang ringkas. Status teknis
+ * `handover_complete` tetap dipertahankan untuk audit dan guard workflow,
+ * tetapi pada peta unit tersebut sudah merupakan unit yang terjual.
+ */
+function getSiteplanStatusColor(status: string | null | undefined, isReadyStock = false) {
+  return getStatusColor(status === "handover_complete" ? "sold" : status, isReadyStock);
+}
+
+function getSiteplanStatusLabel(status: string | null | undefined, isReadyStock = false) {
+  return status === "handover_complete"
+    ? "Terjual"
+    : getUnitStatusLabel(status, isReadyStock);
+}
 
 export type ShapeWithUnit = {
   id: string;
@@ -202,7 +218,7 @@ function getFinancialReadiness(activeBooking: BookingInfo | null, invoices: Invo
   };
 }
 
-function getPhysicalReadiness(unit: ShapeWithUnit["unit"], selectedSpkBast: unknown) {
+function getPhysicalReadiness(unit: ShapeWithUnit["unit"]) {
   if (!unit) return { ready: false, reason: "Unit tidak ditemukan." };
   const unitStockType = getUnitStockType(unit);
 
@@ -228,14 +244,14 @@ function getPhysicalReadiness(unit: ShapeWithUnit["unit"], selectedSpkBast: unkn
     const progressDone = unit.constructionProgress === 100;
     // attachments table has no 'status' column — existence of a BAST vendor attachment
     // combined with progress=100 is sufficient signal that the vendor submitted BAST.
-    const bastVendorUploaded = !!selectedSpkBast;
-
     return {
-      ready: progressDone && bastVendorUploaded,
+      // Upload is only evidence of submission. Physical readiness starts after
+      // Developer verifies the Vendor BAST and sets isReadyStock.
+      ready: false,
       reason:
-        progressDone && bastVendorUploaded
-          ? "Pembangunan selesai dan BAST Vendor sudah diupload."
-          : "Pembangunan belum selesai atau BAST Vendor belum diupload.",
+        progressDone
+          ? "Pembangunan 100%; menunggu BAST Vendor diverifikasi Developer."
+          : "Pembangunan fisik belum selesai 100%.",
     };
   }
 
@@ -248,11 +264,12 @@ function getPhysicalReadiness(unit: ShapeWithUnit["unit"], selectedSpkBast: unkn
     };
   }
 
-  // construction_done (indent, non-ready-stock): physical is done
+  // construction_done means Vendor work is complete, but the BAST still needs
+  // Developer verification. Only isReadyStock is the approved physical gate.
   if (unitStockType === "construction_done") {
     return {
-      ready: true,
-      reason: "Pembangunan selesai.",
+      ready: false,
+      reason: "Menunggu verifikasi BAST Vendor oleh Developer.",
     };
   }
 
@@ -292,7 +309,7 @@ function getHandoverEligibility(
   }
 
   const financial = getFinancialReadiness(activeBooking, invoices, kprProcess);
-  const physical = getPhysicalReadiness(unit, selectedSpkBast);
+  const physical = getPhysicalReadiness(unit);
 
   if (!financial.ready) {
     return {
@@ -354,6 +371,7 @@ type SiteplanViewerProps = {
   leads?: { id: string; name: string; phone: string; status: string; assignedMarketingId: string | null }[];
   bookings?: { id: string; unitId: string; customerId: string; paymentScheme: string; status: string; createdAt?: string | Date }[];
   invoices?: Array<{ id: string; bookingId: string | null; type: string; status: string; amount: number }>;
+  cashDocumentReadiness?: Array<{ bookingId: string; identityComplete: boolean }>;
   kprProcesses?: Array<{ id: string; bookingId: string; status: string; biCheckStatus: string; documentStatus: string; bankNotes?: string | null }>;
   marketings?: { id: string; name: string; roleName?: string | null }[];
   currentUser?: { id: string; name: string; role?: string };
@@ -389,6 +407,7 @@ export function SiteplanViewer({
   leads = [],
   bookings = [],
   invoices = [],
+  cashDocumentReadiness = [],
   kprProcesses = [],
   marketings,
   currentUser,
@@ -855,7 +874,12 @@ export function SiteplanViewer({
 
   const unit = selectedShape?.unit;
   const isReadyStock = !!unit?.isReadyStock;
-  const statusColor = getStatusColor(unit?.status, isReadyStock);
+  const hasFinishedPhysicalConstruction = !!unit && (
+    isReadyStock ||
+    (unit.constructionProgress || 0) >= 100 ||
+    ["construction_done", "menunggu_serah_terima", "handover_complete"].includes(unit.status)
+  );
+  const statusColor = getSiteplanStatusColor(unit?.status, isReadyStock);
   const activeBooking = unit ? getActiveBooking(unit.id, bookings) : null;
 
   // Retrieve current booking to determine payment scheme
@@ -873,12 +897,12 @@ export function SiteplanViewer({
     if (status === "construction_done") {
       return isReadyStock ? "Tersedia Siap Huni" : "Selesai Bangun";
     }
-    return getUnitStatusLabel(status, isReadyStock);
+    return getSiteplanStatusLabel(status, isReadyStock);
   };
 
   const displayStatusLabel = unit
     ? (activeBooking
-      ? getUnitStatusLabel(unit.status, isReady)
+      ? getSiteplanStatusLabel(unit.status, isReady)
       : getUnbookedStatusLabel(unit.status, isReady))
     : "—";
 
@@ -955,12 +979,22 @@ export function SiteplanViewer({
     const bfInvoice = bookingInvoices.find((invoice) => invoice.type === "booking_fee");
     const bfPaid = bfInvoice?.status === "paid";
     const dpInvoice = bookingInvoices.find((invoice) => invoice.type === "dp");
-    const dpPaid = dpInvoice?.status === "paid";
+    const dpPaid = !dpInvoice || dpInvoice.status === "paid";
+    const cashDocumentsComplete = cashDocumentReadiness.some(
+      (readiness) => readiness.bookingId === activeBooking.id && readiness.identityComplete
+    );
+    const cashPemberkasanComplete = Boolean(bfPaid && dpPaid && cashDocumentsComplete);
 
     const isHandoverWaiting = unit.status === "menunggu_serah_terima";
     const isHandoverComplete = unit.status === "handover_complete";
+    // Payment completion only makes a booking eligible for PPJB. The PPJB step
+    // is complete after the actual akad action has moved the booking/unit forward.
+    const isAkadCompleted =
+      activeBooking.status === "akad" ||
+      isHandoverWaiting ||
+      isHandoverComplete;
 
-    const physical = getPhysicalReadiness(unit, selectedSpkBast);
+    const physical = getPhysicalReadiness(unit);
     const physicalReady = physical.ready;
 
     // Helper to override all steps to done if handover is complete
@@ -985,8 +1019,9 @@ export function SiteplanViewer({
         const steps = [
           { key: "available", label: "Tersedia Siap Huni", desc: "Unit siap huni siap dipasarkan", done: true, active: false },
           { key: "booking_fee", label: "Booking Fee", desc: "Pembayaran booking fee awal", done: bfPaid, active: !bfPaid },
-          { key: "cash_payment", label: "Pelunasan Cash", desc: "Pelunasan sisa pembayaran unit", done: isCashPaid, active: bfPaid && !isCashPaid },
-          { key: "akad_ppjb", label: "Akad / PPJB", desc: "Penandatanganan Akad / PPJB", done: isCashPaid, active: isCashPaid && !isHandoverWaiting && !isHandoverComplete },
+          { key: "booking_pemberkasan", label: "Booking & Pemberkasan", desc: "Verifikasi kas, KTP, dan Kartu Keluarga", done: cashPemberkasanComplete, active: bfPaid && !cashPemberkasanComplete },
+          { key: "cash_payment", label: "Pelunasan Cash", desc: "Pelunasan sisa pembayaran unit", done: isCashPaid, active: cashPemberkasanComplete && !isCashPaid },
+          { key: "akad_ppjb", label: "Penandatanganan PPJB", desc: "PPJB ditandatangani oleh developer dan konsumen", done: isAkadCompleted, active: isCashPaid && !isAkadCompleted },
           { key: "handover_waiting", label: "Menunggu Serah Terima", desc: "Fisik & Finansial selesai divalidasi", done: isHandoverWaiting || isHandoverComplete, active: isHandoverWaiting },
           { key: "bast_developer", label: "BAST Developer ke Konsumen", desc: "Penandatanganan berita acara serah terima", done: isHandoverComplete, active: isHandoverWaiting },
           { key: "handover_done", label: "Serah Terima Selesai", desc: "Kunci fisik unit diserahkan", done: isHandoverComplete, active: isHandoverComplete },
@@ -998,9 +1033,10 @@ export function SiteplanViewer({
         const steps = [
           { key: "available", label: "Sedang Dibangun untuk Ready Stock", desc: "Unit sedang dalam konstruksi internal", done: true, active: false },
           { key: "booking_fee", label: "Booking Fee", desc: "Pembayaran booking fee awal", done: bfPaid, active: !bfPaid },
-          { key: "cash_payment", label: "Pelunasan Cash", desc: "Pelunasan sisa pembayaran unit", done: isCashPaid, active: bfPaid && !isCashPaid },
-          { key: "akad_ppjb", label: "Akad / PPJB", desc: "Penandatanganan Akad / PPJB", done: isCashPaid, active: isCashPaid && !physicalReady },
+          { key: "booking_pemberkasan", label: "Booking & Pemberkasan", desc: "Verifikasi kas, KTP, dan Kartu Keluarga", done: cashPemberkasanComplete, active: bfPaid && !cashPemberkasanComplete },
+          { key: "cash_payment", label: "Pelunasan Cash", desc: "Pelunasan sisa pembayaran unit", done: isCashPaid, active: cashPemberkasanComplete && !isCashPaid },
           { key: "physical_waiting", label: "Menunggu Fisik Selesai", desc: "Progress 100% & BAST Vendor approved", done: physicalReady, active: isCashPaid && !physicalReady },
+          { key: "akad_ppjb", label: "Penandatanganan PPJB", desc: "PPJB ditandatangani oleh developer dan konsumen", done: isAkadCompleted, active: isCashPaid && physicalReady && !isAkadCompleted },
           { key: "handover_waiting", label: "Menunggu Serah Terima", desc: "Fisik & Finansial selesai divalidasi", done: isHandoverWaiting || isHandoverComplete, active: isHandoverWaiting },
           { key: "bast_developer", label: "BAST Developer ke Konsumen", desc: "Penandatanganan berita acara serah terima", done: isHandoverComplete, active: isHandoverWaiting },
           { key: "handover_done", label: "Serah Terima Selesai", desc: "Kunci fisik unit diserahkan", done: isHandoverComplete, active: isHandoverComplete },
@@ -1012,10 +1048,10 @@ export function SiteplanViewer({
       const steps = [
         { key: "available", label: "Tersedia", desc: "Unit siap dipasarkan", done: true, active: false },
         { key: "booking_fee", label: "Booking Fee", desc: "Pembayaran booking fee awal", done: bfPaid, active: !bfPaid },
-        { key: "booking_pemberkasan", label: "Booking & Pemberkasan", desc: "Verifikasi kas & berkas konsumen", done: bfPaid, active: bfPaid && !isCashPaid },
-        { key: "cash_payment", label: "Pelunasan Cash", desc: "Pelunasan sisa pembayaran unit", done: isCashPaid, active: bfPaid && !isCashPaid },
-        { key: "akad_ppjb", label: "Akad / PPJB", desc: "Penandatanganan Akad / PPJB", done: isCashPaid, active: isCashPaid && !physicalReady },
+        { key: "booking_pemberkasan", label: "Booking & Pemberkasan", desc: "Verifikasi kas, KTP, dan Kartu Keluarga", done: cashPemberkasanComplete, active: bfPaid && !cashPemberkasanComplete },
+        { key: "cash_payment", label: "Pelunasan Cash", desc: "Pelunasan sisa pembayaran unit", done: isCashPaid, active: cashPemberkasanComplete && !isCashPaid },
         { key: "physical_waiting", label: "Cek Fisik Unit", desc: "Menunggu pembangunan fisik selesai", done: physicalReady, active: isCashPaid && !physicalReady },
+        { key: "akad_ppjb", label: "Penandatanganan PPJB", desc: "PPJB ditandatangani oleh developer dan konsumen", done: isAkadCompleted, active: isCashPaid && physicalReady && !isAkadCompleted },
         { key: "handover_waiting", label: "Menunggu Serah Terima", desc: "Fisik & Finansial selesai divalidasi", done: isHandoverWaiting || isHandoverComplete, active: isHandoverWaiting },
         { key: "bast_developer", label: "BAST Developer ke Konsumen", desc: "Penandatanganan berita acara serah terima", done: isHandoverComplete, active: isHandoverWaiting },
         { key: "handover_done", label: "Serah Terima Selesai", desc: "Kunci fisik unit diserahkan", done: isHandoverComplete, active: isHandoverComplete },
@@ -1033,10 +1069,11 @@ export function SiteplanViewer({
         const steps = [
           { key: "available", label: "Tersedia Siap Huni", desc: "Unit siap huni siap dipasarkan", done: true, active: false },
           { key: "booking_fee", label: "Booking Fee", desc: "Pembayaran booking fee awal", done: bfPaid, active: !bfPaid },
-          { key: "dp_payment", label: "DP / Termin Awal", desc: "Pembayaran uang muka / termin ke-1", done: dpPaid, active: bfPaid && !dpPaid },
-          { key: "installment_payment", label: "Pembayaran Termin Berjalan", desc: "Pelunasan cicilan termin berjalan", done: allInvoicesPaid, active: dpPaid && !allInvoicesPaid },
+          { key: "booking_pemberkasan", label: "Booking & Pemberkasan", desc: "Verifikasi kas, KTP, dan Kartu Keluarga", done: cashPemberkasanComplete, active: bfPaid && !cashPemberkasanComplete },
+          { key: "dp_payment", label: "DP / Termin Awal", desc: "Pembayaran uang muka / termin ke-1", done: dpPaid, active: cashPemberkasanComplete && !dpPaid },
+          { key: "installment_payment", label: "Pembayaran Termin Berjalan", desc: "Pelunasan cicilan termin berjalan", done: allInvoicesPaid, active: cashPemberkasanComplete && dpPaid && !allInvoicesPaid },
           { key: "all_paid", label: "Seluruh Invoice Lunas", desc: "Semua invoice termin lunas", done: allInvoicesPaid, active: dpPaid && !allInvoicesPaid },
-          { key: "akad_ppjb", label: "Akad / PPJB", desc: "Penandatanganan Akad / PPJB", done: allInvoicesPaid, active: allInvoicesPaid && !isHandoverWaiting && !isHandoverComplete },
+          { key: "akad_ppjb", label: "Penandatanganan PPJB", desc: "PPJB ditandatangani oleh developer dan konsumen", done: isAkadCompleted, active: allInvoicesPaid && !isAkadCompleted },
           { key: "handover_waiting", label: "Menunggu Serah Terima", desc: "Fisik & Finansial selesai divalidasi", done: isHandoverWaiting || isHandoverComplete, active: isHandoverWaiting },
           { key: "bast_developer", label: "BAST Developer ke Konsumen", desc: "Penandatanganan berita acara serah terima", done: isHandoverComplete, active: isHandoverWaiting },
           { key: "handover_done", label: "Serah Terima Selesai", desc: "Kunci fisik unit diserahkan", done: isHandoverComplete, active: isHandoverComplete },
@@ -1048,11 +1085,12 @@ export function SiteplanViewer({
         const steps = [
           { key: "available", label: "Sedang Dibangun untuk Ready Stock", desc: "Unit sedang dalam konstruksi internal", done: true, active: false },
           { key: "booking_fee", label: "Booking Fee", desc: "Pembayaran booking fee awal", done: bfPaid, active: !bfPaid },
-          { key: "dp_payment", label: "DP / Termin Awal", desc: "Pembayaran uang muka / termin ke-1", done: dpPaid, active: bfPaid && !dpPaid },
-          { key: "installment_payment", label: "Pembayaran Termin Berjalan", desc: "Pelunasan cicilan termin berjalan", done: allInvoicesPaid, active: dpPaid && !allInvoicesPaid },
+          { key: "booking_pemberkasan", label: "Booking & Pemberkasan", desc: "Verifikasi kas, KTP, dan Kartu Keluarga", done: cashPemberkasanComplete, active: bfPaid && !cashPemberkasanComplete },
+          { key: "dp_payment", label: "DP / Termin Awal", desc: "Pembayaran uang muka / termin ke-1", done: dpPaid, active: cashPemberkasanComplete && !dpPaid },
+          { key: "installment_payment", label: "Pembayaran Termin Berjalan", desc: "Pelunasan cicilan termin berjalan", done: allInvoicesPaid, active: cashPemberkasanComplete && dpPaid && !allInvoicesPaid },
           { key: "all_paid", label: "Seluruh Invoice Lunas", desc: "Semua invoice termin lunas", done: allInvoicesPaid, active: dpPaid && !allInvoicesPaid },
-          { key: "akad_ppjb", label: "Akad / PPJB", desc: "Penandatanganan Akad / PPJB", done: allInvoicesPaid, active: allInvoicesPaid && !physicalReady },
           { key: "physical_waiting", label: "Menunggu Fisik Selesai", desc: "Progress 100% & BAST Vendor approved", done: physicalReady, active: allInvoicesPaid && !physicalReady },
+          { key: "akad_ppjb", label: "Penandatanganan PPJB", desc: "PPJB ditandatangani oleh developer dan konsumen", done: isAkadCompleted, active: allInvoicesPaid && physicalReady && !isAkadCompleted },
           { key: "handover_waiting", label: "Menunggu Serah Terima", desc: "Fisik & Finansial selesai divalidasi", done: isHandoverWaiting || isHandoverComplete, active: isHandoverWaiting },
           { key: "bast_developer", label: "BAST Developer ke Konsumen", desc: "Penandatanganan berita acara serah terima", done: isHandoverComplete, active: isHandoverWaiting },
           { key: "handover_done", label: "Serah Terima Selesai", desc: "Kunci fisik unit diserahkan", done: isHandoverComplete, active: isHandoverComplete },
@@ -1064,12 +1102,12 @@ export function SiteplanViewer({
       const steps = [
         { key: "available", label: "Tersedia", desc: "Unit siap dipasarkan", done: true, active: false },
         { key: "booking_fee", label: "Booking Fee", desc: "Pembayaran booking fee awal", done: bfPaid, active: !bfPaid },
-        { key: "booking_pemberkasan", label: "Booking & Pemberkasan", desc: "Verifikasi kas & berkas konsumen", done: bfPaid, active: bfPaid && !dpPaid },
-        { key: "dp_payment", label: "DP / Termin Awal", desc: "Pembayaran uang muka / termin ke-1", done: dpPaid, active: bfPaid && !dpPaid },
-        { key: "installment_payment", label: "Pembayaran Termin Berjalan", desc: "Pelunasan cicilan termin berjalan", done: allInvoicesPaid, active: dpPaid && !allInvoicesPaid },
+        { key: "booking_pemberkasan", label: "Booking & Pemberkasan", desc: "Verifikasi kas, KTP, dan Kartu Keluarga", done: cashPemberkasanComplete, active: bfPaid && !cashPemberkasanComplete },
+        { key: "dp_payment", label: "DP / Termin Awal", desc: "Pembayaran uang muka / termin ke-1", done: dpPaid, active: cashPemberkasanComplete && !dpPaid },
+        { key: "installment_payment", label: "Pembayaran Termin Berjalan", desc: "Pelunasan cicilan termin berjalan", done: allInvoicesPaid, active: cashPemberkasanComplete && dpPaid && !allInvoicesPaid },
         { key: "all_paid", label: "Seluruh Invoice Lunas", desc: "Semua invoice termin lunas", done: allInvoicesPaid, active: dpPaid && !allInvoicesPaid },
-        { key: "akad_ppjb", label: "Akad / PPJB", desc: "Penandatanganan Akad / PPJB", done: allInvoicesPaid, active: allInvoicesPaid && !physicalReady },
         { key: "physical_waiting", label: "Cek Fisik Unit", desc: "Menunggu pembangunan fisik selesai", done: physicalReady, active: allInvoicesPaid && !physicalReady },
+        { key: "akad_ppjb", label: "Penandatanganan PPJB", desc: "PPJB ditandatangani oleh developer dan konsumen", done: isAkadCompleted, active: allInvoicesPaid && physicalReady && !isAkadCompleted },
         { key: "handover_waiting", label: "Menunggu Serah Terima", desc: "Fisik & Finansial selesai divalidasi", done: isHandoverWaiting || isHandoverComplete, active: isHandoverWaiting },
         { key: "bast_developer", label: "BAST Developer ke Konsumen", desc: "Penandatanganan berita acara serah terima", done: isHandoverComplete, active: isHandoverWaiting },
         { key: "handover_done", label: "Serah Terima Selesai", desc: "Kunci fisik unit diserahkan", done: isHandoverComplete, active: isHandoverComplete },
@@ -1151,6 +1189,21 @@ export function SiteplanViewer({
     ];
     return overrideIfHandoverComplete(steps);
   };
+
+  const salesTimelineSteps = unit
+    ? getTimelineSteps({
+        unit,
+        activeBooking,
+        paymentScheme: activeBooking?.paymentScheme,
+        kprProcess: kprProcesses.find((process) => process.bookingId === activeBooking?.id),
+        invoices,
+      })
+    : [];
+  // A workflow may contain legacy flags that mark more than one step active.
+  // The timeline intentionally highlights only the first actionable step.
+  const activeSalesTimelineStep = unit?.status === "handover_complete"
+    ? -1
+    : salesTimelineSteps.findIndex((step) => step.active);
 
   return (
     <div className="siteplan-container relative w-full overflow-hidden rounded-3xl border border-[#D6DED2] bg-white shadow-sage-lg h-[74vh]">
@@ -1293,7 +1346,7 @@ export function SiteplanViewer({
           {filteredShapes.map((shape) => {
             const color = shape.colorOverride
               ? { fill: shape.colorOverride, stroke: "#555", text: "#555" }
-              : getStatusColor(shape.unit?.status, shape.unit?.isReadyStock);
+              : getSiteplanStatusColor(shape.unit?.status, shape.unit?.isReadyStock);
 
             const centroid = shape.coordinates.reduce(
               (acc, c) => ({
@@ -1449,12 +1502,12 @@ export function SiteplanViewer({
                 <span
                   className="inline-flex items-center rounded-lg px-2 py-0.5 text-[9px] font-black border"
                   style={{
-                    backgroundColor: getStatusColor(hoveredShape.unit.status, hoveredShape.unit?.isReadyStock).fill,
-                    color: getStatusColor(hoveredShape.unit.status, hoveredShape.unit?.isReadyStock).text || getStatusColor(hoveredShape.unit.status, hoveredShape.unit?.isReadyStock).stroke,
-                    borderColor: getStatusColor(hoveredShape.unit.status, hoveredShape.unit?.isReadyStock).stroke + "30",
+                    backgroundColor: getSiteplanStatusColor(hoveredShape.unit.status, hoveredShape.unit?.isReadyStock).fill,
+                    color: getSiteplanStatusColor(hoveredShape.unit.status, hoveredShape.unit?.isReadyStock).text || getSiteplanStatusColor(hoveredShape.unit.status, hoveredShape.unit?.isReadyStock).stroke,
+                    borderColor: getSiteplanStatusColor(hoveredShape.unit.status, hoveredShape.unit?.isReadyStock).stroke + "30",
                   }}
                 >
-                  {getUnitStatusLabel(hoveredShape.unit.status, hoveredShape.unit?.isReadyStock)}
+                  {getSiteplanStatusLabel(hoveredShape.unit.status, hoveredShape.unit?.isReadyStock)}
                 </span>
               </div>
             </div>
@@ -1484,7 +1537,7 @@ export function SiteplanViewer({
         </div>
       </div>
 
-      {/* ðŸš€ UPGRADED PREMIUM DRAWER SHEET FOR UNIT DETAILS */}
+      {/* Panel detail kavling */}
       <Sheet open={!!selectedShape} onOpenChange={(o) => !o && setSelectedShape(null)}>
         <SheetContent className="w-full sm:max-w-xl overflow-y-auto bg-[#F7F8F3] border-l border-[#D6DED2] p-0 shadow-sage-lg rounded-l-[2rem] flex flex-col h-full scrollbar-thin scrollbar-thumb-sage/40">
           
@@ -1499,7 +1552,8 @@ export function SiteplanViewer({
                   <span className="whitespace-nowrap">{t("siteplan_viewer.lot")} {unit?.code ?? selectedShape?.label ?? t("siteplan_viewer.detail")}</span>
                   {isReadyStock && (
                     <span className="inline-flex items-center gap-1 bg-[#DDE8D8] text-[#4F6F52] text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider font-sans whitespace-nowrap">
-                      ðŸ¡ {t("siteplan_viewer.ready_stock")}
+                      <Home className="h-3 w-3" aria-hidden="true" />
+                      {t("siteplan_viewer.ready_stock")}
                     </span>
                   )}
                 </SheetTitle>
@@ -1540,7 +1594,7 @@ export function SiteplanViewer({
                       {unit.status === "available" && <Sparkles className="h-3.5 w-3.5 animate-pulse" />}
                       {unit.status === "booking" && <Clock className="h-3.5 w-3.5 animate-pulse" />}
                       {unit.status === "construction" && <Hammer className="h-3.5 w-3.5 animate-pulse" />}
-                      {unit.status === "sold" && <CheckCircle2 className="h-3.5 w-3.5" />}
+                      {(unit.status === "sold" || unit.status === "handover_complete") && <CheckCircle2 className="h-3.5 w-3.5" />}
                       {displayStatusLabel}
                     </span>
                   </div>
@@ -2231,24 +2285,42 @@ export function SiteplanViewer({
                                 <Layers className="h-3.5 w-3.5 text-[#A8B0AA]" />
                                 Surat Perintah Kerja (SPK) Konstruksi
                               </p>
-                              <div className="p-4 bg-purple-50/50 border border-purple-100 rounded-2xl text-center text-xs space-y-3">
-                                <Hammer className="h-8 w-8 text-purple-400 mx-auto animate-pulse" />
-                                <div className="space-y-1">
-                                  <p className="font-extrabold text-[#243028]">Belum Ada SPK Konstruksi Aktif</p>
-                                  <p className="text-[10px] text-[#66736A] leading-relaxed max-w-[280px] mx-auto">
-                                    Unit ini sudah berada dalam status pembangunan fisik, namun belum ada Surat Perintah Kerja (SPK) yang diterbitkan.
-                                  </p>
+
+                              {hasFinishedPhysicalConstruction ? (
+                                <div className="p-4 bg-[#DDE8D8]/45 border border-[#8FAF9A]/30 rounded-2xl text-center text-xs space-y-2.5">
+                                  <CheckCircle2 className="h-8 w-8 text-[#4F6F52] mx-auto" />
+                                  <div className="space-y-1">
+                                    <p className="font-extrabold text-[#243028]">Pekerjaan Fisik Selesai</p>
+                                    <p className="text-[10px] text-[#66736A] leading-relaxed max-w-[300px] mx-auto">
+                                      {isReadyStock
+                                        ? "Konstruksi telah disetujui dan SPK sebelumnya sudah ditutup. Unit ini tidak memerlukan SPK baru."
+                                        : "Progres fisik telah mencapai 100%. Lanjutkan verifikasi BAST Vendor; jangan menerbitkan SPK baru."}
+                                    </p>
+                                  </div>
+                                  <span className="inline-flex rounded-full border border-[#8FAF9A]/35 bg-white px-2.5 py-1 font-bold text-[10px] text-[#4F6F52]">
+                                    {isReadyStock ? "Fisik Siap Huni" : "Menunggu BAST Vendor"}
+                                  </span>
                                 </div>
-                                <div className="pt-1">
-                                  <a
-                                    href="/production"
-                                    className="inline-flex items-center justify-center bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-[10px] px-3.5 py-2 rounded-xl shadow-sm transition-all hover:scale-[1.02] gap-1"
-                                  >
-                                    Terbitkan SPK Baru
-                                    <ChevronRight className="h-3 w-3" />
-                                  </a>
+                              ) : (
+                                <div className="p-4 bg-purple-50/50 border border-purple-100 rounded-2xl text-center text-xs space-y-3">
+                                  <Hammer className="h-8 w-8 text-purple-400 mx-auto animate-pulse" />
+                                  <div className="space-y-1">
+                                    <p className="font-extrabold text-[#243028]">Belum Ada SPK Konstruksi Aktif</p>
+                                    <p className="text-[10px] text-[#66736A] leading-relaxed max-w-[280px] mx-auto">
+                                      Unit ini masih berada dalam pembangunan fisik dan belum memiliki Surat Perintah Kerja (SPK) aktif.
+                                    </p>
+                                  </div>
+                                  <div className="pt-1">
+                                    <a
+                                      href="/production"
+                                      className="inline-flex items-center justify-center bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-[10px] px-3.5 py-2 rounded-xl shadow-sm transition-all hover:scale-[1.02] gap-1"
+                                    >
+                                      Terbitkan SPK Baru
+                                      <ChevronRight className="h-3 w-3" />
+                                    </a>
+                                  </div>
                                 </div>
-                              </div>
+                              )}
                             </div>
                           )}
 
@@ -2335,46 +2407,49 @@ export function SiteplanViewer({
                           {t("siteplan_viewer.sales_flow")}
                         </h4>
 
-                        <div className="space-y-4 relative pl-3">
-                          {/* Left Solid Guide Line */}
-                          <div className="absolute left-[20px] top-2 bottom-2 w-0.5 bg-[#D6DED2]" />
+                        <div className="relative space-y-1">
+                          {/* Garis alur selalu sejajar dengan titik tahap. */}
+                          <div className="absolute left-[9px] top-3 bottom-3 w-px bg-[#D6DED2]" />
 
-                          {getTimelineSteps({
-                            unit,
-                            activeBooking,
-                            paymentScheme: activeBooking?.paymentScheme,
-                            kprProcess: kprProcesses.find(k => k.bookingId === activeBooking?.id),
-                            invoices,
-                          }).map((step, idx) => {
+                          {salesTimelineSteps.map((step, idx) => {
                             const isDone = step.done;
-                            const isActive = step.active;
+                            const isActive = idx === activeSalesTimelineStep;
 
                             return (
-                              <div key={idx} className="flex gap-4 relative animate-fade-in">
-                                {/* Timeline Bullet Indicator */}
+                              <div key={idx} className="grid grid-cols-[20px_minmax(0,1fr)] gap-3 relative py-1">
                                 <div
-                                  className={`z-10 h-4.5 w-4.5 rounded-full border-2 flex items-center justify-center shrink-0 mt-0.5 transition-all ${
-                                    isDone
-                                      ? "bg-[#4F6F52] border-[#4F6F52] text-white shadow-sm"
-                                      : isActive
-                                      ? "bg-amber-50 border-amber-500 text-amber-600 animate-pulse shadow-md"
+                                  className={`z-10 h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0 mt-1 ${
+                                    isActive
+                                      ? "bg-amber-50 border-amber-500 text-amber-700 ring-4 ring-amber-100/70"
+                                      : isDone
+                                      ? "bg-[#4F6F52] border-[#4F6F52] text-white"
                                       : "bg-[#F7F8F3] border-[#D6DED2]"
                                   }`}
                                 >
-                                  {isDone && <CheckCircle2 className="h-2.5 w-2.5" />}
-                                  {isActive && <div className="h-1.5 w-1.5 bg-amber-500 rounded-full animate-ping" />}
+                                  {isDone && !isActive && <CheckCircle2 className="h-2.5 w-2.5" />}
+                                  {isActive && <div className="h-1.5 w-1.5 bg-amber-600 rounded-full" />}
                                 </div>
 
-                                {/* Timeline Content */}
-                                <div className="pb-5 relative top-[-2px] flex-1">
-                                  <span
-                                    className={`text-[11px] font-extrabold uppercase tracking-widest block transition-colors ${
-                                      isDone ? "text-[#243028]" : isActive ? "text-amber-700" : "text-[#8FAF9A]/70"
-                                    }`}
-                                  >
-                                    {step.label}
-                                  </span>
-                                  <span className={`text-[10px] font-medium leading-tight block mt-0.5 ${isActive ? "text-amber-700/80" : "text-[#66736A]"}`}>
+                                <div className={`min-w-0 rounded-xl px-3 py-2.5 ${
+                                  isActive
+                                    ? "border border-amber-200 bg-amber-50/75"
+                                    : "border border-transparent"
+                                }`}>
+                                  <div className="flex items-start justify-between gap-2">
+                                    <span className={`text-[11px] font-extrabold uppercase tracking-wider block ${
+                                      isDone ? "text-[#243028]" : isActive ? "text-amber-800" : "text-[#8FAF9A]"
+                                    }`}>
+                                      {step.label}
+                                    </span>
+                                    {isActive && (
+                                      <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[8px] font-black uppercase tracking-wide text-amber-800">
+                                        Tahap aktif
+                                      </span>
+                                    )}
+                                  </div>
+                                  <span className={`text-[10px] font-medium leading-relaxed block mt-0.5 ${
+                                    isActive ? "text-amber-800/80" : isDone ? "text-[#66736A]" : "text-[#8FAF9A]"
+                                  }`}>
                                     {step.desc}
                                   </span>
                                 </div>

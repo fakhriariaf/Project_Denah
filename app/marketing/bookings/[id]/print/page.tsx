@@ -321,7 +321,7 @@ export default async function PrintBookingPage({ params }: PrintPageProps) {
         {/* COMPLETED SUCCESS ICON IN SCREEN VIEW */}
         <div className="no-print mt-12 pt-6 border-t border-border/40 flex items-center justify-center gap-2 text-xs text-primary font-semibold">
           <CheckCircle2 className="h-4 w-4 text-primary/70" />
-          <span>{t("booking.print_status_label")} <Badge variant="outline" className="bg-secondary text-primary border-primary/30 uppercase font-bold text-[9px] rounded ml-1">{booking.status === "completed" ? t("booking.print_status_akad") : t("booking.print_status_active")}</Badge></span>
+          <span>{t("booking.print_status_label")} <Badge variant="outline" className="bg-secondary text-primary border-primary/30 uppercase font-bold text-[9px] rounded ml-1">{booking.status === "completed" ? (booking.paymentScheme === "kpr" ? t("booking.print_status_akad") : t("booking.print_status_ppjb")) : t("booking.print_status_active")}</Badge></span>
         </div>
 
       </div>

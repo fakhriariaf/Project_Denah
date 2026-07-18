@@ -34,6 +34,11 @@ import {
   realizeKprSchema
 } from "../validators/marketing";
 import { getBookingAkadReadiness } from "@/server/services/booking-akad-readiness";
+import { getInstallmentProofGate } from "@/lib/booking-payment-gates";
+import {
+  getCashConstructionReadiness,
+  getCashPemberkasanReadiness,
+} from "@/server/services/booking-construction-readiness";
 import { generateInvoiceSchedule, computeInvoiceSchedule, round2, computeOutstanding, validateBookingCancellation } from "@/server/services/booking.service";
 import { requireAnyRole, getSessionRole, getUserRole } from "../permissions";
 import { eq, and, or, sql, inArray, desc, asc, sum, lte, isNotNull, ilike, count } from "drizzle-orm";
@@ -42,6 +47,33 @@ import { revalidatePath } from "next/cache";
 import { writeAuditLog, safeWriteBlockedTransitionLog } from "./audit";
 import { createNotification, notifyUsersWithRoles } from "./notification";
 import { applyRateLimit } from "@/server/middleware/apply-rate-limit";
+
+const KPR_PIPELINE_STATUSES = [
+  "bi_checking",
+  "pemberkasan",
+  "proses_bank",
+  "offering",
+  "approved",
+  "rejected",
+  "akad",
+] as const;
+
+type KprPipelineStatus = (typeof KPR_PIPELINE_STATUSES)[number];
+
+const KPR_ALLOWED_FORWARD_TRANSITIONS: Record<Exclude<KprPipelineStatus, "rejected" | "akad">, readonly KprPipelineStatus[]> = {
+  bi_checking: ["pemberkasan", "rejected"],
+  pemberkasan: ["proses_bank", "rejected"],
+  proses_bank: ["offering", "rejected"],
+  offering: ["approved", "rejected"],
+  approved: ["akad"],
+};
+
+function parseKprPipelineStatus(status: string): KprPipelineStatus {
+  if (!(KPR_PIPELINE_STATUSES as readonly string[]).includes(status)) {
+    throw new Error("Status KPR tidak valid.");
+  }
+  return status as KprPipelineStatus;
+}
 
 // --- LEADS ---
 export async function createLead(data: unknown) {
@@ -341,6 +373,9 @@ export async function createBooking(data: unknown) {
     if (targetUnit.status !== "available") {
       throw new Error("Kavling sudah dipesan atau terjual!");
     }
+    if (targetUnit.projectId !== parsed.projectId) {
+      throw new Error("Unit yang dipilih tidak berada pada proyek booking.");
+    }
 
     let finalCustomerId = parsed.customerId;
     if (parsed.isLead) {
@@ -370,6 +405,9 @@ export async function createBooking(data: unknown) {
       }).where(eq(leads.id, leadRow.id)).run();
 
       finalCustomerId = newCustId;
+    } else {
+      const customer = await tx.select({ id: customers.id }).from(customers).where(eq(customers.id, parsed.customerId)).get();
+      if (!customer) throw new Error("Konsumen tidak ditemukan.");
     }
 
     // 2. Insert Booking Row
@@ -531,6 +569,29 @@ export async function updateBooking(id: string, data: unknown) {
     const unit = await tx.select().from(units).where(eq(units.id, existingBooking.unitId)).get();
     if (!unit) {
       throw new Error("Unit terkait booking tidak ditemukan.");
+    }
+
+    if (existingBooking.paymentScheme !== parsed.paymentScheme) {
+      if (existingBooking.status !== "active" || !["booking", "kpr_process"].includes(unit.status)) {
+        throw new Error("Skema pembayaran tidak dapat diubah setelah booking memasuki tahap akad, konstruksi, atau serah terima.");
+      }
+      const paidInvoice = await tx.select({ id: invoices.id })
+        .from(invoices)
+        .where(and(eq(invoices.bookingId, id), inArray(invoices.status, ["paid", "partial"])))
+        .get();
+      if (paidInvoice) {
+        throw new Error("Skema pembayaran tidak dapat diubah setelah ada invoice yang dibayar sebagian atau lunas.");
+      }
+      const kpr = await tx.select({ id: kprProcesses.id, status: kprProcesses.status })
+        .from(kprProcesses)
+        .where(eq(kprProcesses.bookingId, id))
+        .get();
+      const bankSubmission = kpr
+        ? await tx.select({ id: bankSubmissions.id }).from(bankSubmissions).where(eq(bankSubmissions.kprProcessId, kpr.id)).get()
+        : null;
+      if ((kpr && kpr.status !== "bi_checking") || bankSubmission) {
+        throw new Error("Skema pembayaran tidak dapat diubah setelah proses pengajuan KPR atau pengajuan bank dimulai.");
+      }
     }
 
     // 3. If paymentScheme changes, handle KPR processes adjustments
@@ -890,13 +951,11 @@ export async function isPhysicalReadyForKprAkad(unit: { id: string }, tx?: DbOrT
     dbUnit.status === "booking";
 
   if (isConstructionOrIndent) {
-    const progressDone = (dbUnit.constructionProgress ?? 0) === 100;
-
     return {
-      ready: progressDone,
-      reason: progressDone
-        ? "Progress fisik unit sudah 100%."
-        : "Akad KPR untuk unit indent hanya dapat dilakukan setelah progress fisik 100%.",
+      ready: false,
+      reason: (dbUnit.constructionProgress ?? 0) === 100
+        ? "Progress fisik sudah 100%, tetapi BAST Vendor ke Developer belum diverifikasi."
+        : "Akad KPR untuk unit indent hanya dapat dilakukan setelah progress fisik 100% dan BAST Vendor diverifikasi.",
     };
   }
 
@@ -911,10 +970,13 @@ export async function validateKprStateTransition(
   kprId: string,
   targetStatus: string,
   payload: {
-    documentStatus?: string;
     approvedBankPartnerId?: string | null;
+    biCheckStatus?: "pending" | "partial" | "approved" | "rejected_refund" | "rejected_no_refund";
+    /** Hanya untuk menyimpan perubahan metadata pada tahap yang sama. */
+    allowSameStage?: boolean;
   }
 ) {
+  const newStatus = parseKprPipelineStatus(targetStatus);
   // 1. Fetch KPR process
   const kpr = await tx.select().from(kprProcesses).where(eq(kprProcesses.id, kprId)).get();
   if (!kpr) throw new Error("Proses KPR tidak ditemukan.");
@@ -950,47 +1012,42 @@ export async function validateKprStateTransition(
     }
   }
 
-  const currentStatus = kpr.status;
-  const newStatus = targetStatus;
-
-  // Enforce one-way gates
-  const BACKWARD_FROM_APPROVED = ["bi_checking", "pemberkasan", "proses_bank", "offering"];
-  if (currentStatus === "approved" && BACKWARD_FROM_APPROVED.includes(newStatus)) {
+  const currentStatus = kpr.status as KprPipelineStatus | "realisasi";
+  if (currentStatus === "realisasi" || currentStatus === "rejected" || currentStatus === "akad") {
+    throw new Error("KPR pada tahap terminal tidak dapat dipindahkan melalui pipeline.");
+  }
+  if (currentStatus === newStatus) {
+    if (payload.allowSameStage) {
+      return { kpr, booking, documentStatus: kpr.documentStatus };
+    }
+    throw new Error("KPR sudah berada pada tahap tersebut.");
+  }
+  if (!KPR_ALLOWED_FORWARD_TRANSITIONS[currentStatus].includes(newStatus)) {
     throw new Error(
-      "KPR yang sudah berstatus Approved tidak dapat dikembalikan ke tahap sebelumnya. " +
-      "Dari Approved, alur hanya dapat maju ke tahap Akad."
+      `Transisi KPR dari ${currentStatus} ke ${newStatus} tidak diperbolehkan. ` +
+      "Gunakan tahap berikutnya sesuai urutan pipeline."
     );
   }
 
-  const BACKWARD_FROM_REALISASI = ["bi_checking", "pemberkasan", "proses_bank", "offering", "approved", "akad"];
-  if (currentStatus === "realisasi" && BACKWARD_FROM_REALISASI.includes(newStatus)) {
-    throw new Error(
-      "Status Realisasi tidak dapat dikembalikan ke tahap sebelumnya. " +
-      "Dana KPR yang sudah dicairkan tidak dapat dibatalkan melalui sistem ini."
-    );
+  // BI Checking harus memperoleh keputusan positif sebelum pemberkasan
+  // dibuka. Status dari browser tidak digunakan sebagai sumber kebenaran.
+  if (newStatus === "pemberkasan" && (payload.biCheckStatus ?? kpr.biCheckStatus) !== "approved") {
+    throw new Error("Tahap Pemberkasan hanya dapat dibuka setelah BI Checking berstatus Disetujui.");
   }
 
-  if (newStatus === "rejected" && currentStatus === "approved") {
-    throw new Error(
-      "KPR yang sudah berstatus Approved tidak dapat dikembalikan ke Ditolak (Rejected). " +
-      "Hubungi Super Admin jika diperlukan penanganan khusus."
-    );
-  }
-
-  // 3. Validation for Pemberkasan / Proses Bank: Documents must be complete
-  const finalDocStatus = payload.documentStatus ?? kpr.documentStatus;
-  if ((newStatus === "pemberkasan" || newStatus === "proses_bank") && finalDocStatus !== "complete") {
-    throw new Error("Berkas berkas KPR belum lengkap. Silakan lengkapi berkas di berkas checklist KPR terlebih dahulu.");
-  }
-
-  // Must pass through "pemberkasan" before reaching "proses_bank"
-  // Direct jump from bi_checking ? proses_bank is not allowed
-  const STAGES_BEFORE_PROSES_BANK = ["bi_checking"];
-  if (newStatus === "proses_bank" && STAGES_BEFORE_PROSES_BANK.includes(currentStatus)) {
-    throw new Error(
-      "Tidak dapat langsung ke Proses Bank dari BI Checking. " +
-      "Wajib melewati tahap Pemberkasan (pengumpulan & verifikasi dokumen) terlebih dahulu."
-    );
+  // Kelengkapan dokumen wajib dihitung dari dokumen yang benar-benar sudah
+  // diverifikasi. Pemberkasan adalah tempat untuk mengumpulkan dokumen;
+  // dokumen baru menjadi gate saat akan dikirim ke bank.
+  const docs = await tx
+    .select({ documentType: customerDocuments.documentType, status: customerDocuments.status })
+    .from(customerDocuments)
+    .where(eq(customerDocuments.bookingId, booking.id))
+    .all();
+  const kprDocumentsComplete = ["ktp", "kk", "npwp", "slip_gaji"].every((documentType) =>
+    docs.some((document) => document.documentType === documentType && document.status === "verified")
+  );
+  if (["proses_bank", "offering", "approved", "akad"].includes(newStatus) && !kprDocumentsComplete) {
+    throw new Error("Berkas KPR belum lengkap dan terverifikasi. KTP, Kartu Keluarga, NPWP, dan Slip Gaji wajib diverifikasi terlebih dahulu.");
   }
 
   // Validation for Proses Bank: requires verified bank submission
@@ -1055,7 +1112,25 @@ export async function validateKprStateTransition(
     }
   }
 
-  return { kpr, booking };
+  if (payload.approvedBankPartnerId && ["offering", "approved", "akad"].includes(newStatus)) {
+    const requiredSubmissionStatuses = newStatus === "offering"
+      ? (["offering", "approved"] as const)
+      : (["approved"] as const);
+    const selectedSubmission = await tx
+      .select({ id: bankSubmissions.id })
+      .from(bankSubmissions)
+      .where(and(
+        eq(bankSubmissions.kprProcessId, kprId),
+        eq(bankSubmissions.bankPartnerId, payload.approvedBankPartnerId),
+        inArray(bankSubmissions.status, requiredSubmissionStatuses)
+      ))
+      .get();
+    if (!selectedSubmission) {
+      throw new Error("Bank penyetuju harus memiliki status pengajuan yang sesuai dengan tahap KPR.");
+    }
+  }
+
+  return { kpr, booking, documentStatus: kprDocumentsComplete ? "complete" as const : "incomplete" as const };
 }
 
 export async function updateKprProcess(id: string, data: unknown) {
@@ -1074,12 +1149,15 @@ export async function updateKprProcess(id: string, data: unknown) {
   let bookingIdToTransition = "";
 
   await db.transaction(async (tx) => {
+    let derivedDocumentStatus: "complete" | "incomplete" = "incomplete";
     // Call KPR State Transition validator first, logging blocked attempts
     try {
-      await validateKprStateTransition(tx, id, parsed.status, {
-        documentStatus: parsed.documentStatus,
+      const transition = await validateKprStateTransition(tx, id, parsed.status, {
         approvedBankPartnerId: parsed.approvedBankPartnerId,
+        biCheckStatus: parsed.biCheckStatus,
+        allowSameStage: true,
       });
+      derivedDocumentStatus = transition.documentStatus;
     } catch (err: unknown) {
       await safeWriteBlockedTransitionLog({
         module: "marketing",
@@ -1103,7 +1181,7 @@ export async function updateKprProcess(id: string, data: unknown) {
     await tx.update(kprProcesses).set({
       status: parsed.status,
       biCheckStatus: parsed.biCheckStatus,
-      documentStatus: parsed.documentStatus,
+      documentStatus: derivedDocumentStatus,
       bankNotes: parsed.bankNotes,
       akadDate: parsed.akadDate,
       updatedAt: new Date(),
@@ -1153,17 +1231,30 @@ export async function updateKprProcess(id: string, data: unknown) {
         updatedAt: new Date(),
       }).where(eq(customers.id, booking.customerId)).run();
 
-      // Booking = completed
+      // Akad Kredit belum sama dengan realisasi dana. Booking baru dinyatakan
+      // selesai setelah jalur realizeKprFunds() mencatat kas masuk secara atomik.
       await tx.update(bookings).set({
-        status: "completed",
+        status: "akad",
         updatedAt: new Date(),
       }).where(eq(bookings.id, booking.id)).run();
     } else {
       // Synchronize unit status to match KPR state
-      let unitState: "construction" | "kpr_process" | "booking" | "available" = "kpr_process";
+      let unitState: "kpr_process" | "booking" | "available" = "kpr_process";
       if (parsed.status === "rejected") {
-        // KPR rejected ? release unit back to market
-        unitState = "available";
+        // Penolakan KPR tidak otomatis melepaskan unit. Booking, invoice, dan
+        // kemungkinan refund harus diselesaikan melalui flow pembatalan/revisi.
+        // Catat penolakan pada riwayat booking agar timeline tidak menggantung
+        // tanpa penanda meskipun bookings.status tetap "active".
+        unitState = "booking";
+        await tx.insert(bookingStatusHistories).values({
+          id: crypto.randomUUID(),
+          bookingId: booking.id,
+          previousStatus: booking.status,
+          newStatus: booking.status,
+          notes: "KPR ditolak bank. Menunggu tindak lanjut pembatalan/refund.",
+          changedBy: user.id,
+          changedAt: new Date(),
+        }).run();
       } else if (parsed.status === "bi_checking" || parsed.status === "pemberkasan") {
         // Early KPR stages remain as booking
         unitState = "booking";
@@ -1172,7 +1263,8 @@ export async function updateKprProcess(id: string, data: unknown) {
         // Ready stock units bypass construction phase entirely (BR-22).
         const unitForApproved = await tx.select({ isReadyStock: units.isReadyStock }).from(units).where(eq(units.id, booking.unitId)).get();
         if (!unitForApproved?.isReadyStock) {
-          unitState = "construction";
+          // Construction is promoted only by checkAndTransitionToConstruction(),
+          // which revalidates DP and KPR approval after this transaction.
         }
         // else: keep unitState = "kpr_process" for ready stock — handover gate handled separately
       }
@@ -1183,14 +1275,8 @@ export async function updateKprProcess(id: string, data: unknown) {
           status: unitState,
           updatedAt: new Date(),
         };
-        // On KPR rejection, clear customer/booking references so unit is truly free
-        if (parsed.status === "rejected") {
-          unitUpdate.currentCustomerId = null;
-          unitUpdate.currentBookingId = null;
-        } else {
-          unitUpdate.currentCustomerId = booking.customerId;
-          unitUpdate.currentBookingId = booking.id;
-        }
+        unitUpdate.currentCustomerId = booking.customerId;
+        unitUpdate.currentBookingId = booking.id;
         await tx.update(units).set(unitUpdate).where(eq(units.id, booking.unitId)).run();
 
         await tx.insert(unitStatusHistories).values({
@@ -1239,6 +1325,7 @@ export async function updateKprStatusDirect(id: string, newStatus: string, revis
       "Gunakan Form Realisasi KPR di dialog 'Kelola Berkas KPR' untuk mencatat pencairan dana bank beserta rincian keuangannya."
     );
   }
+  const parsedStatus = parseKprPipelineStatus(newStatus);
   
   let bookingProjectId = "";
   let bookingIdToTransition = "";
@@ -1246,7 +1333,7 @@ export async function updateKprStatusDirect(id: string, newStatus: string, revis
   await db.transaction(async (tx) => {
     // Call KPR State Transition validator first, logging blocked attempts
     try {
-      await validateKprStateTransition(tx, id, newStatus, {});
+      await validateKprStateTransition(tx, id, parsedStatus, {});
     } catch (err: unknown) {
       await safeWriteBlockedTransitionLog({
         module: "marketing",
@@ -1255,7 +1342,7 @@ export async function updateKprStatusDirect(id: string, newStatus: string, revis
         details: {
           action: "updateKprStatusDirect_blocked_transition",
           kprProcessId: id,
-          targetStatus: newStatus,
+          targetStatus: parsedStatus,
           reason: err instanceof Error ? err.message : String(err),
         },
       });
@@ -1280,20 +1367,20 @@ export async function updateKprStatusDirect(id: string, newStatus: string, revis
           }
         } catch (e) {}
       }
-      notesMap[newStatus] = revisionNotes;
+      notesMap[parsedStatus] = revisionNotes;
       updatedNotes = JSON.stringify(notesMap);
     }
 
     // 5. Update KPR row status
     await tx.update(kprProcesses).set({
-      status: newStatus as "bi_checking" | "pemberkasan" | "proses_bank" | "offering" | "approved" | "rejected" | "akad",
+      status: parsedStatus,
       bankNotes: updatedNotes,
-      akadDate: newStatus === "akad" ? new Date() : null,
+      akadDate: parsedStatus === "akad" ? new Date() : null,
       updatedAt: new Date(),
     }).where(eq(kprProcesses.id, id)).run();
 
     // 6. Synchronize unit status based on KPR status
-    if (newStatus === "akad") {
+    if (parsedStatus === "akad") {
       const currentUnit = await tx.select().from(units).where(eq(units.id, booking.unitId)).get();
       if (!currentUnit) throw new Error("Unit tidak ditemukan.");
 
@@ -1310,7 +1397,7 @@ export async function updateKprStatusDirect(id: string, newStatus: string, revis
       }).where(eq(customers.id, booking.customerId)).run();
 
       await tx.update(bookings).set({
-        status: "completed",
+        status: "akad",
         updatedAt: new Date(),
       }).where(eq(bookings.id, booking.id)).run();
 
@@ -1337,9 +1424,20 @@ export async function updateKprStatusDirect(id: string, newStatus: string, revis
 
     } else {
       let unitState: "kpr_process" | "booking" | "available" = "kpr_process";
-      if (newStatus === "rejected") {
-        unitState = "available";
-      } else if (newStatus === "bi_checking" || newStatus === "pemberkasan") {
+      if (parsedStatus === "rejected") {
+        unitState = "booking";
+        // Tandai penolakan KPR pada riwayat booking (Pilihan A: unit tetap
+        // ter-link; pembatalan/refund lewat flow terpisah).
+        await tx.insert(bookingStatusHistories).values({
+          id: crypto.randomUUID(),
+          bookingId: booking.id,
+          previousStatus: booking.status,
+          newStatus: booking.status,
+          notes: "KPR ditolak bank (Kanban). Menunggu tindak lanjut pembatalan/refund.",
+          changedBy: user.id,
+          changedAt: new Date(),
+        }).run();
+      } else if (parsedStatus === "bi_checking" || parsedStatus === "pemberkasan") {
         unitState = "booking";
       }
 
@@ -1349,13 +1447,8 @@ export async function updateKprStatusDirect(id: string, newStatus: string, revis
           status: unitState,
           updatedAt: new Date(),
         };
-        if (newStatus === "rejected") {
-          unitUpdate.currentCustomerId = null;
-          unitUpdate.currentBookingId = null;
-        } else {
-          unitUpdate.currentCustomerId = booking.customerId;
-          unitUpdate.currentBookingId = booking.id;
-        }
+        unitUpdate.currentCustomerId = booking.customerId;
+        unitUpdate.currentBookingId = booking.id;
         await tx.update(units).set(unitUpdate).where(eq(units.id, booking.unitId)).run();
 
         await tx.insert(unitStatusHistories).values({
@@ -1363,7 +1456,7 @@ export async function updateKprStatusDirect(id: string, newStatus: string, revis
           unitId: booking.unitId,
           previousStatus: currentUnit.status,
           newStatus: unitState,
-          reason: `Progress status KPR (Kanban): ${newStatus}`,
+          reason: `Progress status KPR (Kanban): ${parsedStatus}`,
           changedBy: user.id,
           changedAt: new Date(),
         }).run();
@@ -1382,7 +1475,7 @@ export async function updateKprStatusDirect(id: string, newStatus: string, revis
     module: "marketing",
     entityId: id,
     entityType: "kpr_process",
-    details: { step: newStatus, source: "kanban_drag" },
+    details: { step: parsedStatus, source: "kanban_drag" },
   });
 
   revalidatePath("/marketing/kpr");
@@ -1412,7 +1505,7 @@ export async function approveBastKonsumen(bookingId: string) {
   // RULE 10/11: booking harus completed
   if (booking.status !== "completed") {
     throw new Error(
-      "Serah terima tidak dapat dilakukan. Booking belum berstatus completed (akad kredit belum selesai)."
+      "Serah terima tidak dapat dilakukan. Akad / PPJB atau Akad Kredit belum diselesaikan."
     );
   }
 
@@ -1431,7 +1524,7 @@ export async function approveBastKonsumen(bookingId: string) {
   if (!bastDoc) {
     throw new Error(
       "Dokumen BAST (Berita Acara Serah Terima) dari Developer ke Konsumen belum diunggah. " +
-      "Silakan unggah BAST terlebih dahulu di tab Berkas Konsumen."
+      "Silakan unggah BAST terlebih dahulu pada kartu BAST Developer ke Konsumen di Detail Booking."
     );
   }
   if (bastDoc.status !== "verified") {
@@ -1546,6 +1639,99 @@ export async function approveBastKonsumen(bookingId: string) {
   return { success: true };
 }
 
+/**
+ * Controlled correction path for an already completed handover.
+ * Only Super Admin may reopen the handover queue; the signed BAST is retained
+ * as a rejected record so the audit trail is never removed silently.
+ */
+export async function requestHandoverRevision(bookingId: string, reason: string) {
+  const user = await requireAnyRole(["Super Admin"]);
+  const normalizedReason = reason.trim();
+  if (normalizedReason.length < 10 || normalizedReason.length > 500) {
+    throw new Error("Alasan revisi serah terima wajib diisi antara 10 sampai 500 karakter.");
+  }
+
+  const booking = await db.select().from(bookings).where(eq(bookings.id, bookingId)).get();
+  if (!booking) throw new Error("Booking tidak ditemukan.");
+  if (booking.status !== "completed") {
+    throw new Error("Revisi serah terima hanya dapat dilakukan pada booking yang telah selesai.");
+  }
+
+  const unit = await db.select().from(units).where(eq(units.id, booking.unitId)).get();
+  if (!unit) throw new Error("Unit tidak ditemukan.");
+  if (unit.status !== "handover_complete") {
+    throw new Error("Unit belum berada pada status Serah Terima Selesai.");
+  }
+
+  const bastDocument = await db
+    .select()
+    .from(customerDocuments)
+    .where(
+      and(
+        eq(customerDocuments.bookingId, bookingId),
+        eq(customerDocuments.documentType, "bast")
+      )
+    )
+    .get();
+  if (!bastDocument) {
+    throw new Error("Dokumen BAST untuk booking ini tidak ditemukan.");
+  }
+
+  await db.transaction(async (tx) => {
+    await tx.update(units).set({
+      status: "menunggu_serah_terima",
+      updatedAt: new Date(),
+    }).where(eq(units.id, unit.id)).run();
+
+    await tx.update(customerDocuments).set({
+      status: "rejected",
+      notes: `Revisi serah terima: ${normalizedReason}`,
+    }).where(eq(customerDocuments.id, bastDocument.id)).run();
+
+    await tx.insert(unitStatusHistories).values({
+      id: crypto.randomUUID(),
+      unitId: unit.id,
+      previousStatus: "handover_complete",
+      newStatus: "menunggu_serah_terima",
+      reason: `Revisi serah terima oleh Super Admin: ${normalizedReason}`,
+      changedBy: user.id,
+      changedAt: new Date(),
+    }).run();
+
+    await tx.insert(bookingStatusHistories).values({
+      id: crypto.randomUUID(),
+      bookingId,
+      previousStatus: "completed",
+      newStatus: "Handover Revision",
+      notes: `Serah terima dibuka kembali. ${normalizedReason}`,
+      changedBy: user.id,
+      changedAt: new Date(),
+    }).run();
+  });
+
+  await writeAuditLog({
+    action: "update",
+    module: "marketing",
+    entityId: unit.id,
+    entityType: "handover",
+    details: {
+      action: "handover_revision",
+      bookingId,
+      bastDocumentId: bastDocument.id,
+      reason: normalizedReason,
+      previousUnitStatus: "handover_complete",
+      newUnitStatus: "menunggu_serah_terima",
+    },
+  });
+
+  revalidatePath(`/marketing/bookings/${bookingId}`);
+  revalidatePath("/marketing/bookings");
+  revalidatePath("/marketing/kpr");
+  revalidatePath(`/siteplan/${booking.projectId}`);
+  revalidatePath("/master/units");
+  return { success: true };
+}
+
 // --- BANK SUBMISSIONS & PARTNERS ---
 export async function createBankPartner(data: unknown) {
   await requireAnyRole(["Super Admin", "Admin Kantor", "Marketing", "Marketing Manager"]);
@@ -1625,6 +1811,20 @@ export async function submitKprToBank(data: unknown) {
   const id = crypto.randomUUID();
 
   await db.transaction(async (tx) => {
+    const kpr = await tx.select().from(kprProcesses).where(eq(kprProcesses.id, parsed.kprProcessId)).get();
+    if (!kpr) throw new Error("Proses KPR tidak ditemukan.");
+    if (kpr.status !== "pemberkasan" || kpr.documentStatus !== "complete") {
+      throw new Error("Pengajuan ke bank hanya dapat dibuat setelah tahap Pemberkasan dan seluruh dokumen KPR terverifikasi.");
+    }
+    if (parsed.status !== "submitted") {
+      throw new Error("Pengajuan bank baru harus dimulai dengan status Diajukan.");
+    }
+    const duplicate = await tx.select({ id: bankSubmissions.id })
+      .from(bankSubmissions)
+      .where(and(eq(bankSubmissions.kprProcessId, parsed.kprProcessId), eq(bankSubmissions.bankPartnerId, parsed.bankPartnerId)))
+      .get();
+    if (duplicate) throw new Error("Pengajuan ke bank ini sudah ada untuk proses KPR yang sama.");
+
     await tx.insert(bankSubmissions).values({
       id,
       kprProcessId: parsed.kprProcessId,
@@ -1638,13 +1838,6 @@ export async function submitKprToBank(data: unknown) {
       createdAt: new Date(),
     }).run();
 
-    // If approved bank submission, update KPR status automatically
-    if (parsed.status === "approved" || parsed.status === "offering") {
-      await tx.update(kprProcesses).set({
-        status: parsed.status === "offering" ? "offering" : "approved",
-        updatedAt: new Date(),
-      }).where(eq(kprProcesses.id, parsed.kprProcessId)).run();
-    }
   });
 
   await writeAuditLog({
@@ -1666,35 +1859,58 @@ export async function updateBankSubmission(id: string, data: {
   tenorYear?: number | null;
   rejectionReason?: string | null;
 }) {
-  const user = await requireAnyRole(["Super Admin", "Admin Kantor", "Marketing", "Marketing Manager"]);
+  const activeUser = await requireAnyRole(["Super Admin", "Admin Kantor", "Marketing", "Marketing Manager", "Direksi / Manager"]);
+  const roleInfo = await getSessionRole(activeUser.id);
+  const parsed = bankSubmissionSchema
+    .pick({ status: true, plafondAmount: true, interestRate: true, tenorYear: true, rejectionReason: true })
+    .parse(data);
+
+  // Marketing mengelola pemberkasan dan pengiriman. Keputusan/tanggapan bank
+  // hanya dapat dicatat oleh pejabat internal yang berwenang agar marketing
+  // tidak dapat mengesahkan pengajuan bank miliknya sendiri.
+  const canRecordBankDecision =
+    roleInfo.isSuperAdmin || roleInfo.isAdminKantor || roleInfo.isDireksi;
+  if (!canRecordBankDecision) {
+    throw new Error("Hanya Super Admin, Admin Kantor, atau Direksi yang dapat memperbarui keputusan pengajuan bank.");
+  }
+  if (parsed.status === "rejected" && !parsed.rejectionReason?.trim()) {
+    throw new Error("Alasan penolakan dari bank wajib diisi.");
+  }
   
   await db.transaction(async (tx) => {
     const existing = await tx.select().from(bankSubmissions).where(eq(bankSubmissions.id, id)).get();
     if (!existing) throw new Error("Pengajuan bank tidak ditemukan.");
 
-    await tx.update(bankSubmissions).set({
-      status: data.status,
-      plafondAmount: data.plafondAmount !== undefined ? data.plafondAmount : existing.plafondAmount,
-      interestRate: data.interestRate !== undefined ? data.interestRate : existing.interestRate,
-      tenorYear: data.tenorYear !== undefined ? data.tenorYear : existing.tenorYear,
-      rejectionReason: data.rejectionReason !== undefined ? data.rejectionReason : existing.rejectionReason,
-    }).where(eq(bankSubmissions.id, id)).run();
-
-    // Automatically transition the KPR process status if needed!
     const kpr = await tx.select().from(kprProcesses).where(eq(kprProcesses.id, existing.kprProcessId)).get();
-    if (kpr) {
-      if (data.status === "approved" && kpr.status !== "akad" && kpr.status !== "approved") {
-        await tx.update(kprProcesses).set({
-          status: "approved",
-          updatedAt: new Date(),
-        }).where(eq(kprProcesses.id, existing.kprProcessId)).run();
-      } else if (data.status === "offering" && kpr.status !== "akad" && kpr.status !== "approved" && kpr.status !== "offering") {
-        await tx.update(kprProcesses).set({
-          status: "offering",
-          updatedAt: new Date(),
-        }).where(eq(kprProcesses.id, existing.kprProcessId)).run();
-      }
+    if (!kpr) throw new Error("Proses KPR tidak ditemukan.");
+
+    const allowedTransitions: Record<string, string[]> = {
+      submitted: ["verified", "rejected"],
+      verified: ["offering", "rejected"],
+      offering: ["approved", "rejected"],
+      approved: [],
+      rejected: [],
+    };
+    if (parsed.status === existing.status) throw new Error("Pengajuan bank sudah berada pada status tersebut.");
+    if (!allowedTransitions[existing.status]?.includes(parsed.status)) {
+      throw new Error("Transisi status pengajuan bank tidak diperbolehkan.");
     }
+    const requiredKprStatus: Partial<Record<typeof parsed.status, string>> = {
+      verified: "pemberkasan",
+      offering: "proses_bank",
+      approved: "offering",
+    };
+    if (requiredKprStatus[parsed.status] && kpr.status !== requiredKprStatus[parsed.status]) {
+      throw new Error("Tahap KPR harus dilanjutkan terlebih dahulu sebelum status pengajuan bank dapat diubah.");
+    }
+
+    await tx.update(bankSubmissions).set({
+      status: parsed.status,
+      plafondAmount: parsed.plafondAmount !== undefined ? parsed.plafondAmount : existing.plafondAmount,
+      interestRate: parsed.interestRate !== undefined ? parsed.interestRate : existing.interestRate,
+      tenorYear: parsed.tenorYear !== undefined ? parsed.tenorYear : existing.tenorYear,
+      rejectionReason: parsed.rejectionReason !== undefined ? parsed.rejectionReason : existing.rejectionReason,
+    }).where(eq(bankSubmissions.id, id)).run();
   });
 
   await writeAuditLog({
@@ -1702,7 +1918,7 @@ export async function updateBankSubmission(id: string, data: {
     module: "marketing",
     entityId: id,
     entityType: "bank_submission",
-    details: { status: data.status },
+    details: { status: parsed.status },
   });
 
   revalidatePath("/marketing/kpr");
@@ -1715,6 +1931,20 @@ export async function deleteBankSubmission(id: string) {
   await db.transaction(async (tx) => {
     const existing = await tx.select().from(bankSubmissions).where(eq(bankSubmissions.id, id)).get();
     if (!existing) throw new Error("Pengajuan bank tidak ditemukan.");
+
+    // Riwayat keputusan bank merupakan bukti proses KPR dan tidak boleh
+    // dihapus. Hanya draf pengajuan yang belum diproses bank yang dapat dibatalkan.
+    if (existing.status !== "submitted") {
+      throw new Error("Pengajuan bank yang sudah diproses tidak dapat dihapus. Riwayat keputusan bank harus dipertahankan.");
+    }
+
+    const kpr = await tx.select({ status: kprProcesses.status })
+      .from(kprProcesses)
+      .where(eq(kprProcesses.id, existing.kprProcessId))
+      .get();
+    if (!kpr || kpr.status !== "pemberkasan") {
+      throw new Error("Pengajuan bank hanya dapat dihapus saat proses KPR masih pada tahap Pemberkasan.");
+    }
 
     await tx.delete(bankSubmissions).where(eq(bankSubmissions.id, id)).run();
   });
@@ -1735,34 +1965,39 @@ export async function deleteBankSubmission(id: string) {
 export async function uploadPaymentProof(
   bookingId: string,
   data: { fileName: string; fileUrl: string; mimeType?: string; fileSize?: number },
-  paymentType?: "booking_fee" | "dp",
+  paymentType?: "booking_fee" | "dp" | "cash_settlement" | "installment",
   invoiceId?: string
 ) {
   const user = await requireAnyRole(["Super Admin", "Admin Kantor", "Marketing", "Marketing Manager"]);
   const [booking] = await db.select().from(bookings).where(eq(bookings.id, bookingId));
   if (!booking) throw new Error("Booking tidak ditemukan.");
   if (booking.status === "cancelled") throw new Error("Booking sudah dibatalkan.");
+  if (paymentType === "cash_settlement" && booking.paymentScheme !== "cash") {
+    throw new Error("Pelunasan Cash hanya tersedia untuk booking dengan skema Cash.");
+  }
+  if (paymentType === "installment" && booking.paymentScheme !== "installment") {
+    throw new Error("Termin Cash Bertahap hanya tersedia untuk booking dengan skema Cash Bertahap.");
+  }
+  // Both cash settlement and installment termin require the pemberkasan gate
+  // (Booking Fee + DP + KTP/KK verified) before any follow-up proof is uploaded.
+  if (paymentType === "cash_settlement" || paymentType === "installment") {
+    const pemberkasanReadiness = await getCashPemberkasanReadiness(db, bookingId);
+    if (!pemberkasanReadiness.eligible) {
+      const label = paymentType === "installment" ? "Bukti Termin Cash Bertahap" : "Bukti Pelunasan Cash";
+      throw new Error(
+        `${label} belum dapat diunggah. ${pemberkasanReadiness.reason}`
+      );
+    }
+  }
 
-  const attachmentId = crypto.randomUUID();
-  await db.insert(attachments).values({
-    id: attachmentId,
-    entityId: bookingId,
-    entityType: paymentType === "dp" ? "booking_dp" : "booking_bf",
-    fileName: data.fileName,
-    fileUrl: data.fileUrl,
-    mimeType: data.mimeType || "application/octet-stream",
-    fileSize: data.fileSize || 0,
-    uploadedBy: user.id,
-    createdAt: new Date(),
-  });
-
-  await writeAuditLog({
-    action: "create",
-    module: "marketing",
-    entityId: attachmentId,
-    entityType: "booking_proof",
-    details: { bookingId, fileName: data.fileName, paymentType },
-  });
+  const attachmentEntityType =
+    paymentType === "dp"
+      ? "booking_dp"
+      : paymentType === "cash_settlement"
+        ? "booking_cash_settlement"
+        : paymentType === "installment"
+          ? "booking_installment"
+          : "booking_bf";
 
   // ── Req 2.10: Search invoice candidates with status "unpaid" OR "partial" ──
   let targetInvoice: typeof invoices.$inferSelect | null = null;
@@ -1775,6 +2010,12 @@ export async function uploadPaymentProof(
       .where(
         and(
           eq(invoices.id, invoiceId),
+          eq(invoices.bookingId, bookingId),
+          ...(paymentType === "cash_settlement"
+            ? [eq(invoices.scheduleKind, "cash_settlement")]
+            : paymentType
+              ? [eq(invoices.type, paymentType)]
+              : []),
           inArray(invoices.status, ["unpaid", "partial"])
         )
       )
@@ -1795,7 +2036,11 @@ export async function uploadPaymentProof(
         and(
           eq(invoices.bookingId, bookingId),
           inArray(invoices.status, ["unpaid", "partial"]),
-          ...(paymentType ? [eq(invoices.type, paymentType)] : [])
+          ...(paymentType === "cash_settlement"
+            ? [eq(invoices.scheduleKind, "cash_settlement")]
+            : paymentType
+              ? [eq(invoices.type, paymentType)]
+              : [])
         )
       )
       .orderBy(
@@ -1815,10 +2060,54 @@ export async function uploadPaymentProof(
     }
   }
 
+  // UI may dim later termins, but the sequential rule must also be enforced
+  // server-side so a crafted request cannot upload payment proof for Termin 2+
+  // while an earlier termin is still unpaid.
+  if (paymentType === "installment" && targetInvoice) {
+    const installmentInvoices = await db
+      .select({ id: invoices.id, status: invoices.status })
+      .from(invoices)
+      .where(
+        and(
+          eq(invoices.bookingId, bookingId),
+          eq(invoices.type, "installment")
+        )
+      )
+      .orderBy(asc(invoices.scheduleSequence), asc(invoices.dueDate), asc(invoices.id));
+    const installmentGate = getInstallmentProofGate(installmentInvoices, targetInvoice.id);
+    if (!installmentGate.eligible) {
+      throw new Error(installmentGate.reason);
+    }
+  }
+
+  // Kandidat invoice sudah tervalidasi sebelum bukti disimpan, sehingga file
+  // tidak tercatat untuk invoice eksplisit yang salah atau sudah lunas.
+  const attachmentId = crypto.randomUUID();
+  await db.transaction(async (tx) => {
+  await tx.insert(attachments).values({
+    id: attachmentId,
+    entityId: bookingId,
+    entityType: attachmentEntityType,
+    fileName: data.fileName,
+    fileUrl: data.fileUrl,
+    mimeType: data.mimeType || "application/octet-stream",
+    fileSize: data.fileSize || 0,
+    uploadedBy: user.id,
+    createdAt: new Date(),
+  });
+
+  await writeAuditLog({
+    action: "create",
+    module: "marketing",
+    entityId: attachmentId,
+    entityType: "booking_proof",
+    details: { bookingId, fileName: data.fileName, paymentType },
+  });
+
   // If there is a valid target invoice, create a payment record linked to that invoice
   if (targetInvoice) {
     // ── Req 2.11: Outstanding guard — validate payment amount does not exceed outstanding ──
-    const [sumResult] = await db
+    const [sumResult] = await tx
       .select({ total: sum(payments.amount) })
       .from(payments)
       .where(
@@ -1847,7 +2136,7 @@ export async function uploadPaymentProof(
     const rand = crypto.randomUUID().replace(/-/g, "").slice(0, 6).toUpperCase();
     const paymentNumber = `PAY-AUTO-${dateStr}-${rand}`;
 
-    await db.insert(payments).values({
+    await tx.insert(payments).values({
       id: paymentId,
       invoiceId: targetInvoice.id,
       paymentNumber,
@@ -1872,8 +2161,97 @@ export async function uploadPaymentProof(
       entityType: "payment",
     });
   }
+  });
 
   revalidatePath(`/marketing/bookings/${bookingId}`);
+  revalidatePath("/marketing/bookings");
+  revalidatePath("/finance/payments");
+  return { success: true, attachmentId };
+}
+
+/**
+ * Adds a proof file to an existing booking payment without creating another
+ * payment row. This is used for historical payments that were verified before
+ * a proof file was attached.
+ */
+export async function attachExistingPaymentProof(
+  bookingId: string,
+  paymentId: string,
+  data: { fileName: string; fileUrl: string; mimeType?: string; fileSize?: number }
+) {
+  const user = await requireAnyRole(["Super Admin", "Admin Kantor", "Marketing", "Marketing Manager"]);
+
+  const [paymentRecord] = await db
+    .select({
+      id: payments.id,
+      paymentNumber: payments.paymentNumber,
+      status: payments.status,
+      proofAttachmentId: payments.proofAttachmentId,
+      invoiceId: payments.invoiceId,
+      invoiceType: invoices.type,
+      scheduleKind: invoices.scheduleKind,
+    })
+    .from(payments)
+    .innerJoin(invoices, eq(payments.invoiceId, invoices.id))
+    .where(
+      and(
+        eq(payments.id, paymentId),
+        eq(invoices.bookingId, bookingId)
+      )
+    )
+    .limit(1);
+
+  if (!paymentRecord) {
+    throw new Error("Pembayaran tidak ditemukan atau tidak terkait dengan booking ini.");
+  }
+  if (paymentRecord.status === "voided") {
+    throw new Error("Bukti tidak dapat ditambahkan ke pembayaran yang sudah dibatalkan.");
+  }
+  if (paymentRecord.proofAttachmentId) {
+    throw new Error("Pembayaran ini sudah memiliki bukti pembayaran.");
+  }
+
+  const attachmentEntityType = paymentRecord.scheduleKind === "cash_settlement"
+    ? "booking_cash_settlement"
+    : paymentRecord.invoiceType === "dp"
+      ? "booking_dp"
+      : "booking_bf";
+
+  const attachmentId = crypto.randomUUID();
+  await db.transaction(async (tx) => {
+    await tx.insert(attachments).values({
+      id: attachmentId,
+      entityId: bookingId,
+      entityType: attachmentEntityType,
+      fileName: data.fileName,
+      fileUrl: data.fileUrl,
+      mimeType: data.mimeType || "application/octet-stream",
+      fileSize: data.fileSize || 0,
+      uploadedBy: user.id,
+      createdAt: new Date(),
+    });
+
+    await tx
+      .update(payments)
+      .set({ proofAttachmentId: attachmentId })
+      .where(eq(payments.id, paymentId));
+  });
+
+  await writeAuditLog({
+    action: "update",
+    module: "marketing",
+    entityId: paymentId,
+    entityType: "payment",
+    details: {
+      bookingId,
+      paymentNumber: paymentRecord.paymentNumber,
+      action: "attach_existing_payment_proof",
+      attachmentId,
+      attachmentEntityType,
+    },
+  });
+
+  revalidatePath("/marketing/bookings/" + bookingId);
   revalidatePath("/marketing/bookings");
   revalidatePath("/finance/payments");
   return { success: true, attachmentId };
@@ -1894,28 +2272,12 @@ export async function upgradeBookingToAkad(bookingId: string) {
 
   await db.transaction(async (tx) => {
     await tx.update(bookings).set({ status: "akad", updatedAt: new Date() }).where(eq(bookings.id, bookingId)).run();
-    await tx.update(units).set({
-      status: "menunggu_serah_terima",
-      currentCustomerId: booking.customerId,
-      currentBookingId: bookingId,
-      updatedAt: new Date()
-    }).where(eq(units.id, booking.unitId)).run();
-    await tx.update(customers).set({ status: "buyer", updatedAt: new Date() }).where(eq(customers.id, booking.customerId)).run();
     await tx.insert(bookingStatusHistories).values({
       id: crypto.randomUUID(),
       bookingId,
       previousStatus: "active",
       newStatus: "akad",
-      notes: "Proses Akad dimulai",
-      changedBy: user.id,
-      changedAt: new Date(),
-    }).run();
-    await tx.insert(unitStatusHistories).values({
-      id: crypto.randomUUID(),
-      unitId: booking.unitId,
-      previousStatus: unit.status,
-      newStatus: "menunggu_serah_terima",
-      reason: "Akad / PPJB selesai diproses. Unit masuk tahap menunggu serah terima.",
+      notes: "Akad / PPJB telah ditandai. Menunggu konfirmasi penyelesaian akad.",
       changedBy: user.id,
       changedAt: new Date(),
     }).run();
@@ -1926,7 +2288,74 @@ export async function upgradeBookingToAkad(bookingId: string) {
     module: "marketing",
     entityId: bookingId,
     entityType: "booking",
-    details: { action: "upgrade_to_akad" },
+    details: { action: "start_akad" },
+  });
+
+  revalidatePath(`/marketing/bookings/${bookingId}`);
+  revalidatePath("/marketing/bookings");
+  revalidatePath("/siteplan");
+  return { success: true };
+}
+
+/**
+ * Completes a non-KPR Akad / PPJB that has already been marked.
+ * The unit only enters the handover queue after this explicit confirmation.
+ */
+export async function completeBookingAkad(bookingId: string) {
+  const user = await requireAnyRole(["Super Admin", "Admin Kantor"]);
+  const [booking] = await db.select().from(bookings).where(eq(bookings.id, bookingId));
+  if (!booking) throw new Error("Booking tidak ditemukan.");
+
+  if (booking.paymentScheme === "kpr") {
+    throw new Error("Akad KPR diselesaikan melalui Pipeline KPR, bukan dari detail booking.");
+  }
+
+  const [unit] = await db.select().from(units).where(eq(units.id, booking.unitId));
+  if (!unit) throw new Error("Unit tidak ditemukan.");
+
+  const readiness = await getBookingAkadReadiness(bookingId, "akad");
+  if (!readiness.eligible) {
+    throw new Error(readiness.reason);
+  }
+
+  await db.transaction(async (tx) => {
+    await tx.update(bookings).set({ status: "completed", updatedAt: new Date() }).where(eq(bookings.id, bookingId)).run();
+    await tx.update(units).set({
+      ...(unit.status !== "menunggu_serah_terima" ? { status: "menunggu_serah_terima" } : {}),
+      currentCustomerId: booking.customerId,
+      currentBookingId: bookingId,
+      updatedAt: new Date(),
+    }).where(eq(units.id, booking.unitId)).run();
+    await tx.update(customers).set({ status: "buyer", updatedAt: new Date() }).where(eq(customers.id, booking.customerId)).run();
+
+    await tx.insert(bookingStatusHistories).values({
+      id: crypto.randomUUID(),
+      bookingId,
+      previousStatus: "akad",
+      newStatus: "completed",
+      notes: "Akad / PPJB selesai dikonfirmasi. Booking siap masuk proses serah terima.",
+      changedBy: user.id,
+      changedAt: new Date(),
+    }).run();
+    if (unit.status !== "menunggu_serah_terima") {
+      await tx.insert(unitStatusHistories).values({
+        id: crypto.randomUUID(),
+        unitId: booking.unitId,
+        previousStatus: unit.status,
+        newStatus: "menunggu_serah_terima",
+        reason: "Akad / PPJB selesai dikonfirmasi. Unit masuk tahap menunggu serah terima.",
+        changedBy: user.id,
+        changedAt: new Date(),
+      }).run();
+    }
+  });
+
+  await writeAuditLog({
+    action: "update",
+    module: "marketing",
+    entityId: bookingId,
+    entityType: "booking",
+    details: { action: "complete_akad" },
   });
 
   revalidatePath(`/marketing/bookings/${bookingId}`);
@@ -1960,7 +2389,7 @@ export async function uploadCustomerDocument(
   data: {
     customerId: string;
     bookingId?: string;
-    documentType: "ktp" | "npwp" | "slip_gaji" | "kk" | "spjb" | "kpr_doc" | "other";
+    documentType: "ktp" | "npwp" | "slip_gaji" | "kk" | "spjb" | "kpr_doc" | "bast" | "other";
     fileName: string;
     fileUrl: string;
     mimeType: string;
@@ -1970,17 +2399,49 @@ export async function uploadCustomerDocument(
 ) {
   const user = await requireAnyRole(["Super Admin", "Admin Kantor", "Marketing", "Marketing Manager", "Admin Keuangan"]);
 
+  const booking = data.bookingId
+    ? await db.select({ id: bookings.id, customerId: bookings.customerId, paymentScheme: bookings.paymentScheme }).from(bookings).where(eq(bookings.id, data.bookingId)).get()
+    : null;
+  if (data.bookingId && !booking) {
+    throw new Error("Booking untuk dokumen ini tidak ditemukan.");
+  }
+  if (booking && booking.customerId !== data.customerId) {
+    throw new Error("Dokumen harus diunggah untuk konsumen yang sama dengan pemilik booking.");
+  }
+
+  if (data.documentType === "bast" && !data.bookingId) {
+    throw new Error("Dokumen BAST harus dikaitkan dengan booking konsumen.");
+  }
+
+  if (booking && data.documentType !== "bast") {
+    const allowedTypes = booking.paymentScheme === "kpr"
+      ? ["ktp", "kk", "npwp", "slip_gaji", "kpr_doc"]
+      : ["ktp", "kk", "npwp", "spjb"];
+    if (!allowedTypes.includes(data.documentType)) {
+      throw new Error(
+        booking.paymentScheme === "kpr"
+          ? "Jenis dokumen ini tidak termasuk berkas pengajuan KPR."
+          : "Jenis dokumen ini tidak diperlukan untuk booking Cash."
+      );
+    }
+  }
+
   // Check if a document of this type already exists for this customer (excluding 'other')
   if (data.documentType !== "other") {
+    const documentIdentity = data.bookingId
+      ? and(
+          eq(customerDocuments.customerId, data.customerId),
+          eq(customerDocuments.bookingId, data.bookingId!),
+          eq(customerDocuments.documentType, data.documentType)
+        )
+      : and(
+          eq(customerDocuments.customerId, data.customerId),
+          eq(customerDocuments.documentType, data.documentType)
+        );
     const [existing] = await db
       .select()
       .from(customerDocuments)
-      .where(
-        and(
-          eq(customerDocuments.customerId, data.customerId),
-          eq(customerDocuments.documentType, data.documentType)
-        )
-      )
+      .where(documentIdentity)
       .limit(1);
 
     if (existing) {
@@ -1989,8 +2450,9 @@ export async function uploadCustomerDocument(
         npwp: "NPWP",
         slip_gaji: "Slip Gaji",
         kk: "Kartu Keluarga",
-        spjb: "SPJB",
-        kpr_doc: "Dokumen KPR",
+        spjb: "Dokumen Akad / PPJB",
+        kpr_doc: "Dokumen Pendukung Bank",
+        bast: "BAST Konsumen",
       };
       throw new Error(`Dokumen ${typeLabels[data.documentType] || data.documentType.toUpperCase()} sudah pernah diunggah untuk konsumen ini.`);
     }
@@ -1998,28 +2460,29 @@ export async function uploadCustomerDocument(
 
   // 1. Create attachment record
   const attachmentId = crypto.randomUUID();
-  await db.insert(attachments).values({
-    id: attachmentId,
-    entityType: "customer_document",
-    entityId: data.customerId,
-    fileName: data.fileName,
-    fileUrl: data.fileUrl,
-    mimeType: data.mimeType,
-    fileSize: data.fileSize,
-    uploadedBy: user.id,
-  });
-
-  // 2. Create customer document record
   const docId = crypto.randomUUID();
-  await db.insert(customerDocuments).values({
-    id: docId,
-    customerId: data.customerId,
-    bookingId: data.bookingId || null,
-    attachmentId,
-    documentType: data.documentType,
-    status: "uploaded",
-    notes: data.notes || null,
-    uploadedBy: user.id,
+  await db.transaction(async (tx) => {
+    await tx.insert(attachments).values({
+      id: attachmentId,
+      entityType: "customer_document",
+      entityId: data.customerId,
+      fileName: data.fileName,
+      fileUrl: data.fileUrl,
+      mimeType: data.mimeType,
+      fileSize: data.fileSize,
+      uploadedBy: user.id,
+    });
+
+    await tx.insert(customerDocuments).values({
+      id: docId,
+      customerId: data.customerId,
+      bookingId: data.bookingId || null,
+      attachmentId,
+      documentType: data.documentType,
+      status: "uploaded",
+      notes: data.notes || null,
+      uploadedBy: user.id,
+    });
   });
 
   await writeAuditLog({
@@ -2035,31 +2498,98 @@ export async function uploadCustomerDocument(
   }
   revalidatePath("/marketing/kpr");
 
-  // Send pending approval notification when all 4 mandatory files (ktp, npwp, slip_gaji, kk) are uploaded
+  // Notifikasi kelengkapan empat berkas hanya berlaku untuk proses KPR.
+  // Booking Cash tidak boleh memicu pemberkasan bank.
   try {
-    const existingDocs = await db.select().from(customerDocuments).where(eq(customerDocuments.customerId, data.customerId));
-    const uploadedTypes = new Set<string>(existingDocs.map(d => d.documentType));
-    uploadedTypes.add(data.documentType);
+    if (booking?.paymentScheme === "kpr") {
+      const existingDocs = await db.select().from(customerDocuments).where(eq(customerDocuments.bookingId, booking.id));
+      const uploadedTypes = new Set<string>(existingDocs.map(d => d.documentType));
+      const isMandatoryComplete = ["ktp", "npwp", "slip_gaji", "kk"].every(type => uploadedTypes.has(type));
+      if (isMandatoryComplete) {
+        const customer = await db.select().from(customers).where(eq(customers.id, data.customerId)).get();
+        const customerName = customer?.name || "Konsumen";
 
-    const isMandatoryComplete = ["ktp", "npwp", "slip_gaji", "kk"].every(type => uploadedTypes.has(type));
-    if (isMandatoryComplete) {
-      const customer = await db.select().from(customers).where(eq(customers.id, data.customerId)).get();
-      const customerName = customer?.name || "Konsumen";
-
-      await notifyUsersWithRoles({
-        roleNames: ["Super Admin", "Admin Kantor", "Admin Keuangan", "Direksi / Manager"],
-        type: "approval_pending",
-        title: "Pengecekan Berkas KPR Konsumen",
-        message: `Seluruh berkas persyaratan KPR konsumen ${customerName} telah lengkap diunggah. Silakan lakukan pemeriksaan dan verifikasi berkas!`,
-        entityId: data.bookingId || undefined,
-        entityType: "booking",
-      });
+        await notifyUsersWithRoles({
+          roleNames: ["Super Admin", "Admin Kantor", "Admin Keuangan", "Direksi / Manager"],
+          type: "approval_pending",
+          title: "Pengecekan Berkas KPR Konsumen",
+          message: `Seluruh berkas persyaratan KPR konsumen ${customerName} telah lengkap diunggah. Silakan lakukan pemeriksaan dan verifikasi berkas!`,
+          entityId: booking.id,
+          entityType: "booking",
+        });
+      }
     }
   } catch (err) {
     console.warn("Failed to trigger mandatory document upload notification:", err);
   }
 
   return { success: true, id: docId, attachmentId };
+}
+
+/** Replaces a rejected BAST without deleting its customer-document record. */
+export async function replaceBastCustomerDocument(
+  bookingId: string,
+  documentId: string,
+  data: {
+    fileName: string;
+    fileUrl: string;
+    mimeType: string;
+    fileSize: number;
+  }
+) {
+  const user = await requireAnyRole(["Super Admin", "Admin Kantor", "Marketing", "Marketing Manager", "Admin Keuangan"]);
+  const document = await db
+    .select()
+    .from(customerDocuments)
+    .where(
+      and(
+        eq(customerDocuments.id, documentId),
+        eq(customerDocuments.bookingId, bookingId),
+        eq(customerDocuments.documentType, "bast")
+      )
+    )
+    .get();
+  if (!document) throw new Error("Dokumen BAST tidak ditemukan untuk booking ini.");
+  if (document.status !== "rejected") {
+    throw new Error("Hanya BAST yang berstatus Perlu Diperbaiki yang dapat diganti.");
+  }
+
+  const replacementAttachmentId = crypto.randomUUID();
+  await db.transaction(async (tx) => {
+    await tx.insert(attachments).values({
+      id: replacementAttachmentId,
+      entityType: "customer_document",
+      entityId: document.customerId,
+      fileName: data.fileName,
+      fileUrl: data.fileUrl,
+      mimeType: data.mimeType,
+      fileSize: data.fileSize,
+      uploadedBy: user.id,
+    });
+    await tx.update(customerDocuments).set({
+      attachmentId: replacementAttachmentId,
+      status: "uploaded",
+      notes: "BAST pengganti telah diunggah dan menunggu verifikasi ulang.",
+    }).where(eq(customerDocuments.id, document.id)).run();
+  });
+
+  await writeAuditLog({
+    action: "update",
+    module: "marketing",
+    entityId: document.id,
+    entityType: "customer_document",
+    details: {
+      action: "replace_rejected_bast",
+      bookingId,
+      oldAttachmentId: document.attachmentId,
+      replacementAttachmentId,
+      documentType: "bast",
+    },
+  });
+
+  revalidatePath(`/marketing/bookings/${bookingId}`);
+  revalidatePath("/marketing/bookings");
+  return { success: true, attachmentId: replacementAttachmentId };
 }
 
 async function syncKprDocumentStatus(tx: DbOrTx, customerId: string, bookingId: string | null) {
@@ -2099,26 +2629,45 @@ async function syncKprDocumentStatus(tx: DbOrTx, customerId: string, bookingId: 
 
 export async function verifyCustomerDocument(docId: string, status: "verified" | "rejected", notes?: string) {
   const user = await requireAnyRole(["Super Admin", "Admin Kantor", "Admin Keuangan", "Direksi / Manager"]);
+  if (status !== "verified" && status !== "rejected") {
+    throw new Error("Status verifikasi dokumen tidak valid.");
+  }
+  if (status === "rejected" && !notes?.trim()) {
+    throw new Error("Catatan perbaikan wajib diisi saat dokumen ditolak.");
+  }
+  let bookingIdToCheckForConstruction: string | null = null;
 
   await db.transaction(async (tx) => {
+    const docRecord = await tx.select().from(customerDocuments).where(eq(customerDocuments.id, docId)).get();
+    if (!docRecord) {
+      throw new Error("Dokumen yang akan diverifikasi tidak ditemukan.");
+    }
+
     await tx.update(customerDocuments)
       .set({ status, notes: notes || null })
       .where(eq(customerDocuments.id, docId))
       .run();
 
-    const docRecord = await tx.select().from(customerDocuments).where(eq(customerDocuments.id, docId)).get();
-    if (docRecord) {
-      await syncKprDocumentStatus(tx, docRecord.customerId, docRecord.bookingId);
+    await syncKprDocumentStatus(tx, docRecord.customerId, docRecord.bookingId);
 
-      // Write document verification log to Booking Status History
-      if (docRecord.bookingId) {
+    if (
+      status === "verified" &&
+      docRecord.bookingId &&
+      ["ktp", "kk"].includes(docRecord.documentType)
+    ) {
+      bookingIdToCheckForConstruction = docRecord.bookingId;
+    }
+
+    // Write document verification log to Booking Status History
+    if (docRecord.bookingId) {
         const typeLabels: Record<string, string> = {
           ktp: "KTP",
           npwp: "NPWP",
           slip_gaji: "Slip Gaji",
           kk: "Kartu Keluarga",
-          spjb: "SPJB",
-          kpr_doc: "Dokumen KPR",
+          spjb: "Dokumen Akad / PPJB",
+          kpr_doc: "Dokumen Pendukung Bank",
+          bast: "BAST Konsumen",
           other: "Berkas Lainnya",
         };
         const docLabel = typeLabels[docRecord.documentType] || docRecord.documentType.toUpperCase();
@@ -2134,7 +2683,6 @@ export async function verifyCustomerDocument(docId: string, status: "verified" |
           changedBy: user.id,
           changedAt: new Date(),
         }).run();
-      }
     }
   });
 
@@ -2145,6 +2693,10 @@ export async function verifyCustomerDocument(docId: string, status: "verified" |
     entityType: "customer_document",
     details: { status, notes },
   });
+
+  if (bookingIdToCheckForConstruction) {
+    await checkAndTransitionToConstruction(db, bookingIdToCheckForConstruction, user.id);
+  }
 
   // Send notification to the assigned Marketing PIC
   try {
@@ -2157,8 +2709,9 @@ export async function verifyCustomerDocument(docId: string, status: "verified" |
           npwp: "NPWP",
           slip_gaji: "Slip Gaji",
           kk: "Kartu Keluarga",
-          spjb: "SPJB",
-          kpr_doc: "Dokumen KPR",
+          spjb: "Dokumen Akad / PPJB",
+          kpr_doc: "Dokumen Pendukung Bank",
+          bast: "BAST Konsumen",
           other: "Berkas Lainnya",
         };
 
@@ -2338,6 +2891,11 @@ export async function checkAndTransitionToConstruction(tx: DbOrTx, bookingId: st
     return;
   }
 
+  const cashConstructionReadiness = await getCashConstructionReadiness(tx, bookingId);
+  if (!cashConstructionReadiness.eligible) {
+    return;
+  }
+
   // Find invoices
   const bookingInvoices = await tx.select().from(invoices).where(eq(invoices.bookingId, bookingId)).all();
 
@@ -2376,7 +2934,11 @@ export async function checkAndTransitionToConstruction(tx: DbOrTx, bookingId: st
       unitId: booking.unitId,
       previousStatus: unit.status,
       newStatus: "construction",
-      reason: `Otomatis: Pembayaran DP Lunas & Analisis KPR disetujui (Skema: ${booking.paymentScheme === "kpr" ? "KPR" : booking.paymentScheme})`,
+      reason: booking.paymentScheme === "cash"
+        ? "Otomatis: Seluruh invoice Cash lunas serta KTP dan Kartu Keluarga telah diverifikasi. Unit masuk pembangunan fisik."
+        : booking.paymentScheme === "installment"
+          ? "Otomatis: Booking Fee, DP, KTP, dan Kartu Keluarga telah diverifikasi. Unit Cash Bertahap masuk pembangunan fisik; seluruh termin tetap wajib lunas sebelum Akad / PPJB."
+          : "Otomatis: Pembayaran DP lunas dan analisis KPR disetujui. Unit masuk pembangunan fisik.",
       changedBy: userId,
       changedAt: new Date(),
     }).run();
@@ -2431,6 +2993,11 @@ export async function startPhysicalConstructionManual(unitId: string) {
       throw new Error("Pembangunan fisik hanya bisa dimulai dari status Booking atau Proses KPR.");
     }
 
+    const cashConstructionReadiness = await getCashConstructionReadiness(tx, booking.id);
+    if (!cashConstructionReadiness.eligible) {
+      throw new Error(cashConstructionReadiness.reason);
+    }
+
     // Find invoices
     const bookingInvoices = await tx.select().from(invoices).where(eq(invoices.bookingId, booking.id)).all();
 
@@ -2471,7 +3038,11 @@ export async function startPhysicalConstructionManual(unitId: string) {
       unitId: unitId,
       previousStatus: unit.status,
       newStatus: "construction",
-      reason: `Manual: Memulai pembangunan fisik (Skema: ${booking.paymentScheme === "kpr" ? "KPR" : booking.paymentScheme})`,
+      reason: booking.paymentScheme === "cash"
+        ? "Manual: Seluruh invoice Cash lunas serta KTP dan Kartu Keluarga telah diverifikasi. Memulai pembangunan fisik."
+        : booking.paymentScheme === "installment"
+          ? "Manual: Booking Fee, DP, KTP, dan Kartu Keluarga telah diverifikasi. Memulai pembangunan Cash Bertahap; seluruh termin tetap wajib lunas sebelum Akad / PPJB."
+          : "Manual: Analisis KPR telah disetujui. Memulai pembangunan fisik.",
       changedBy: user.id,
       changedAt: new Date(),
     }).run();
@@ -2542,13 +3113,16 @@ export async function realizeKprFunds(data: unknown) {
 
   // 4. Fetch async SEBELUM transaction
   const attachment = await db
-    .select({ id: attachments.id, entityType: attachments.entityType })
+    .select({ id: attachments.id, entityType: attachments.entityType, entityId: attachments.entityId })
     .from(attachments)
     .where(eq(attachments.id, parsed.realizedAttachmentId))
     .get();
   if (!attachment) throw new Error("File memo pencairan tidak ditemukan. Silakan unggah ulang.");
   if (attachment.entityType !== "kpr_realization_memo") {
     throw new Error("File yang diunggah bukan bertipe memo pencairan KPR. Silakan unggah file yang benar.");
+  }
+  if (attachment.entityId !== parsed.kprProcessId) {
+    throw new Error("Memo pencairan harus berasal dari proses KPR yang sama dan tidak dapat digunakan ulang untuk KPR lain.");
   }
 
   const incomeCategoryId = await getOrCreateIncomeKprCategoryId();
@@ -2572,6 +3146,28 @@ export async function realizeKprFunds(data: unknown) {
     }
     if ((kpr.status as string) === "realisasi" || kpr.realizedDate) {
       throw new Error("Realisasi dana KPR sudah pernah diproses. Tidak bisa diproses dua kali.");
+    }
+
+    // Nominal pencairan wajib bersandar pada keputusan bank yang sudah
+    // disetujui. Tanpa ini, nominal dapat diisi bebas dari dialog realisasi.
+    const approvedSubmissions = await tx
+      .select({ id: bankSubmissions.id, plafondAmount: bankSubmissions.plafondAmount })
+      .from(bankSubmissions)
+      .where(and(
+        eq(bankSubmissions.kprProcessId, parsed.kprProcessId),
+        eq(bankSubmissions.status, "approved")
+      ));
+    if (approvedSubmissions.length === 0) {
+      throw new Error("Realisasi dana memerlukan minimal satu keputusan bank berstatus Disetujui.");
+    }
+    const maximumApprovedPlafond = Math.max(
+      ...approvedSubmissions.map((submission) => Number(submission.plafondAmount ?? 0))
+    );
+    if (!Number.isFinite(maximumApprovedPlafond) || maximumApprovedPlafond <= 0) {
+      throw new Error("Nominal plafon pada keputusan bank belum valid. Perbarui keputusan bank sebelum realisasi.");
+    }
+    if (round2(parsed.plafondApproved) > round2(maximumApprovedPlafond)) {
+      throw new Error("Nominal plafon realisasi tidak boleh melebihi plafon yang disetujui bank.");
     }
 
     // 5.2. Layer 2 Idempotency: check if transaction already has this kprProcessId
@@ -2632,6 +3228,17 @@ export async function realizeKprFunds(data: unknown) {
       realizedNotes: parsed.realizedNotes || null,
       updatedAt: new Date(),
     }).where(eq(kprProcesses.id, parsed.kprProcessId)).run();
+
+    // Akad Kredit menjadi booking selesai hanya sesudah realisasi dana bank
+    // tercatat. Ini mencegah UI menyebut transaksi selesai lebih awal.
+    await tx.update(bookings).set({
+      status: "completed",
+      updatedAt: new Date(),
+    }).where(eq(bookings.id, booking.id)).run();
+    await tx.update(customers).set({
+      status: "buyer",
+      updatedAt: new Date(),
+    }).where(eq(customers.id, booking.customerId)).run();
 
     // 5.7. Update Unit to menunggu_serah_terima (only if not already)
     if (unit.status !== "menunggu_serah_terima") {
@@ -2749,6 +3356,15 @@ export async function createRealizationAttachment(data: {
   const activeUser = await requireAnyRole([
     "Super Admin", "Admin Keuangan", "Marketing Manager", "Admin Kantor"
   ]);
+
+  const kpr = await db.select({ id: kprProcesses.id, status: kprProcesses.status })
+    .from(kprProcesses)
+    .where(eq(kprProcesses.id, data.kprProcessId))
+    .get();
+  if (!kpr) throw new Error("Proses KPR tidak ditemukan.");
+  if (kpr.status !== "akad") {
+    throw new Error("Memo pencairan hanya dapat diunggah setelah proses KPR berada pada tahap Akad.");
+  }
 
   const id = crypto.randomUUID();
   await db.insert(attachments).values({
