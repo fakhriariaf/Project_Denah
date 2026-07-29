@@ -26,7 +26,7 @@ async function runAudit() {
 
   if (rows.length === 0) {
     console.log("AUDIT PASSED — aman membuat index uniq_income_per_kpr");
-    return;
+    process.exit(0);
   }
 
   console.error("AUDIT BLOCKED");
@@ -35,12 +35,12 @@ async function runAudit() {
     console.error(`  - kpr_process_id=${row.kpr_process_id} income_count=${row.income_count}`);
   }
   console.error("Migrasi 0007 tidak boleh dijalankan sebelum data duplikat diselesaikan secara manual.");
-  process.exitCode = 1;
+  process.exit(1);
 }
 
 runAudit().catch((error) => {
   console.error("AUDIT BLOCKED");
   console.error("Audit gagal dijalankan. Migrasi 0007 tidak boleh dilanjutkan.");
   console.error(error);
-  process.exitCode = 1;
+  process.exit(1);
 });
