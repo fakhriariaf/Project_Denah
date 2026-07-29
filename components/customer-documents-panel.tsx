@@ -23,6 +23,10 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  getCustomerDocumentTypeLabel,
+  getDocumentVerificationStatusLabel,
+} from "@/lib/label-helpers";
 
 export type CustomerDoc = {
   customer_documents: {
@@ -97,6 +101,18 @@ const STATUS_CONFIG: Record<string, { label: string; icon: React.ElementType; cl
   verified: { label: "Terverifikasi", icon: CheckCircle2, className: "bg-emerald-50 border-emerald-100 text-emerald-700" },
   rejected: { label: "Ditolak", icon: XCircle, className: "bg-rose-50 border-rose-100 text-rose-700" },
 };
+
+function getDocumentTypeLabel(value: string): string {
+  return DOC_TYPE_LABELS[value] ?? getCustomerDocumentTypeLabel(value);
+}
+
+function getDocumentStatusConfig(value: string) {
+  return STATUS_CONFIG[value] ?? {
+    label: getDocumentVerificationStatusLabel(value),
+    icon: Clock,
+    className: "bg-slate-50 border-slate-200 text-slate-700",
+  };
+}
 
 interface Props {
   customerId: string;
@@ -234,7 +250,7 @@ export function CustomerDocumentsPanel({
         };
 
         setDocs((prev) => [...prev, newDoc]);
-        setSuccessMsg(`Dokumen ${DOC_TYPE_LABELS[selectedDocType]} berhasil diupload!`);
+        setSuccessMsg(`Dokumen ${getDocumentTypeLabel(selectedDocType)} berhasil diupload!`);
         router.refresh();
       }
       setSelectedFile(null);
@@ -365,7 +381,7 @@ export function CustomerDocumentsPanel({
                 key={t}
                 className={`text-[10px] font-bold px-2 py-1 rounded-full border ${pillClass}`}
               >
-                {pillIcon} {DOC_TYPE_LABELS[t]}
+                {pillIcon} {getDocumentTypeLabel(t)}
               </span>
             );
           })}
@@ -409,14 +425,14 @@ export function CustomerDocumentsPanel({
               >
                 <SelectTrigger className="border-[#D6DED2] focus:ring-ring/50 focus:border-[#8FAF9A]">
                   <SelectValue>
-                    {DOC_TYPE_LABELS[selectedDocType] ?? selectedDocType}
+                    {getDocumentTypeLabel(selectedDocType)}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent className="rounded-xl border-[#D6DED2] bg-white/95 backdrop-blur-md">
                   {documentFlow.allowedTypes
                     .filter((type) => !uploadedTypes.has(type))
                     .map((v) => (
-                      <SelectItem key={v} value={v}>{DOC_TYPE_LABELS[v]}</SelectItem>
+                      <SelectItem key={v} value={v}>{getDocumentTypeLabel(v)}</SelectItem>
                     ))}
                 </SelectContent>
               </Select>
@@ -472,7 +488,7 @@ export function CustomerDocumentsPanel({
               {loading ? (
                 <><div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Mengupload...</>
               ) : (
-                <><Upload className="h-4 w-4" />Upload {DOC_TYPE_LABELS[selectedDocType]}</>
+                <><Upload className="h-4 w-4" />Upload {getDocumentTypeLabel(selectedDocType)}</>
               )}
             </Button>
           </form>
@@ -497,8 +513,8 @@ export function CustomerDocumentsPanel({
         ) : (
           <div className="divide-y divide-[#D6DED2]/60">
             {primaryDocs.map((doc) => {
-              const statusCfg = STATUS_CONFIG[doc.customer_documents.status];
-              const StatusIcon = statusCfg?.icon ?? Clock;
+              const statusCfg = getDocumentStatusConfig(doc.customer_documents.status);
+              const StatusIcon = statusCfg.icon;
               return (
                 <div key={doc.customer_documents.id} className="flex items-center gap-3 px-5 py-3.5 hover:bg-[#F7F8F3]/60 transition-colors">
                   <div className="h-9 w-9 rounded-xl bg-[#DDE8D8] flex items-center justify-center shrink-0">
@@ -506,10 +522,10 @@ export function CustomerDocumentsPanel({
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <p className="text-sm font-bold text-[#243028]">{DOC_TYPE_LABELS[doc.customer_documents.documentType]}</p>
-                      <Badge className={`border text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${statusCfg?.className}`}>
+                      <p className="text-sm font-bold text-[#243028]">{getDocumentTypeLabel(doc.customer_documents.documentType)}</p>
+                      <Badge className={`border text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${statusCfg.className}`}>
                         <StatusIcon className="h-3 w-3" />
-                        {statusCfg?.label}
+                        {statusCfg.label}
                       </Badge>
                     </div>
                     <p className="text-xs text-[#66736A] truncate">{doc.attachments.fileName}</p>
@@ -596,8 +612,8 @@ export function CustomerDocumentsPanel({
           ) : (
             <div className="divide-y divide-[#D6DED2]/60">
               {akadDocs.map((doc) => {
-                const statusCfg = STATUS_CONFIG[doc.customer_documents.status];
-                const StatusIcon = statusCfg?.icon ?? Clock;
+                const statusCfg = getDocumentStatusConfig(doc.customer_documents.status);
+                const StatusIcon = statusCfg.icon;
                 return (
                   <div key={doc.customer_documents.id} className="flex items-center gap-3 px-5 py-3.5 hover:bg-[#F7F8F3]/60 transition-colors">
                     <div className="h-9 w-9 rounded-xl bg-[#DDE8D8] flex items-center justify-center shrink-0">
@@ -653,7 +669,7 @@ export function CustomerDocumentsPanel({
           <DialogHeader>
             <DialogTitle className="text-lg font-bold text-[#243028] tracking-tight">Konfirmasi Hapus</DialogTitle>
             <DialogDescription className="text-xs text-[#66736A] mt-2 leading-relaxed">
-              Apakah Anda yakin ingin menghapus berkas <strong>"{deleteTarget ? DOC_TYPE_LABELS[deleteTarget.customer_documents.documentType] : ""}"</strong>? Tindakan ini tidak dapat dibatalkan.
+              Apakah Anda yakin ingin menghapus berkas <strong>"{deleteTarget ? getDocumentTypeLabel(deleteTarget.customer_documents.documentType) : ""}"</strong>? Tindakan ini tidak dapat dibatalkan.
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-end gap-2 mt-4">
@@ -683,7 +699,7 @@ export function CustomerDocumentsPanel({
               Tolak Dokumen
             </DialogTitle>
             <DialogDescription className="text-xs text-[#66736A] mt-2 leading-relaxed">
-              Silakan masukkan alasan penolakan dokumen <strong>"{rejectTarget ? DOC_TYPE_LABELS[rejectTarget.customer_documents.documentType] : ""}"</strong> milik konsumen ini. Catatan revisi wajib diisi agar staf marketing dapat mengetahui penyebab penolakan berkas.
+              Silakan masukkan alasan penolakan dokumen <strong>"{rejectTarget ? getDocumentTypeLabel(rejectTarget.customer_documents.documentType) : ""}"</strong> milik konsumen ini. Catatan revisi wajib diisi agar staf marketing dapat mengetahui penyebab penolakan berkas.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 mt-4">

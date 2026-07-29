@@ -11,6 +11,7 @@ import { PrintButton } from "@/components/ui/print-button";
 import { FileText, MapPin, Phone, Mail, CheckCircle2, Building, User, Wrench, Calendar, Hash } from "lucide-react";
 import { requireAuth } from "@/server/permissions";
 import { getI18n } from "@/lib/i18n-server";
+import { getSpkStatusLabel } from "@/lib/label-helpers";
 
 export const revalidate = 0;
 
@@ -86,16 +87,6 @@ export default async function PrintSpkPage({ params }: Props) {
   const companyPhone = settingsRows.find(r => r.key === "company_phone")?.value || "+62 812-3456-7890";
   const companyEmail = settingsRows.find(r => r.key === "company_email")?.value || "info@denahproperty.com";
 
-  const STATUS_LABELS: Record<string, string> = {
-    draft: "Draft", 
-    approved: t("production.status_active") || "Disetujui", 
-    active: t("production.status_active") || "Aktif",
-    proses_konstruksi: "Proses Konstruksi",
-    selesai_konstruksi: "Selesai Konstruksi",
-    completed: t("production.status_done") || "Selesai", 
-    cancelled: t("production.status_draft") || "Dibatalkan",
-  };
-
   return (
     <div className="min-h-screen bg-muted/30/60 print:bg-card pb-12 font-sans text-foreground">
       <style dangerouslySetInnerHTML={{ __html: `
@@ -149,7 +140,7 @@ export default async function PrintSpkPage({ params }: Props) {
           </h1>
           <p className="text-sm font-semibold text-primary mt-1">{spk.title}</p>
           <p className="text-xs text-muted-foreground mt-1 font-mono">
-            {t("production.print_issued")} {formatDate(spk.createdAt)} &nbsp;|&nbsp; {t("production.print_status")} <strong>{STATUS_LABELS[spk.status] || spk.status}</strong>
+            {t("production.print_issued")} {formatDate(spk.createdAt)} &nbsp;|&nbsp; {t("production.print_status")} <strong>{getSpkStatusLabel(spk.status)}</strong>
           </p>
         </div>
 
@@ -288,7 +279,7 @@ export default async function PrintSpkPage({ params }: Props) {
 
         <div className="no-print mt-12 pt-6 border-t border-border/40 flex items-center justify-center gap-2 text-xs text-primary font-semibold">
           <CheckCircle2 className="h-4 w-4 text-primary/70" />
-          <span>SPK {spk.spkNumber} — {t("production.print_status")} <strong>{STATUS_LABELS[spk.status] || spk.status}</strong></span>
+          <span>SPK {spk.spkNumber} — {t("production.print_status")} <strong>{getSpkStatusLabel(spk.status)}</strong></span>
         </div>
       </div>
     </div>

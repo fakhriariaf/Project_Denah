@@ -1,7 +1,22 @@
 /**
- * Migration script — run with: npx tsx db/migrate.ts
- * Adds new tables without drizzle-kit push interactive prompts.
+ * LEGACY SQLITE SCRIPT — DISABLED (P1 hardening).
+ *
+ * This file predates the PostgreSQL migration. `drizzle.config.ts` now uses the
+ * `postgresql` dialect with `DATABASE_URL`, and every schema change lives in
+ * `db/migrations/*.sql` driven by drizzle-kit.
+ *
+ * Running this file would open `better-sqlite3` against whatever `DATABASE_URL`
+ * points at (or create a bogus `local.db`) and build a parallel SQLite schema with
+ * SQLite-only syntax — silently divergent from the real database and very
+ * confusing for an operator debugging a failed deploy.
+ *
+ * The DDL below is kept verbatim for historical reference only. Do NOT re-enable
+ * it; use `npx.cmd drizzle-kit migrate` instead.
  */
+throw new Error(
+  "Script SQLite legacy dinonaktifkan. Gunakan `npx.cmd drizzle-kit migrate` untuk PostgreSQL (lihat db/migrations/)."
+);
+
 import Database from "better-sqlite3";
 
 const db = new Database(process.env.DATABASE_URL || "local.db");

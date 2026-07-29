@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { timingSafeEqual } from "crypto";
-import { checkOverdueSpks } from "@/server/actions/production";
+// Calls the INTERNAL service, not the server action. The action now carries a
+// role gate for its manual UI trigger, which a session-less cron request would
+// always fail. This route's own CRON_SECRET check is the authorisation here.
+import { runOverdueSpkScan, runKprSlaOverdueScan } from "@/server/services/reminder.service";
 
 /**
  * Verifies the cron authorization token using timing-safe comparison.
@@ -46,10 +49,12 @@ async function handleCron(request: NextRequest) {
   }
 
   try {
-    const result = await checkOverdueSpks();
+    const spkResult = await runOverdueSpkScan();
+    const kprSlaResult = await runKprSlaOverdueScan();
     return NextResponse.json({
-      message: "Daily SPK overdue check executed successfully.",
-      ...result
+      message: "Daily overdue checks (SPK + KPR SLA) executed successfully.",
+      spk: spkResult,
+      kprSla: kprSlaResult,
     });
   } catch (error: any) {
     console.error("Cron Job [overdue-scanner] execution failed:", error);

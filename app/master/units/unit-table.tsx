@@ -13,6 +13,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Trash2, CheckSquare, Square, MinusSquare, AlertTriangle, Loader2 } from "lucide-react";
 import type { UnitInput } from "@/server/validators/master";
 import { useI18n } from "@/lib/i18n";
+import { getUnitStatusLabel } from "@/lib/label-helpers";
 
 type UnitRow = {
   unit: {
@@ -252,7 +253,7 @@ export function UnitTable({
                               className="h-1.5 w-1.5 rounded-full shrink-0"
                               style={{ backgroundColor: badge.dotColor }}
                             />
-                            {badge.label ?? u.status}
+                            {badge.label ?? getUnitStatusLabel(u.status, { isReadyStock: u.isReadyStock })}
                           </Badge>
                         );
                       })()}

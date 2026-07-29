@@ -8,8 +8,10 @@ import { spks, spkProgressLogs, workItems, complaints, spmbs } from "@/db/schema
 import { auditLogs, attachments } from "@/db/schema/system";
 import { user as userTable, vendorProfiles } from "@/db/schema/auth";
 import { requireAuth, getSessionRole } from "../permissions";
-import { eq, and, or, desc, sql, count, sum, gte, lte, lt, inArray, ne } from "drizzle-orm";
+import { eq, and, or, desc, sql, count, sum, gte, lte, lt, inArray, notInArray, ne } from "drizzle-orm";
 import { getKprStatusLabel, getBankSubmissionStatusLabel, getUnitStatusLabel, getSpkStatusLabel, getApprovalStatusLabel } from "@/lib/label-helpers";
+import { computeTotalKprAktif } from "@/lib/kpr-report-helpers";
+import { SLA_TERMINAL_STAGES } from "@/server/services/kpr-sla/resolver";
 
 /**
  * Fetch consolidated statistics for the executive dashboard
@@ -1020,10 +1022,17 @@ export async function getKprReportsData(projectId?: string) {
     biCheckMap[row.biCheckStatus] = row.cnt;
   }
 
-  // 3. Count SLA overdue (slaDeadlineAt < now AND status not in terminal states)
-  const terminalStatuses = ["approved", "rejected", "akad", "realisasi"] as const;
+  // 3. Count SLA overdue (slaDeadlineAt < now AND status not in terminal SLA states)
+  // Terminal SLA stages come straight from the canonical stage domain
+  // (`SLA_TERMINAL_STAGES` in `server/services/kpr-sla/resolver.ts`) — no
+  // local literal copy, so this query and `computeTotalKprAktif`
+  // (`lib/kpr-report-helpers.ts`, which delegates to the same resolver) can
+  // never drift apart. See design.md "Stage Domain — Source of Truth".
+  // NOTE: `approved` is intentionally NOT terminal — it must still count as
+  // overdue-eligible (it is a measured/active SLA stage).
   const overdueConditions = [
     lt(kprProcesses.slaDeadlineAt, now),
+    notInArray(kprProcesses.status, [...SLA_TERMINAL_STAGES]),
     ...projectConditions,
   ];
 
@@ -1054,9 +1063,10 @@ export async function getKprReportsData(projectId?: string) {
   const akadThisMonthCount = akadRow?.cnt ?? 0;
 
   // 5. Calculate metrics
-  const totalKprAktif = Object.entries(statusMap)
-    .filter(([key]) => !["approved", "rejected", "realisasi"].includes(key))
-    .reduce((sum, [, cnt]) => sum + cnt, 0);
+  // `approved` counts as aktif (it is a measured/active SLA stage, not
+  // terminal); only terminal SLA stages are excluded, consistent with the
+  // overdue filter above (both resolve to `SLA_TERMINAL_STAGES`).
+  const totalKprAktif = computeTotalKprAktif(statusMap);
 
   const totalKpr = Object.values(statusMap).reduce((s, c) => s + c, 0);
   const biApprovedCount = biCheckMap["approved"] ?? 0;

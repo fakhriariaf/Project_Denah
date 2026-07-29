@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { bookings, leads } from "@/db/schema/marketing";
 import { customers, projects, units } from "@/db/schema/master";
 import { user as userTable } from "@/db/schema/auth";
-import { requireAnyRole, requireAuth } from "../permissions";
+import { requireAnyRole } from "../permissions";
 import { safeAction } from "./safe-action";
 import { eq, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
@@ -23,6 +23,26 @@ interface BulkExportResult {
 }
 
 /**
+ * Normalises the client-supplied id list before it reaches `inArray(...)`.
+ * Server actions receive whatever the RPC payload contains, so the declared
+ * `string[]` type is not a runtime guarantee: a non-array or a list holding
+ * objects/nulls would otherwise be handed straight to the query builder.
+ */
+function assertBulkIds(ids: unknown): string[] {
+  if (!Array.isArray(ids) || ids.length === 0) {
+    throw new Error("Tidak ada item yang dipilih.");
+  }
+  if (ids.length > 100) {
+    throw new Error("Maksimal 100 item dapat diproses dalam satu operasi.");
+  }
+  const cleaned = ids.map((id) => (typeof id === "string" ? id.trim() : ""));
+  if (cleaned.some((id) => id.length === 0)) {
+    throw new Error("Daftar item tidak valid.");
+  }
+  return Array.from(new Set(cleaned));
+}
+
+/**
  * Bulk delete server action for bookings or leads.
  *
  * RBAC: Only Super Admin and Admin Kantor can perform bulk delete.
@@ -36,18 +56,16 @@ export const bulkDelete = safeAction(
     entityType: "booking" | "lead";
     ids: string[];
   }): Promise<BulkDeleteResult> => {
+    const { entityType } = input;
+
+    if (entityType !== "booking" && entityType !== "lead") {
+      throw new Error("Jenis data tidak dikenali.");
+    }
+
     // RBAC check — only Super Admin and Admin Kantor
     await requireAnyRole(["Super Admin", "Admin Kantor"]);
 
-    const { entityType, ids } = input;
-
-    if (!ids || ids.length === 0) {
-      throw new Error("Tidak ada item yang dipilih untuk dihapus.");
-    }
-
-    if (ids.length > 100) {
-      throw new Error("Maksimal 100 item dapat dihapus dalam satu operasi.");
-    }
+    const ids = assertBulkIds(input.ids);
 
     // BUG 12 FIX: Store timer reference and clearTimeout when deletion finishes first
     // Prevents timer from lingering in edge runtimes after Promise.race resolves
@@ -170,7 +188,12 @@ async function executeBulkDelete(
 /**
  * Bulk export server action for bookings or leads.
  *
- * RBAC: Any authenticated user can export.
+ * RBAC (P0 hardening): booking & lead exports emit customer PII (nama, telepon,
+ * nilai booking fee) into a downloadable file, so `requireAuth()` alone was too
+ * broad — it let Kontraktor / Vendor and Viewer accounts bulk-exfiltrate the
+ * customer database. Export is now limited to the roles that already own the
+ * marketing pipeline.
+ *
  * Generates a .xlsx file with all visible table columns for selected items.
  * Returns the file as a base64 string for client-side download.
  */
@@ -179,18 +202,16 @@ export const bulkExport = safeAction(
     entityType: "booking" | "lead";
     ids: string[];
   }): Promise<BulkExportResult> => {
-    // Any authenticated user can export
-    await requireAuth();
+    const { entityType } = input;
 
-    const { entityType, ids } = input;
-
-    if (!ids || ids.length === 0) {
-      throw new Error("Tidak ada item yang dipilih untuk diekspor.");
+    if (entityType !== "booking" && entityType !== "lead") {
+      throw new Error("Jenis data ekspor tidak dikenali.");
     }
 
-    if (ids.length > 100) {
-      throw new Error("Maksimal 100 item dapat diekspor dalam satu operasi.");
-    }
+    // PII export gate — same role-set for booking and lead (both carry customer data).
+    await requireAnyRole(["Super Admin", "Admin Kantor", "Marketing Manager"]);
+
+    const ids = assertBulkIds(input.ids);
 
     let worksheetData: Record<string, unknown>[] = [];
     let fileName: string;

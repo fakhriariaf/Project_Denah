@@ -37,6 +37,7 @@ import {
 } from "@/components/finance/finance-detail-layout";
 import { FinanceDocLink } from "@/components/finance/finance-doc-link";
 import { FinanceTimeline } from "@/components/finance/finance-timeline";
+import { BudgetUsageIndicator } from "@/components/finance/budget-usage-indicator";
 import { computeBudgetTotals } from "@/lib/finance-budget-summary";
 
 export const revalidate = 0;
@@ -194,9 +195,19 @@ export default async function BudgetDetailPage({
     };
   });
 
-  // Overall totals from the display allocation lines (Req 9.1) via the pure
-  // summary helper. tabular-nums applied in cells.
+  // Overall totals from the display allocation lines (Req 10.1, 10.2) via the
+  // pure summary helper — "totalUsed" here is the live Realisasi Aktual sourced
+  // from approved expense transactions (category + project + period), never the
+  // paginated page slice. tabular-nums applied in cells.
   const { totalAllocated, totalUsed, totalRemaining } = computeBudgetTotals(displayLines);
+
+  // Persisted allocation usage (budget_lines.usedAmount) kept for source
+  // comparison — the UI labels the number source explicitly when the persisted
+  // figure differs from the live Realisasi Aktual, without mutating any data
+  // (design 5.5). `lines` still carries the persisted usedAmount before the
+  // liveUsageByCategory override applied in displayLines.
+  const totalUsedPersisted = lines.reduce((sum, line) => sum + (line.usedAmount ?? 0), 0);
+  const persistedDiffersFromActual = totalUsedPersisted !== totalUsed;
 
   // --- Pagination for related transactions (Req 9.2) ---
   const requestedPage = Number.parseInt(pageParam ?? "1", 10);
@@ -244,34 +255,68 @@ export default async function BudgetDetailPage({
   const hasNext = currentPage < totalPages;
   const pageHref = (p: number) => `/finance/budgets/${id}?page=${p}`;
 
-  // --- Summary cards (Req 2.3, 9.1) ---
+  // --- Summary: Total Anggaran, Terpakai Aktual, Sisa + progress serapan
+  // (Req 10.1). "Terpakai Aktual" is the live approved-expense total; when it
+  // differs from the persisted budget_lines figure the source is stated
+  // explicitly (design 5.5) so users know which number they are reading. ---
   const summary = (
-    <FinanceDetailGrid cols={3}>
+    <div className="space-y-4">
+      <FinanceDetailGrid cols={3}>
+        <Card className="border-border">
+          <CardHeader className="pb-2">
+            <CardDescription className="text-muted-foreground">Total Anggaran</CardDescription>
+            <CardTitle className="font-mono text-2xl tabular-nums text-foreground">
+              {formatRupiah(budget.totalAmount)}
+            </CardTitle>
+          </CardHeader>
+        </Card>
+        <Card className="border-border">
+          <CardHeader className="pb-2">
+            <CardDescription className="text-muted-foreground">Terpakai Aktual</CardDescription>
+            <CardTitle className="font-mono text-2xl tabular-nums text-foreground">
+              {formatRupiah(totalUsed)}
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Realisasi dari pengeluaran disetujui
+            </p>
+          </CardHeader>
+        </Card>
+        <Card className="border-border">
+          <CardHeader className="pb-2">
+            <CardDescription className="text-muted-foreground">Sisa Anggaran</CardDescription>
+            <CardTitle
+              className={`font-mono text-2xl tabular-nums ${
+                totalRemaining < 0 ? "text-destructive" : "text-foreground"
+              }`}
+            >
+              {totalRemaining < 0 ? "-" : ""}
+              {formatRupiah(Math.abs(totalRemaining))}
+            </CardTitle>
+          </CardHeader>
+        </Card>
+      </FinanceDetailGrid>
+
+      {/* Progress serapan (Req 10.1) — over-budget capped at 100% visual +
+          badge via BudgetUsageIndicator. Total Anggaran is the budget cap. */}
       <Card className="border-border">
-        <CardHeader className="pb-2">
-          <CardDescription className="text-muted-foreground">Total Anggaran</CardDescription>
-          <CardTitle className="font-mono text-2xl tabular-nums text-foreground">
-            {formatRupiah(budget.totalAmount)}
-          </CardTitle>
-        </CardHeader>
+        <CardContent className="pt-6">
+          <BudgetUsageIndicator
+            totalBudget={budget.totalAmount}
+            usedAmount={totalUsed}
+            label="Serapan Anggaran"
+          />
+          {persistedDiffersFromActual && (
+            <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-[#8A6D1D]">
+              Angka tersimpan pada baris anggaran (
+              <span className="font-mono tabular-nums">{formatRupiah(totalUsedPersisted)}</span>)
+              berbeda dari Realisasi Aktual (
+              <span className="font-mono tabular-nums">{formatRupiah(totalUsed)}</span>). Nilai yang
+              ditampilkan adalah Realisasi Aktual dari transaksi pengeluaran disetujui.
+            </p>
+          )}
+        </CardContent>
       </Card>
-      <Card className="border-border">
-        <CardHeader className="pb-2">
-          <CardDescription className="text-muted-foreground">Terpakai</CardDescription>
-          <CardTitle className="font-mono text-2xl tabular-nums text-foreground">
-            {formatRupiah(totalUsed)}
-          </CardTitle>
-        </CardHeader>
-      </Card>
-      <Card className="border-border">
-        <CardHeader className="pb-2">
-          <CardDescription className="text-muted-foreground">Sisa Anggaran</CardDescription>
-          <CardTitle className="font-mono text-2xl tabular-nums text-foreground">
-            {formatRupiah(totalRemaining)}
-          </CardTitle>
-        </CardHeader>
-      </Card>
-    </FinanceDetailGrid>
+    </div>
   );
 
   // --- Detail metadata (Req 2.4, 9.1, 9.2, 9.3) ---

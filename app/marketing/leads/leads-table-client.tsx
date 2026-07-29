@@ -18,6 +18,7 @@ import AddFollowupDialog from "@/app/marketing/leads/add-followup-dialog";
 import EditLeadDialog from "@/app/marketing/leads/edit-lead-dialog";
 import { DeleteConfirm } from "@/components/delete-confirm";
 import { deleteLead } from "@/server/actions/marketing";
+import { getLeadSourceLabel, getLeadStatusLabel } from "@/lib/label-helpers";
 
 export interface LeadRow {
   id: string;
@@ -40,6 +41,13 @@ interface LeadsTableClientProps {
   leads: LeadRow[];
   /** Whether user has role to perform bulk delete (Super Admin / Admin Kantor) */
   canBulkDelete: boolean;
+  /**
+   * Whether user has role to perform bulk export
+   * (Super Admin / Admin Kantor / Marketing Manager).
+   * Must mirror the `bulkExport` server guard so the button is never offered to
+   * a role the server will reject.
+   */
+  canBulkExport: boolean;
   /** Total filtered items for display */
   totalFilteredItems: number;
   /** Total leads for display */
@@ -84,6 +92,7 @@ const statusMap: Record<string, { bg: string; dot: string; label: string }> = {
 export function LeadsTableClient({
   leads,
   canBulkDelete,
+  canBulkExport,
   totalFilteredItems,
   totalLeads,
   mineFilter,
@@ -191,7 +200,7 @@ export function LeadsTableClient({
       {/* Bulk Action Bar */}
       <BulkActionBar
         selectedCount={selectedCount}
-        onExport={handleExport}
+        onExport={canBulkExport ? handleExport : undefined}
         onDelete={canBulkDelete ? () => setShowDeleteDialog(true) : undefined}
         isProcessing={isProcessing || isPending}
         className="mb-3"
@@ -260,7 +269,7 @@ export function LeadsTableClient({
                   const statusInfo = statusMap[lead.status] || {
                     bg: "bg-slate-50 text-slate-600 border-slate-200",
                     dot: "bg-slate-400",
-                    label: lead.status,
+                    label: getLeadStatusLabel(lead.status),
                   };
                   const selected = isSelected(lead.id);
 
@@ -317,10 +326,7 @@ export function LeadsTableClient({
                             )}
                             <span className="text-muted-foreground/70">•</span>
                             <span className="font-medium">
-                              <Translate
-                                namespace="lead"
-                                translationKey={`source_${lead.source}`}
-                              />
+                              {getLeadSourceLabel(lead.source)}
                             </span>
                           </div>
                         </div>
@@ -353,10 +359,7 @@ export function LeadsTableClient({
                           <span
                             className={`h-1.5 w-1.5 rounded-full ${statusInfo.dot} shrink-0`}
                           />
-                          <Translate
-                            namespace="lead"
-                            translationKey={`status_${lead.status}`}
-                          />
+                          {getLeadStatusLabel(lead.status)}
                         </Badge>
                       </td>
                       <td className="py-4 px-6">

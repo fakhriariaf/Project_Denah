@@ -13,6 +13,7 @@ import { WaitingListActions } from "./waiting-list-actions"
 import { AddToWaitingListDialog } from "./add-waiting-list-dialog"
 import { Translate } from "@/components/translate"
 import { DataTablePagination } from "@/components/ui/data-table-pagination"
+import { getWaitingListStatusLabel } from "@/lib/label-helpers"
 
 export const revalidate = 0
 
@@ -133,7 +134,10 @@ export default async function WaitingListPage({
           <>
             <div className="divide-y divide-[#D6DED2]/60">
               {paginatedList.map((item) => {
-              const statusCfg = STATUS_CONFIG[item.status]
+              const statusCfg = STATUS_CONFIG[item.status] ?? {
+                icon: Clock,
+                className: "bg-slate-50 text-slate-700 border-slate-200",
+              }
               const StatusIcon = statusCfg.icon
               return (
                 <div key={item.id} className="flex items-center gap-4 px-6 py-4 hover:bg-muted/30/60 transition-colors">
@@ -148,7 +152,7 @@ export default async function WaitingListPage({
                       <p className="font-bold text-foreground text-sm">{item.customerName}</p>
                       <Badge className={`border text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${statusCfg.className}`}>
                         <StatusIcon className="h-3 w-3" />
-                        <Translate namespace="waiting" translationKey={statusCfg.labelKey as any} />
+                        {getWaitingListStatusLabel(item.status)}
                       </Badge>
                     </div>
                     <div className="flex flex-wrap gap-3 mt-1">

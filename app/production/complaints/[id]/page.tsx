@@ -31,6 +31,11 @@ import {
   CircleDot,
 } from "lucide-react";
 import { formatDate } from "@/lib/format-utils";
+import {
+  getComplaintActionLabel,
+  getComplaintCategoryLabel,
+  getComplaintStatusLabel,
+} from "@/lib/label-helpers";
 
 export const revalidate = 0;
 
@@ -49,19 +54,6 @@ const statusColors: Record<string, string> = {
   follow_up_required: "bg-amber-50 text-amber-700 border-amber-200",
   waiting_customer_confirmation: "bg-amber-50 text-amber-700 border-amber-200",
   rejected: "bg-red-50 text-red-700 border-red-200",
-};
-
-const statusLabels: Record<string, string> = {
-  open: "Open",
-  in_progress: "In Progress",
-  resolved: "Resolved",
-  closed: "Closed",
-  in_review: "In Review",
-  need_revision: "Need Revision",
-  approved_extension: "Approved Extension",
-  follow_up_required: "Follow Up Required",
-  waiting_customer_confirmation: "Waiting Confirmation",
-  rejected: "Rejected",
 };
 
 export default async function ComplaintDetailPage({ params }: ComplaintDetailPageProps) {
@@ -143,15 +135,7 @@ export default async function ComplaintDetailPage({ params }: ComplaintDetailPag
     .where(eq(attachmentsTable.entityId, id));
 
   const statusColor = statusColors[complaintData.status || "open"] || statusColors.open;
-  const statusLabel = statusLabels[complaintData.status || "open"] || complaintData.status;
-
-  const categoryLabels: Record<string, string> = {
-    quality: "Kualitas",
-    delay: "Keterlambatan",
-    document: "Dokumen",
-    payment: "Pembayaran",
-    other: "Lainnya",
-  };
+  const statusLabel = getComplaintStatusLabel(complaintData.status);
 
   return (
     <div className="min-h-screen bg-muted/30 p-4 md:p-8">
@@ -183,7 +167,7 @@ export default async function ComplaintDetailPage({ params }: ComplaintDetailPag
               variant="outline"
               className="text-xs border-primary/50 text-primary bg-[#8FAF9A]/5 font-semibold shadow-none"
             >
-              {categoryLabels[complaintData.category] || complaintData.category}
+              {getComplaintCategoryLabel(complaintData.category)}
             </Badge>
           </div>
         </div>
@@ -220,7 +204,7 @@ export default async function ComplaintDetailPage({ params }: ComplaintDetailPag
                 <div>
                   <p className="text-sm font-semibold text-foreground">Kategori Ditetapkan</p>
                   <p className="text-xs text-muted-foreground">
-                    {categoryLabels[complaintData.category] || complaintData.category}
+                    {getComplaintCategoryLabel(complaintData.category)}
                   </p>
                 </div>
               </div>
@@ -248,7 +232,7 @@ export default async function ComplaintDetailPage({ params }: ComplaintDetailPag
                     <p className="text-sm font-semibold text-foreground">Komplain Diselesaikan</p>
                     <p className="text-xs text-muted-foreground">{formatDate(complaintData.resolvedAt)}</p>
                     {complaintData.repairAction && (
-                      <p className="text-xs text-primary mt-1">{complaintData.repairAction}</p>
+                      <p className="text-xs text-primary mt-1">{getComplaintActionLabel(complaintData.repairAction)}</p>
                     )}
                   </div>
                 </div>
@@ -321,7 +305,7 @@ export default async function ComplaintDetailPage({ params }: ComplaintDetailPag
               <div>
                 <p className="text-xs text-muted-foreground">Kategori</p>
                 <p className="text-sm font-medium text-foreground">
-                  {categoryLabels[complaintData.category] || complaintData.category}
+                  {getComplaintCategoryLabel(complaintData.category)}
                 </p>
               </div>
             </CardContent>
@@ -349,7 +333,7 @@ export default async function ComplaintDetailPage({ params }: ComplaintDetailPag
               {complaintData.repairAction && (
                 <div>
                   <p className="text-xs text-muted-foreground">Tindakan Perbaikan</p>
-                  <p className="text-sm font-medium text-foreground whitespace-pre-wrap">{complaintData.repairAction}</p>
+                  <p className="text-sm font-medium text-foreground whitespace-pre-wrap">{getComplaintActionLabel(complaintData.repairAction)}</p>
                 </div>
               )}
               {complaintData.developerNote && (

@@ -4,26 +4,27 @@ import { useRouter } from "next/navigation";
 import * as React from "react";
 import { useI18n } from "@/lib/i18n";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   CircleDollarSign,
   TrendingUp,
   TrendingDown,
   Clock,
-  Search,
   FileText,
   FolderOpen,
   PieChart,
+  CheckCircle2,
+  BarChart3,
+  Wallet,
+  Plus,
 } from "lucide-react";
-import { PageHeader } from "@/components/ui/page-header";
-import { StatCard } from "@/components/ui/stat-card";
+import { Button } from "@/components/ui/button";
+import { FinanceFilterBar } from "@/components/finance/finance-filter-bar";
+import { FinanceSummaryGrid } from "@/components/finance/finance-summary-grid";
+import { computeFilteredBudgetTotals } from "@/lib/finance-budget-summary";
+import { KpiComparisonIndicator } from "@/components/finance/kpi-comparison-indicator";
+import { calculateKpiPercentageChange } from "@/lib/finance-kpi-utils";
+import { BudgetAlertNotice } from "@/components/finance/budget-alert-notice";
+import { CreateInvoiceDialog } from "./components/create-invoice-dialog";
 import {
   createPayment,
   verifyPayment,
@@ -32,8 +33,13 @@ import {
   approveExpense,
   rejectExpense,
   createBudget,
+  activateBudget,
+  updateDraftBudget,
+  deleteDraftBudget,
 } from "@/server/actions/finance";
 import type { PaginatedResult } from "@/lib/pagination";
+import { formatRupiah } from "@/lib/format-utils";
+import { parseServerError } from "@/lib/error-parser";
 import { toast } from "sonner";
 import { InvoicesTab } from "./tabs/invoices-tab";
 import { PaymentsTab } from "./tabs/payments-tab";
@@ -107,6 +113,11 @@ interface FinanceShellProps {
     scheduleLabel: string | null;
     bookingProofFileUrl: string | null;
     bookingProofFileName: string | null;
+    // Additive optional fields (Req 17.4, 17.5)
+    totalPaidVerified?: number;
+    remainingBalance?: number;
+    relatedExpenseTransactionId?: string | null;
+    relatedApprovalId?: string | null;
   }>;
   payments: Array<{
     id: string;
@@ -159,6 +170,10 @@ interface FinanceShellProps {
     invoiceNumber?: string | null;
     invoiceId?: string | null;
     resolvedApproverName?: string | null;
+    // Additive: reversal markers for ledger classification (Req 6.2, 17.4)
+    reversalOfTransactionId?: string | null;
+    reversalOfPaymentId?: string | null;
+    reversalReason?: string | null;
   }>;
   budgets: Array<{
     id: string;
@@ -170,8 +185,27 @@ interface FinanceShellProps {
     status: "draft" | "active" | "closed";
     projectName: string;
   }>;
+  // Additive: budget lines for budget summary/detail (Req 9.3, 10.2, 17.4)
+  budgetLines?: Array<{
+    id: string;
+    budgetId: string;
+    categoryId: string;
+    allocatedAmount: number;
+    usedAmount: number;
+    remainingAmount: number;
+  }>;
+  // Additive: actual budget usage aggregated from approved expense (Req 9.3, 17.4)
+  budgetActualUsage?: Array<{
+    budgetId: string;
+    categoryId: string;
+    actualAmount: number;
+  }>;
   defaultTab?: "invoices" | "payments" | "transactions" | "approvals" | "budgets" | "reports";
   isSuperAdmin?: boolean;
+  /** Whether the current user can approve/reject expense requests (Direksi or Super Admin) */
+  canApproveExpense?: boolean;
+  /** Mirrors the server-side role gate on `createPayment` (Super Admin / Admin Keuangan / Admin Kantor). */
+  canRecordPayment?: boolean;
 }
 
 /** Type for a single transaction item from the FinanceShellProps.transactions array */
@@ -179,18 +213,20 @@ type FinanceTransactionItem = FinanceShellProps["transactions"][number];
 
 type FinanceTabKey = "invoices" | "payments" | "transactions" | "approvals" | "budgets" | "reports";
 
-const financeTabs: Array<{ key: FinanceTabKey; labelKey: string; icon: React.ComponentType<{ className?: string }> }> = [
-  { key: "invoices", labelKey: "finance.tab_invoices", icon: FileText },
-  { key: "payments", labelKey: "finance.tab_payments", icon: FileText },
-  { key: "transactions", labelKey: "finance.tab_transactions", icon: CircleDollarSign },
-  { key: "approvals", labelKey: "finance.tab_approvals", icon: Clock },
-  { key: "budgets", labelKey: "finance.tab_budgets", icon: FolderOpen },
-  { key: "reports", labelKey: "finance.tab_reports", icon: PieChart },
+const financeTabs: Array<{ key: FinanceTabKey; label: string; icon: React.ComponentType<{ className?: string }> }> = [
+  { key: "invoices", label: "Invoice & Tagihan", icon: FileText },
+  { key: "payments", label: "Kas Masuk & Pembayaran", icon: CircleDollarSign },
+  { key: "transactions", label: "Buku Kas Ledger", icon: BarChart3 },
+  { key: "approvals", label: "Persetujuan Kas Keluar", icon: CheckCircle2 },
+  { key: "budgets", label: "Anggaran Proyek", icon: FolderOpen },
+  { key: "reports", label: "Laporan Statement", icon: PieChart },
 ];
 
 export default function FinanceShell({
   activeUser,
   isSuperAdmin = false,
+  canApproveExpense = false,
+  canRecordPayment = false,
   projects,
   units,
   customers,
@@ -200,6 +236,8 @@ export default function FinanceShell({
   payments: initialPayments,
   transactions: initialTransactions,
   budgets: initialBudgets,
+  budgetLines: initialBudgetLines,
+  budgetActualUsage: initialBudgetActualUsage,
   defaultTab,
 }: FinanceShellProps) {
   const router = useRouter();
@@ -216,12 +254,45 @@ export default function FinanceShell({
   // Search & Filter States
   const [selectedProjectId, setSelectedProjectId] = React.useState<string>("all");
   const [searchQuery, setSearchQuery] = React.useState("");
+  // Period filter — null means "Semua Periode" (no date constraint applied)
+  const [periodStart, setPeriodStart] = React.useState<Date | null>(null);
+  const [periodEnd, setPeriodEnd] = React.useState<Date | null>(null);
+
+  // Tab bar scroll & gradient state
+  const tabListRef = React.useRef<HTMLDivElement>(null);
+  const [showLeftGradient, setShowLeftGradient] = React.useState(false);
+  const [showRightGradient, setShowRightGradient] = React.useState(false);
+
+  const updateScrollGradients = React.useCallback(() => {
+    const el = tabListRef.current;
+    if (!el) return;
+    const { scrollLeft, scrollWidth, clientWidth } = el;
+    setShowLeftGradient(scrollLeft > 4);
+    setShowRightGradient(scrollLeft + clientWidth < scrollWidth - 4);
+  }, []);
+
+  React.useEffect(() => {
+    const el = tabListRef.current;
+    if (!el) return;
+    updateScrollGradients();
+    el.addEventListener("scroll", updateScrollGradients, { passive: true });
+    const observer = new ResizeObserver(updateScrollGradients);
+    observer.observe(el);
+    return () => {
+      el.removeEventListener("scroll", updateScrollGradients);
+      observer.disconnect();
+    };
+  }, [updateScrollGradients]);
 
   // Modals & Action States
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
   const [paymentOpen, setPaymentOpen] = React.useState(false);
   const [budgetOpen, setBudgetOpen] = React.useState(false);
+  const [invoiceDialogOpen, setInvoiceDialogOpen] = React.useState(false);
+  const [activatingBudgetId, setActivatingBudgetId] = React.useState<string | null>(null);
+  const [updatingBudgetId, setUpdatingBudgetId] = React.useState<string | null>(null);
+  const [deletingBudgetId, setDeletingBudgetId] = React.useState<string | null>(null);
   
   // Create Payment Form State
   const [paymentForm, setPaymentForm] = React.useState({
@@ -261,21 +332,34 @@ export default function FinanceShell({
   const [verificationAccount, setVerificationAccount] = React.useState("");
   const [verificationNotes, setVerificationNotes] = React.useState("");
 
-  // -- Client-side paginated payment state --
-  const PAYMENT_PAGE_SIZE = 20;
+  // The shell applies the shared Project/Search/Period context. PaymentsTab
+  // owns its own pagination so status filtering never loses rows first.
   const paymentPageData: PaginatedResult<PaymentListItem> = React.useMemo(() => {
     const filtered = initialPayments.filter(pay => {
       const matchesProj = selectedProjectId === "all" || pay.projectId === selectedProjectId;
       const matchesQuery = searchQuery === "" ||
         pay.paymentNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (pay.customerName && pay.customerName.toLowerCase().includes(searchQuery.toLowerCase()));
-      return matchesProj && matchesQuery;
+      // Period filter — payment basis = paymentDate (Req 1.3), keeping the tab
+      // consistent with the shared global period context. Inlined here (rather
+      // than reusing isInPeriodByDate) because that callback is declared later.
+      let matchesPeriod = true;
+      if (periodStart || periodEnd) {
+        const d = new Date(pay.paymentDate);
+        if (periodStart && d < periodStart) matchesPeriod = false;
+        if (periodEnd && d > periodEnd) matchesPeriod = false;
+      }
+      return matchesProj && matchesQuery && matchesPeriod;
     });
     const totalCount = filtered.length;
-    const totalPages = Math.max(1, Math.ceil(totalCount / PAYMENT_PAGE_SIZE));
-    const data = filtered.slice(0, PAYMENT_PAGE_SIZE);
-    return { data, totalCount, page: 1, pageSize: PAYMENT_PAGE_SIZE, totalPages };
-  }, [initialPayments, selectedProjectId, searchQuery]);
+    return {
+      data: filtered,
+      totalCount,
+      page: 1,
+      pageSize: 20,
+      totalPages: Math.max(1, Math.ceil(totalCount / 20)),
+    };
+  }, [initialPayments, selectedProjectId, searchQuery, periodStart, periodEnd]);
 
   // Expense Approval Dialog state
   const [selectedExpense, setSelectedExpense] = React.useState<FinanceTransactionItem | null>(null);
@@ -313,13 +397,25 @@ export default function FinanceShell({
   // METRICS & FILTERS COMPUTATIONS
   // ==========================================
   
+  // -- Period filter helpers --
+  /** Check if a transaction date falls within the period filter */
+  const isInPeriodByDate = React.useCallback((date: Date | null | undefined): boolean => {
+    if (!periodStart && !periodEnd) return true;
+    if (!date) return false;
+    const d = new Date(date);
+    if (periodStart && d < periodStart) return false;
+    if (periodEnd && d > periodEnd) return false;
+    return true;
+  }, [periodStart, periodEnd]);
+
   // Filter datasets based on selection
   const filteredTransactions = initialTransactions.filter(t => {
     const matchesProj = selectedProjectId === "all" || t.projectId === selectedProjectId;
     const matchesQuery = searchQuery === "" || 
       t.transactionNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
       t.description.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesProj && matchesQuery;
+    const matchesPeriod = isInPeriodByDate(t.transactionDate);
+    return matchesProj && matchesQuery && matchesPeriod;
   });
 
   const pendingApprovals = initialTransactions.filter(t => 
@@ -327,31 +423,269 @@ export default function FinanceShell({
     (t.approvalStatus === "pending" || t.approvalStatus === "insufficient_balance")
   );
 
+  // All expense transactions (any approval status) for the Approvals tab.
+  // Filtered by shared Project/Period/search context; approval status
+  // sub-filter is applied inside ApprovalsTab. Period basis = transactionDate.
+  const allExpenseTransactions = initialTransactions.filter(t => {
+    const matchType = t.type === "expense";
+    const matchProj = selectedProjectId === "all" || t.projectId === selectedProjectId;
+    const matchQuery = searchQuery === "" ||
+      t.transactionNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      t.description.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchPeriod = isInPeriodByDate(t.transactionDate);
+    return matchType && matchProj && matchQuery && matchPeriod;
+  });
+
   const filteredBudgets = initialBudgets.filter(b => 
     selectedProjectId === "all" || b.projectId === selectedProjectId
   );
 
-  // Financial Report aggregations
+  // ==========================================
+  // KAS SUMMARY (Req 1.4)
+  // ==========================================
+
+  // Total Kas Masuk: income with approvalStatus "not_required" OR "approved", filtered by project + period
   const totalIncomeVal = initialTransactions
-    .filter(t => t.type === "income" && (selectedProjectId === "all" || t.projectId === selectedProjectId))
+    .filter(t =>
+      t.type === "income" &&
+      (t.approvalStatus === "not_required" || t.approvalStatus === "approved") &&
+      (selectedProjectId === "all" || t.projectId === selectedProjectId) &&
+      isInPeriodByDate(t.transactionDate)
+    )
     .reduce((sum, t) => sum + t.amount, 0);
 
+  // Pengeluaran Disetujui: expense with approvalStatus "approved", filtered by project + period
   const totalExpenseVal = initialTransactions
-    .filter(t => t.type === "expense" && t.approvalStatus === "approved" && (selectedProjectId === "all" || t.projectId === selectedProjectId))
+    .filter(t =>
+      t.type === "expense" &&
+      t.approvalStatus === "approved" &&
+      (selectedProjectId === "all" || t.projectId === selectedProjectId) &&
+      isInPeriodByDate(t.transactionDate)
+    )
     .reduce((sum, t) => sum + t.amount, 0);
 
+  // Saldo Bersih
   const netBalanceVal = totalIncomeVal - totalExpenseVal;
 
-  const totalUnpaidVal = initialInvoices
-    .filter(i => i.status === "unpaid" && (selectedProjectId === "all" || i.projectId === selectedProjectId))
-    .reduce((sum, i) => sum + i.amount, 0);
+  // Piutang Berjalan: sum of remainingBalance from invoices where status is "unpaid" or "partial"
+  // Use enriched remainingBalance field (from Task 14.1), filtered by dueDate (fallback createdAt) for period
+  const totalPiutangVal = initialInvoices
+    .filter(i => {
+      const matchStatus = i.status === "unpaid" || i.status === "partial";
+      const matchProj = selectedProjectId === "all" || i.projectId === selectedProjectId;
+      const dateForPeriod = i.dueDate ?? i.createdAt;
+      const matchPeriod = isInPeriodByDate(dateForPeriod);
+      return matchStatus && matchProj && matchPeriod;
+    })
+    .reduce((sum, i) => sum + (i.remainingBalance ?? i.amount), 0);
 
-  // Recharts aggregated cashflow data
-  const monthlyData = [
-    { name: t("finance.report_income_label"), Nominal: totalIncomeVal, fill: "#8FAF9A" },
-    { name: t("finance.report_expense_label"), Nominal: totalExpenseVal, fill: "#D77A7A" },
-    { name: t("finance.report_net_label"), Nominal: netBalanceVal, fill: "#4F6F52" },
-  ];
+  // ==========================================
+  // BUDGET SUMMARY (Req 1.5 - 1.9)
+  // ==========================================
+
+  const budgetSummary = React.useMemo(() => {
+    return computeFilteredBudgetTotals(
+      initialBudgets,
+      initialBudgetLines ?? [],
+      initialBudgetActualUsage ?? [],
+      {
+        projectId: selectedProjectId === "all" ? null : selectedProjectId,
+        periodStart: periodStart ?? null,
+        periodEnd: periodEnd ?? null,
+      }
+    );
+  }, [initialBudgets, initialBudgetLines, initialBudgetActualUsage, selectedProjectId, periodStart, periodEnd]);
+
+  /** True if there are no active budgets matching the current filter */
+  const hasNoActiveBudgets = budgetSummary.totalAllocated === 0 &&
+    initialBudgets.filter(b => b.status === "active").length === 0 ||
+    (budgetSummary.totalAllocated === 0 && budgetSummary.totalUsedActual === 0);
+
+  // ==========================================
+  // KPI COMPARISON (Req 1.9 - 1.11)
+  // ==========================================
+
+  const kpiComparison = React.useMemo(() => {
+    // Only compute when a specific period is selected (not "Semua Periode")
+    const isNeutral = periodStart === null || periodEnd === null;
+
+    if (isNeutral) {
+      const neutralResult = calculateKpiPercentageChange(0, 0, true);
+      return {
+        income: neutralResult,
+        expense: neutralResult,
+        netBalance: neutralResult,
+        piutang: neutralResult,
+        budget: neutralResult,
+        comparisonLabel: null as string | null,
+        isAllPeriod: true,
+      };
+    }
+
+    // Compute previous period: M-1 from periodStart
+    const prevEnd = new Date(periodStart);
+    prevEnd.setDate(prevEnd.getDate() - 1); // day before periodStart
+    const prevStart = new Date(prevEnd);
+    prevStart.setDate(1); // first day of that month
+
+    // Comparison label from prevEnd month
+    const comparisonLabel = prevEnd.toLocaleDateString("id-ID", { month: "short", year: "numeric" });
+
+    // Previous period filter
+    const isInPrevPeriod = (date: Date | null | undefined): boolean => {
+      if (!date) return false;
+      const d = new Date(date);
+      return d >= prevStart && d <= prevEnd;
+    };
+
+    // Previous income
+    const prevIncome = initialTransactions
+      .filter(t =>
+        t.type === "income" &&
+        (t.approvalStatus === "not_required" || t.approvalStatus === "approved") &&
+        (selectedProjectId === "all" || t.projectId === selectedProjectId) &&
+        isInPrevPeriod(t.transactionDate)
+      )
+      .reduce((sum, t) => sum + t.amount, 0);
+
+    // Previous expense
+    const prevExpense = initialTransactions
+      .filter(t =>
+        t.type === "expense" &&
+        t.approvalStatus === "approved" &&
+        (selectedProjectId === "all" || t.projectId === selectedProjectId) &&
+        isInPrevPeriod(t.transactionDate)
+      )
+      .reduce((sum, t) => sum + t.amount, 0);
+
+    const prevNet = prevIncome - prevExpense;
+
+    // Previous piutang
+    const prevPiutang = initialInvoices
+      .filter(i => {
+        const matchStatus = i.status === "unpaid" || i.status === "partial";
+        const matchProj = selectedProjectId === "all" || i.projectId === selectedProjectId;
+        const dateForPeriod = i.dueDate ?? i.createdAt;
+        return matchStatus && matchProj && isInPrevPeriod(dateForPeriod);
+      })
+      .reduce((sum, i) => sum + (i.remainingBalance ?? i.amount), 0);
+
+    // Previous budget allocated (same filter logic as current)
+    const prevBudgetSummary = computeFilteredBudgetTotals(
+      initialBudgets,
+      initialBudgetLines ?? [],
+      initialBudgetActualUsage ?? [],
+      {
+        projectId: selectedProjectId === "all" ? null : selectedProjectId,
+        periodStart: prevStart,
+        periodEnd: prevEnd,
+      }
+    );
+
+    return {
+      income: calculateKpiPercentageChange(totalIncomeVal, prevIncome),
+      expense: calculateKpiPercentageChange(totalExpenseVal, prevExpense),
+      netBalance: calculateKpiPercentageChange(netBalanceVal, prevNet),
+      piutang: calculateKpiPercentageChange(totalPiutangVal, prevPiutang),
+      budget: calculateKpiPercentageChange(budgetSummary.totalAllocated, prevBudgetSummary.totalAllocated),
+      comparisonLabel,
+      isAllPeriod: false,
+    };
+  }, [
+    periodStart, periodEnd, initialTransactions, initialInvoices, initialBudgets,
+    initialBudgetLines, initialBudgetActualUsage, selectedProjectId,
+    totalIncomeVal, totalExpenseVal, netBalanceVal, totalPiutangVal, budgetSummary.totalAllocated,
+  ]);
+
+  // ==========================================
+  // BUDGET ALERT NOTICE (Req 3.1, 3.5)
+  // ==========================================
+
+  const budgetAlertData = React.useMemo(() => {
+    const activeBudgets = initialBudgets.filter(b => {
+      if (b.status !== "active") return false;
+      if (selectedProjectId !== "all" && b.projectId !== selectedProjectId) return false;
+      // Period filter on budget
+      if (periodStart && new Date(b.periodEnd) < periodStart) return false;
+      if (periodEnd && new Date(b.periodStart) > periodEnd) return false;
+      return true;
+    });
+
+    const budgetsWithAbsorption = activeBudgets
+      .map(b => {
+        const usage = (initialBudgetActualUsage ?? [])
+          .filter(u => u.budgetId === b.id)
+          .reduce((sum, u) => sum + u.actualAmount, 0);
+        const absorption = b.totalAmount > 0 ? (usage / b.totalAmount) * 100 : 0;
+        return {
+          id: b.id,
+          name: b.name,
+          totalAmount: b.totalAmount,
+          usedAmount: usage,
+          absorptionPercentage: absorption,
+        };
+      })
+      .filter(b => b.absorptionPercentage > 80);
+
+    if (budgetsWithAbsorption.length === 0) return null;
+
+    // Sort by absorption desc, then alphabetical name for tie
+    budgetsWithAbsorption.sort((a, b) => {
+      if (b.absorptionPercentage !== a.absorptionPercentage) {
+        return b.absorptionPercentage - a.absorptionPercentage;
+      }
+      return a.name.localeCompare(b.name);
+    });
+
+    return budgetsWithAbsorption[0];
+  }, [initialBudgets, initialBudgetActualUsage, selectedProjectId, periodStart, periodEnd]);
+
+  // ==========================================
+  // HOME BUDGET SNAPSHOT
+  // ==========================================
+
+  const homeBudgetSnapshot = React.useMemo(() => {
+    const scopedBudgets = initialBudgets.filter((budget) => {
+      if (selectedProjectId !== "all" && budget.projectId !== selectedProjectId) return false;
+      if (periodStart && new Date(budget.periodEnd) < periodStart) return false;
+      if (periodEnd && new Date(budget.periodStart) > periodEnd) return false;
+      return true;
+    });
+
+    const draftBudgets = scopedBudgets
+      .filter((budget) => budget.status === "draft")
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .slice(0, 3);
+
+    const activeBudgets = scopedBudgets.filter((budget) => budget.status === "active");
+    const usedActual = activeBudgets.reduce((sum, budget) => {
+      const used = (initialBudgetActualUsage ?? [])
+        .filter((usage) => usage.budgetId === budget.id)
+        .reduce((total, usage) => total + usage.actualAmount, 0);
+      return sum + used;
+    }, 0);
+    const remaining = budgetSummary.totalAllocated - usedActual;
+    const absorption =
+      budgetSummary.totalAllocated > 0
+        ? (usedActual / budgetSummary.totalAllocated) * 100
+        : 0;
+
+    return {
+      activeCount: activeBudgets.length,
+      draftBudgets,
+      totalAllocated: budgetSummary.totalAllocated,
+      usedActual,
+      remaining,
+      absorption,
+    };
+  }, [
+    initialBudgets,
+    initialBudgetActualUsage,
+    selectedProjectId,
+    periodStart,
+    periodEnd,
+    budgetSummary.totalAllocated,
+  ]);
 
   // ==========================================
   // FORM SUBMISSION HANDLERS
@@ -541,11 +875,76 @@ export default function FinanceShell({
     }
   };
 
+  const handleActivateBudget = async (budgetId: string) => {
+    setActivatingBudgetId(budgetId);
+    setErrorMsg(null);
+    try {
+      const res = await activateBudget(budgetId);
+      if (res.success) {
+        toast.success("Anggaran berhasil diaktifkan");
+        router.refresh();
+      }
+    } catch (err) {
+      const msg = parseServerError(err, "Gagal mengaktifkan anggaran. Silakan coba lagi.");
+      setErrorMsg(msg);
+      toast.error(msg);
+    } finally {
+      setActivatingBudgetId(null);
+    }
+  };
+
+  const handleUpdateDraftBudget = async (
+    budgetId: string,
+    data: {
+      projectId: string;
+      name: string;
+      periodStart: Date;
+      periodEnd: Date;
+      totalAmount: number;
+      lines: Array<{ categoryId: string; allocatedAmount: number }>;
+    },
+  ) => {
+    setUpdatingBudgetId(budgetId);
+    setErrorMsg(null);
+    try {
+      const res = await updateDraftBudget(budgetId, data);
+      if (res.success) {
+        toast.success("Draft anggaran berhasil diperbarui");
+        router.refresh();
+      }
+    } catch (err) {
+      const msg = parseServerError(err, "Gagal memperbarui draft anggaran. Silakan coba lagi.");
+      setErrorMsg(msg);
+      toast.error(msg);
+      throw err;
+    } finally {
+      setUpdatingBudgetId(null);
+    }
+  };
+
+  const handleDeleteDraftBudget = async (budgetId: string) => {
+    setDeletingBudgetId(budgetId);
+    setErrorMsg(null);
+    try {
+      const res = await deleteDraftBudget(budgetId);
+      if (res.success) {
+        toast.success("Draft anggaran berhasil dihapus");
+        router.refresh();
+      }
+    } catch (err) {
+      const msg = parseServerError(err, "Gagal menghapus draft anggaran. Silakan coba lagi.");
+      setErrorMsg(msg);
+      toast.error(msg);
+    } finally {
+      setDeletingBudgetId(null);
+    }
+  };
+
   if (!mounted) {
     return (
-      <div className="flex h-screen items-center justify-center bg-background">
+      <div className="flex h-screen items-center justify-center bg-background" aria-busy="true" role="status">
         <div className="text-primary-dark font-semibold text-lg flex items-center gap-2">
-          <Clock className="animate-spin h-5 w-5" /> {t("finance.loading")}
+          <Clock className="animate-spin h-5 w-5" aria-hidden="true" /> {t("finance.loading")}
         </div>
       </div>
     );
@@ -555,107 +954,340 @@ export default function FinanceShell({
     <>
     <div className="flex flex-col gap-6">
       
-      {/* -- PREMIUM HEADER -- */}
-      <PageHeader
-        icon={<CircleDollarSign className="h-6 w-6" />}
-        title={t("finance.title")}
-        description={t("finance.subtitle")}
-        actions={
-          <div className="grid w-full grid-cols-1 gap-3 sm:w-auto sm:grid-cols-[280px_280px]">
-            {/* Project Selector filter */}
-            <div className="min-w-0">
-              <Select 
-                value={selectedProjectId} 
-                onValueChange={(val) => setSelectedProjectId(val || "all")}
-                items={[{ label: t("finance.all_projects"), value: "all" }, ...projects.map(p => ({ label: p.name, value: p.id }))] }
-              >
-                <SelectTrigger className="!w-[280px] min-w-0 h-10 bg-white/90 backdrop-blur-sm border-border focus:ring-ring rounded-2xl shadow-sm px-4 text-sm">
-                  <SelectValue className="min-w-0 flex-1 truncate pr-2" placeholder={t("finance.all_projects")}>
-                    <span className="block truncate">
-                      {selectedProjectId === "all" ? t("finance.all_projects") : projects.find(p => p.id === selectedProjectId)?.name}
-                    </span>
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">{t("finance.all_projects")}</SelectItem>
-                  {projects.map(p => (
-                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+      {/* Header ringkas: data dan aksi utama selalu terlihat tanpa hero dekoratif. */}
+      <section className="flex flex-col gap-4 border-b border-border pb-5 sm:flex-row sm:items-end sm:justify-between">
+        <div className="space-y-1">
+          <p className="text-sm font-semibold text-foreground">Keuangan Perusahaan</p>
+          <p className="text-sm text-muted-foreground">
+            Pantau kas, tagihan, pembayaran, dan anggaran perusahaan.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <Button
+            type="button"
+            onClick={() => setInvoiceDialogOpen(true)}
+            className="min-h-11 gap-2 bg-[#4F6F52] px-4 font-semibold text-white hover:bg-[#4F6F52]/90"
+          >
+            <Plus className="h-4 w-4" />
+            Buat Invoice
+          </Button>
+          {canRecordPayment && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setActiveTab("payments");
+                setPaymentOpen(true);
+              }}
+              className="min-h-11 gap-2 px-4 font-semibold"
+            >
+              <Plus className="h-4 w-4" />
+              Catat Pembayaran
+            </Button>
+          )}
+        </div>
+      </section>
 
-            <div className="relative min-w-0">
-              <Search className="absolute left-3 top-2 h-4 w-4 text-muted-foreground/70" />
-              <Input
-                placeholder={t("finance.search_ph")}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="!w-[280px] h-8 pl-9 pr-4 bg-white/90 backdrop-blur-sm border-border focus-visible:ring-ring rounded-2xl shadow-sm text-sm"
+      {/* Konteks filter bersama untuk seluruh modul finance. */}
+      <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
+        <FinanceFilterBar
+          projects={projects}
+          selectedProjectId={selectedProjectId === "all" ? null : selectedProjectId}
+          onProjectChange={(id) => setSelectedProjectId(id ?? "all")}
+          periodStart={periodStart}
+          periodEnd={periodEnd}
+          onPeriodChange={(start, end) => {
+            setPeriodStart(start);
+            setPeriodEnd(end);
+          }}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder={t("finance.search_ph")}
+        />
+      </section>
+
+      {/* Ringkasan utama: kas dan kondisi anggaran dibaca dalam satu pandangan. */}
+      <FinanceSummaryGrid
+        aria-label="Ringkasan utama keuangan"
+        items={[
+          {
+            key: "kas-masuk",
+            label: "Total Kas Masuk",
+            value: totalIncomeVal,
+            icon: <TrendingUp className="h-4 w-4" />,
+            accent: "success",
+            indicator: (
+              <KpiComparisonIndicator
+                result={kpiComparison.income}
+                comparisonLabel={kpiComparison.comparisonLabel}
+                isAllPeriod={kpiComparison.isAllPeriod}
               />
-            </div>
-          </div>
-        }
+            ),
+          },
+          {
+            key: "pengeluaran",
+            label: "Pengeluaran Disetujui",
+            value: totalExpenseVal,
+            icon: <TrendingDown className="h-4 w-4" />,
+            accent: "danger",
+            indicator: (
+              <KpiComparisonIndicator
+                result={kpiComparison.expense}
+                comparisonLabel={kpiComparison.comparisonLabel}
+                isAllPeriod={kpiComparison.isAllPeriod}
+              />
+            ),
+          },
+          {
+            key: "saldo",
+            label: "Saldo Bersih",
+            value: netBalanceVal,
+            icon: <CircleDollarSign className="h-4 w-4" />,
+            accent: "primary",
+            indicator: (
+              <KpiComparisonIndicator
+                result={kpiComparison.netBalance}
+                comparisonLabel={kpiComparison.comparisonLabel}
+                isAllPeriod={kpiComparison.isAllPeriod}
+              />
+            ),
+          },
+          {
+            key: "piutang",
+            label: "Piutang Berjalan",
+            value: totalPiutangVal,
+            icon: <Clock className="h-4 w-4" />,
+            accent: "warning",
+            indicator: (
+              <KpiComparisonIndicator
+                result={kpiComparison.piutang}
+                comparisonLabel={kpiComparison.comparisonLabel}
+                isAllPeriod={kpiComparison.isAllPeriod}
+              />
+            ),
+          },
+          {
+            key: "anggaran-aktif",
+            label: "Anggaran Aktif",
+            value: budgetSummary.totalAllocated,
+            icon: <Wallet className="h-4 w-4" />,
+            accent: hasNoActiveBudgets
+              ? "warning"
+              : budgetSummary.isOverBudget
+                ? "danger"
+                : "primary",
+            indicator: hasNoActiveBudgets ? (
+              <span className="text-xs text-muted-foreground">Belum ada anggaran aktif</span>
+            ) : (
+              <KpiComparisonIndicator
+                result={kpiComparison.budget}
+                comparisonLabel={kpiComparison.comparisonLabel}
+                isAllPeriod={kpiComparison.isAllPeriod}
+              />
+            ),
+          },
+        ]}
       />
 
-      {/* 2. Top Banner Metrics Widgets */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          title={t("finance.kpi_income")}
-          value={`Rp ${totalIncomeVal.toLocaleString("id-ID")}`}
-          icon={<TrendingUp className="h-5 w-5" />}
-          colorScheme="#10b981"
-        />
-        <StatCard
-          title={t("finance.kpi_expense")}
-          value={`Rp ${totalExpenseVal.toLocaleString("id-ID")}`}
-          icon={<TrendingDown className="h-5 w-5" />}
-          colorScheme="#f43f5e"
-        />
-        <StatCard
-          title={t("finance.kpi_net")}
-          value={`Rp ${netBalanceVal.toLocaleString("id-ID")}`}
-          icon={<CircleDollarSign className="h-5 w-5" />}
-          colorScheme="#4F6F52"
-        />
-        <StatCard
-          title={t("finance.kpi_ar")}
-          value={`Rp ${totalUnpaidVal.toLocaleString("id-ID")}`}
-          icon={<Clock className="h-5 w-5" />}
-          colorScheme="#f59e0b"
-        />
-      </div>
+      {/* Budget Alert Notice — conditional */}
+      <BudgetAlertNotice budget={budgetAlertData} />
 
-      {/* 3. Operational Custom Tabs Navigation */}
-      <div role="tablist" aria-label={t("finance.title")} className="flex border-b border-border">
-        {financeTabs.map((tab) => {
-          const isActive = activeTab === tab.key;
-          const Icon = tab.icon;
-          return (
-            <button
-              key={tab.key}
-              type="button"
-              role="tab"
-              id={`finance-tab-${tab.key}`}
-              aria-selected={isActive}
-              aria-controls={`finance-panel-${tab.key}`}
-              tabIndex={isActive ? 0 : -1}
-              onClick={() => setActiveTab(tab.key)}
-              className={`relative px-4 py-2 text-sm font-semibold border-b-2 transition-colors duration-150 flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 ${
-                isActive
-                  ? "border-primary text-primary"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <Icon className="h-4 w-4" /> {t(tab.labelKey as Parameters<typeof t>[0])}
-              {tab.key === "approvals" && pendingApprovals.length > 0 && (
-                <Badge className="ml-1.5 bg-destructive hover:bg-destructive text-destructive-foreground rounded-full px-1.5 py-0 text-[10px]">
-                  {pendingApprovals.length}
-                </Badge>
-              )}
-            </button>
-          );
-        })}
+      <section className="space-y-3" aria-label="Ringkasan Anggaran">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold text-foreground">Ringkasan Anggaran</h3>
+            <p className="text-xs text-muted-foreground">
+              Pantau budget aktif, serapan, dan draft yang perlu diaktifkan.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActiveTab("budgets")}
+            className="text-xs font-medium text-primary hover:underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+          >
+            Lihat Semua Anggaran →
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.4fr_1fr]">
+          <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Total Aktif
+                </p>
+                <p className="mt-1 font-mono text-lg font-bold tabular-nums text-foreground">
+                  {formatRupiah(homeBudgetSnapshot.totalAllocated)}
+                </p>
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Terpakai Aktual
+                </p>
+                <p className="mt-1 font-mono text-lg font-bold tabular-nums text-primary">
+                  {formatRupiah(homeBudgetSnapshot.usedActual)}
+                </p>
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Sisa Anggaran
+                </p>
+                <p className={`mt-1 font-mono text-lg font-bold tabular-nums ${
+                  homeBudgetSnapshot.remaining < 0 ? "text-destructive" : "text-foreground"
+                }`}>
+                  {formatRupiah(homeBudgetSnapshot.remaining)}
+                </p>
+              </div>
+            </div>
+            <div className="mt-4">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-medium text-muted-foreground">
+                  Serapan dari {homeBudgetSnapshot.activeCount} budget aktif
+                </span>
+                <span className="font-mono font-bold text-primary tabular-nums">
+                  {homeBudgetSnapshot.absorption.toFixed(1)}%
+                </span>
+              </div>
+              <div className="mt-2 h-2 rounded-full bg-secondary">
+                <div
+                  className={`h-2 rounded-full ${
+                    homeBudgetSnapshot.absorption > 100
+                      ? "bg-destructive"
+                      : homeBudgetSnapshot.absorption > 80
+                        ? "bg-amber-500"
+                        : "bg-primary"
+                  }`}
+                  style={{ width: `${Math.min(homeBudgetSnapshot.absorption, 100)}%` }}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold text-foreground">Draft Perlu Diaktifkan</p>
+              <Badge className="border border-amber-200 bg-amber-50 text-[10px] text-amber-700">
+                {homeBudgetSnapshot.draftBudgets.length} draft
+              </Badge>
+            </div>
+            {homeBudgetSnapshot.draftBudgets.length === 0 ? (
+              <p className="mt-4 text-sm text-muted-foreground">
+                Tidak ada draft budget pada filter ini.
+              </p>
+            ) : (
+              <div className="mt-3 space-y-2">
+                {homeBudgetSnapshot.draftBudgets.map((budget) => (
+                  <div
+                    key={budget.id}
+                    className="flex items-center justify-between gap-3 rounded-lg border border-border bg-secondary/30 px-3 py-2"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-foreground">{budget.name}</p>
+                      <p className="truncate text-[11px] text-muted-foreground">{budget.projectName}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab("budgets")}
+                      className="shrink-0 text-xs font-medium text-primary hover:underline"
+                    >
+                      Buka
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* 3. Responsive Tab Navigation with ARIA semantics and keyboard nav */}
+      <div className="relative">
+        {/* Left gradient indicator (mobile scroll) */}
+        {showLeftGradient && (
+          <div
+            className="pointer-events-none absolute left-0 top-0 bottom-0 z-10 w-8 bg-gradient-to-r from-background to-transparent md:hidden"
+            aria-hidden="true"
+          />
+        )}
+        {/* Right gradient indicator (mobile scroll) */}
+        {showRightGradient && (
+          <div
+            className="pointer-events-none absolute right-0 top-0 bottom-0 z-10 w-8 bg-gradient-to-l from-background to-transparent md:hidden"
+            aria-hidden="true"
+          />
+        )}
+
+        <div
+          ref={tabListRef}
+          role="tablist"
+          aria-label="Tab navigasi keuangan"
+          aria-orientation="horizontal"
+          className="flex gap-1 overflow-x-auto border-b border-border/80 px-1 scrollbar-none md:overflow-x-visible"
+          onKeyDown={(e) => {
+            const currentIndex = financeTabs.findIndex((t) => t.key === activeTab);
+            let nextIndex = currentIndex;
+            if (e.key === "ArrowRight") {
+              e.preventDefault();
+              nextIndex = (currentIndex + 1) % financeTabs.length;
+            } else if (e.key === "ArrowLeft") {
+              e.preventDefault();
+              nextIndex = (currentIndex - 1 + financeTabs.length) % financeTabs.length;
+            } else if (e.key === "Home") {
+              e.preventDefault();
+              nextIndex = 0;
+            } else if (e.key === "End") {
+              e.preventDefault();
+              nextIndex = financeTabs.length - 1;
+            } else {
+              return;
+            }
+            setActiveTab(financeTabs[nextIndex].key);
+            // Focus the new tab button
+            const tabEl = document.getElementById(`finance-tab-${financeTabs[nextIndex].key}`);
+            tabEl?.focus();
+          }}
+        >
+          {financeTabs.map((tab) => {
+            const isActive = activeTab === tab.key;
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                role="tab"
+                id={`finance-tab-${tab.key}`}
+                aria-selected={isActive}
+                aria-controls={`finance-panel-${tab.key}`}
+                tabIndex={isActive ? 0 : -1}
+                onClick={() => setActiveTab(tab.key)}
+                className={`relative flex min-h-[44px] items-center gap-2 whitespace-nowrap px-4 py-3 text-sm font-semibold transition-colors duration-150 min-w-max focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
+                  isActive
+                    ? "text-primary"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
+                }`}
+              >
+                <Icon className="h-4 w-4 shrink-0" />
+                <span>{tab.label}</span>
+                {tab.key === "approvals" && pendingApprovals.length > 0 && (
+                  <Badge
+                    className="ml-1.5 bg-destructive hover:bg-destructive text-destructive-foreground rounded-full px-1.5 py-0 text-[10px]"
+                    aria-label={`${pendingApprovals.length} pengajuan menunggu persetujuan`}
+                    title={`${pendingApprovals.length} pengajuan menunggu persetujuan`}
+                  >
+                    {pendingApprovals.length}
+                  </Badge>
+                )}
+                {/* Centered active indicator keeps the baseline visually clean. */}
+                {isActive && (
+                  <span
+                    className="pointer-events-none absolute inset-x-1/2 bottom-0 h-[3px] w-8 -translate-x-1/2 rounded-full bg-primary"
+                    aria-hidden="true"
+                  />
+                )}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* 4. Tab Panels Layouts */}
@@ -676,6 +1308,8 @@ export default function FinanceShell({
           initialPayments={initialPayments}
           selectedProjectId={selectedProjectId}
           searchQuery={searchQuery}
+          periodStart={periodStart}
+          periodEnd={periodEnd}
         />
       )}
 
@@ -703,6 +1337,7 @@ export default function FinanceShell({
           errorMsg={errorMsg}
           isSubmitting={isSubmitting}
           isSuperAdmin={isSuperAdmin}
+          canRecordPayment={canRecordPayment}
           onCreatePaymentSubmit={handleCreatePaymentSubmit}
           onVerifyPaymentSubmit={handleVerifyPaymentSubmit}
           onDeletePaymentSubmit={handleDeletePaymentSubmit}
@@ -725,14 +1360,18 @@ export default function FinanceShell({
 
       {activeTab === "approvals" && (
         <ApprovalsTab
-          pendingApprovals={pendingApprovals}
+          allExpenseTransactions={allExpenseTransactions}
           selectedExpense={selectedExpense}
-          setSelectedExpense={(expense: any) => setSelectedExpense(expense)}
+          setSelectedExpense={(expense) => setSelectedExpense(expense)}
           approvalNotes={approvalNotes}
           setApprovalNotes={setApprovalNotes}
           errorMsg={errorMsg}
           isSubmitting={isSubmitting}
           onExpenseApprovalSubmit={handleExpenseApprovalSubmit}
+          canApprove={canApproveExpense}
+          budgets={initialBudgets}
+          budgetLines={initialBudgetLines ?? []}
+          budgetActualUsage={initialBudgetActualUsage ?? []}
         />
       )}
 
@@ -741,6 +1380,8 @@ export default function FinanceShell({
           projects={projects}
           categories={categories}
           filteredBudgets={filteredBudgets}
+          budgetLines={initialBudgetLines ?? []}
+          budgetActualUsage={initialBudgetActualUsage ?? []}
           budgetForm={budgetForm}
           setBudgetForm={setBudgetForm}
           budgetOpen={budgetOpen}
@@ -748,20 +1389,39 @@ export default function FinanceShell({
           errorMsg={errorMsg}
           isSubmitting={isSubmitting}
           onCreateBudgetSubmit={handleCreateBudgetSubmit}
+          onActivateBudget={handleActivateBudget}
+          onUpdateDraftBudget={handleUpdateDraftBudget}
+          onDeleteDraftBudget={handleDeleteDraftBudget}
+          activatingBudgetId={activatingBudgetId}
+          updatingBudgetId={updatingBudgetId}
+          deletingBudgetId={deletingBudgetId}
+          periodStart={periodStart}
+          periodEnd={periodEnd}
         />
       )}
 
       {activeTab === "reports" && (
         <ReportsTab
-          totalIncomeVal={totalIncomeVal}
-          totalExpenseVal={totalExpenseVal}
-          netBalanceVal={netBalanceVal}
-          monthlyData={monthlyData}
+          transactions={initialTransactions}
+          invoices={initialInvoices}
+          budgets={initialBudgets}
+          budgetLines={initialBudgetLines ?? []}
+          budgetActualUsage={initialBudgetActualUsage ?? []}
+          accounts={accounts}
+          projects={projects}
         />
       )}
 
       </div>
     </div>
+    <CreateInvoiceDialog
+      open={invoiceDialogOpen}
+      onOpenChange={setInvoiceDialogOpen}
+      projects={projects}
+      units={units}
+      customers={customers}
+      onSuccess={() => router.refresh()}
+    />
     </>
   );
 }

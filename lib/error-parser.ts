@@ -66,10 +66,18 @@ export function parseDbError(error: Error): string | null {
   return null;
 }
 
-export function parseServerError(err: unknown): string {
-  if (!(err instanceof Error)) return dict["err.unknown"];
+export function parseServerError(err: unknown, fallback = dict["err.processing"]): string {
+  if (!(err instanceof Error)) return fallback || dict["err.unknown"];
 
   const msg = err.message;
+
+  if (
+    msg.includes("Failed query:") ||
+    msg.includes("\nparams:") ||
+    msg.includes("DrizzleQueryError")
+  ) {
+    return fallback || "Terjadi kendala saat memproses data. Silakan coba lagi.";
+  }
 
   // Try parseDbError first for consistent handling
   const dbError = parseDbError(err);
@@ -89,5 +97,5 @@ export function parseServerError(err: unknown): string {
   // Common NEXT errors
   if (msg.includes("NEXT_REDIRECT")) return dict["err.redirect"];
 
-  return msg || dict["err.processing"];
+  return msg || fallback || dict["err.processing"];
 }

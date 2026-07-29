@@ -9,104 +9,31 @@ import { getAuditLogsPaginated } from "@/server/actions/audit";
 import type { AuditLogItem } from "@/server/actions/audit";
 import { useI18n } from "@/lib/i18n";
 import { Translate } from "@/components/translate";
+import {
+  getAuditActionLabel as getCentralAuditActionLabel,
+  getAuditEntityTypeLabel as getCentralAuditEntityTypeLabel,
+  getAuditModuleLabel as getCentralAuditModuleLabel,
+  getAuditStatusLabel,
+} from "@/lib/label-helpers";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 /** Mapping action code → human-readable Indonesian label */
-const ACTION_LABELS: Record<string, string> = {
-  create: "Buat Baru",
-  update: "Perbarui",
-  delete: "Hapus",
-  approve: "Setujui",
-  reject: "Tolak",
-  login: "Masuk",
-  logout: "Keluar",
-  cancel: "Batalkan",
-  bulk_delete: "Hapus Massal",
-  update_access: "Ubah Hak Akses",
-  kpr_realization: "Realisasi KPR",
-  upgrade_to_akad: "Upgrade ke Akad",
-  blocked_transition: "Transisi Diblokir",
-  cancelBooking_blocked_paid_invoice: "Batal Booking Diblokir (Invoice Lunas)",
-  cancelBooking_blocked_verified_payment: "Batal Booking Diblokir (Pembayaran Terverifikasi)",
-  completeConstruction_blocked_manual_ready_stock: "Selesai Bangun Diblokir (Ready Stock Manual)",
-  completeConstruction_blocked_missing_bast: "Selesai Bangun Diblokir (BAST Belum Ada)",
-  updateKprProcess_blocked_transition: "Update KPR Diblokir",
-  updateKprStatusDirect_blocked_transition: "Update Status KPR Diblokir",
-  updateUnit_blocked_edit_trans_unit: "Edit Unit Diblokir (Ada Transaksi)",
-  updateUnit_blocked_trans_status: "Ubah Status Diblokir (Ada Transaksi)",
-};
-
-/** Get human-readable action label */
-function getActionLabel(action: string): string {
-  return ACTION_LABELS[action] || humanizeKey(action);
-}
-
 /** Mapping module code → Indonesian label */
-const MODULE_LABELS: Record<string, string> = {
-  auth: "Autentikasi",
-  master: "Master Data",
-  marketing: "Pemasaran",
-  finance: "Keuangan",
-  production: "Produksi",
-  system: "Sistem",
-  access: "Hak Akses",
-  profile: "Profil",
-  employment: "Kepegawaian",
-  vendor_profile: "Profil Vendor",
-};
-
-/** Get human-readable module label */
-function getModuleLabel(module: string): string {
-  return MODULE_LABELS[module] || humanizeKey(module);
-}
-
 /** Mapping entity type code → Indonesian label */
-const ENTITY_TYPE_LABELS: Record<string, string> = {
-  bank_partner: "Bank Rekanan",
-  finance_account: "Rekening Keuangan",
-  finance_category: "Kategori Keuangan",
-  work_item: "Item Pekerjaan",
-  project: "Proyek",
-  unit: "Unit / Kavling",
-  customer: "Konsumen",
-  vendor: "Vendor",
-  lead: "Prospek",
-  booking: "Booking",
-  invoice: "Invoice",
-  payment: "Pembayaran",
-  spk: "SPK",
-  spmb: "SPMB",
-  complaint: "Komplain",
-  user: "Pengguna",
-  role: "Peran",
-  notification: "Notifikasi",
-  budget: "Anggaran",
-  siteplan: "Siteplan",
-  app_settings: "Pengaturan Sistem",
-  progress_log: "Log Progres",
-  attachment: "Lampiran",
-  material_request: "Permintaan Material",
-  material_estimation: "Estimasi Material",
-  waiting_list: "Daftar Tunggu",
-  target: "Target Penjualan",
-  permission: "Izin Akses",
-};
 
 /** Get human-readable entity type label */
-function getEntityTypeLabel(entityType: string): string {
-  return ENTITY_TYPE_LABELS[entityType] || humanizeKey(entityType);
-}
-
 /** snake_case / camelCase → Title Case */
-function humanizeKey(key: string): string {
-  return key
-    .replace(/_/g, " ")
-    .replace(/([a-z])([A-Z])/g, "$1 $2")
-    .replace(/\b\w/g, (c) => c.toUpperCase());
+/** Relative time: "2 jam lalu", "baru saja" */
+function humanizeKey(value: string): string {
+  return value
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-/** Relative time: "2 jam lalu", "baru saja" */
 function relativeTime(date: Date): string {
   const now = new Date();
   const diff = now.getTime() - date.getTime();
@@ -235,16 +162,16 @@ function DetailDrawer({ log, onClose }: { log: AuditLogItem; onClose: () => void
                 : "-"
             } />
             <InfoCard label="Pengguna" value={log.userName || "Sistem"} sub={log.userEmail || "system@internal"} />
-            <InfoCard label="Modul" value={getModuleLabel(log.module)} />
+            <InfoCard label="Modul" value={getCentralAuditModuleLabel(log.module)} />
             <InfoCard label="Alamat IP" value={log.ipAddress || "-"} />
             <InfoCard label="Endpoint" value={log.endpoint || "-"} mono />
-            <InfoCard label="Tipe Entitas" value={getEntityTypeLabel(log.entityType || "-")} />
+            <InfoCard label="Tipe Entitas" value={getCentralAuditEntityTypeLabel(log.entityType)} />
             <InfoCard label="ID Entitas" value={log.entityId || "-"} mono />
             <InfoCard label="Tingkat" value={
-              log.level === "error" ? "🔴 Kesalahan" : log.level === "info" ? "🔵 Informasi" : "🟢 Normal"
+              log.level === "error" ? "Kesalahan" : log.level === "info" ? "Informasi" : "Normal"
             } />
             <InfoCard label="Status" value={
-              `${log.responseCode || 200} — ${log.status === "success" ? "Berhasil" : log.status === "failed" ? "Gagal" : log.status || "Berhasil"}`
+              `${log.responseCode || 200} — ${getAuditStatusLabel(log.status || "success")}`
             } />
             <InfoCard label="Durasi" value={
               log.durationMs ? `${log.durationMs}ms` : "—"
@@ -255,7 +182,7 @@ function DetailDrawer({ log, onClose }: { log: AuditLogItem; onClose: () => void
           <div>
             <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Aksi</p>
             <Badge className={`${actionStyle.bg} ${actionStyle.text} ${actionStyle.border} border text-xs font-semibold px-2.5 py-1`}>
-              {getActionLabel(log.action)}
+              {getCentralAuditActionLabel(log.action)}
             </Badge>
           </div>
 
@@ -406,7 +333,7 @@ export function AuditTableClient({
 
   /** Preview text for details column */
   const getDetailPreview = (log: AuditLogItem): string => {
-    if (!log.details) return log.entityId ? `Entity: ${log.entityId}` : "—";
+    if (!log.details) return log.entityId ? `Entitas: ${log.entityId}` : "—";
     if (typeof log.details === "string") return log.details;
 
     const d = log.details as Record<string, unknown>;
@@ -503,7 +430,7 @@ export function AuditTableClient({
                     {/* Module */}
                     <TableCell>
                       <Badge variant="outline" className="bg-[#8FAF9A]/5 border-[#8FAF9A]/20 text-primary text-[10px] uppercase font-semibold font-mono tracking-wider">
-                        {getModuleLabel(log.module)}
+                        {getCentralAuditModuleLabel(log.module)}
                       </Badge>
                     </TableCell>
 
@@ -526,7 +453,7 @@ export function AuditTableClient({
                     {/* Action — color-coded */}
                     <TableCell>
                       <Badge className={`${actionStyle.bg} ${actionStyle.text} ${actionStyle.border} border text-[10px] font-semibold`}>
-                        {getActionLabel(log.action)}
+                        {getCentralAuditActionLabel(log.action)}
                       </Badge>
                     </TableCell>
 

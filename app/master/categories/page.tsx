@@ -12,6 +12,7 @@ import { Tag } from "lucide-react"
 import { SearchInput } from "@/components/ui/search-input"
 import type { FinanceCategoryInput } from "@/server/validators/master"
 import { Translate } from "@/components/translate"
+import { getTransactionTypeLabel } from "@/lib/label-helpers"
 
 const TYPE_MAP: Record<string, { labelKey: string; className: string }> = {
   income:  { labelKey: "type_income",  className: "bg-[#DDE8D8] text-[#4F6F52] border-[#4F6F52]/20" },
@@ -137,7 +138,7 @@ export default async function CategoriesPage({
                         <TableCell className="font-semibold text-[#243028] py-3">{c.name}</TableCell>
                         <TableCell className="py-3">
                           <Badge variant="outline" className={`font-semibold rounded-full px-2.5 py-0.5 text-[10px] ${st?.className}`}>
-                            <Translate namespace="category_form" translationKey={st?.labelKey as any ?? c.type} />
+                            {getTransactionTypeLabel(c.type)}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-xs text-[#66736A] py-3">

@@ -259,7 +259,7 @@ export function RevisionDialog({
           </Button>
         }
       />
-      <DialogContent className="max-w-md sm:max-w-lg">
+      <DialogContent className="w-[calc(100vw-2rem)] max-w-md sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>

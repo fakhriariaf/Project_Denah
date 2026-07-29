@@ -150,6 +150,14 @@
   @apply transition-all duration-300 hover:scale-[1.02] active:scale-[0.98];
 }
 
+@utility scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 @utility text-page-title {
   font-size: var(--font-page-title);
   font-weight: 600;

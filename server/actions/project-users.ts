@@ -5,7 +5,7 @@ import { projectUsers } from "@/db/schema/master";
 import { requireRole } from "@/server/permissions";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { writeAuditLog } from "./audit";
+import { writeAuditLog } from "@/server/services/audit.service";
 
 export async function updateUserProjectAssignments(targetUserId: string, projectIds: string[]) {
   await requireRole("Super Admin");

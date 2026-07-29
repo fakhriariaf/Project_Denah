@@ -50,6 +50,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   accounts: "Rekening Bank",
   banks: "Bank Rekanan",
   "work-items": "Item Pekerjaan",
+  "kpr-sla": "Data SLA KPR",
 };
 
 /** A segment that looks like a DB id (uuid or long/numeric) → shown as "Detail". */

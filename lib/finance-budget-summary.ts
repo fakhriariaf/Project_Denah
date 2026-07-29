@@ -131,4 +131,165 @@ export function paginateTransactions<T extends DatedTransaction>(
   return { items, totalCount, totalPages, currentPage, pageSize };
 }
 
+// ==========================================================================
+// Extended Budget Summary — Finance Home, Tab Budget, Detail Budget
+// ==========================================================================
+
+/**
+ * A budget entity with status and period information.
+ * Used by `computeFilteredBudgetTotals` to determine which budgets to include.
+ */
+export interface BudgetEntity {
+  id: string;
+  projectId: string;
+  name: string;
+  periodStart: Date;
+  periodEnd: Date;
+  totalAmount: number;
+  status: "draft" | "active" | "closed";
+}
+
+/**
+ * A budget allocation line with persisted usage (from budget_lines table).
+ */
+export interface BudgetLineDetail {
+  budgetId: string;
+  categoryId: string;
+  allocatedAmount: number;
+  usedAmount: number;
+  remainingAmount: number;
+}
+
+/**
+ * Pre-aggregated actual usage from approved expense transactions.
+ */
+export interface BudgetActualUsage {
+  budgetId: string;
+  categoryId: string;
+  actualAmount: number;
+}
+
+/**
+ * Optional filter for computing budget totals.
+ */
+export interface BudgetTotalsFilter {
+  projectId?: string | null;
+  periodStart?: Date | null;
+  periodEnd?: Date | null;
+}
+
+/**
+ * Extended budget totals result with actual vs persisted comparison.
+ */
+export interface FilteredBudgetTotals {
+  /** Sum of totalAmount for active budgets matching filter. */
+  totalAllocated: number;
+  /** Sum of budgetLines.usedAmount for matching active budgets. */
+  totalUsedPersisted: number;
+  /** Sum of budgetActualUsage.actualAmount for matching active budgets. */
+  totalUsedActual: number;
+  /** totalAllocated - totalUsedActual */
+  remaining: number;
+  /** (totalUsedActual / totalAllocated) * 100, 0 if no allocation. */
+  absorptionPercentage: number;
+  /** totalUsedActual > totalAllocated */
+  isOverBudget: boolean;
+  /** totalUsedPersisted !== totalUsedActual */
+  persistedDiffersFromActual: boolean;
+}
+
+/**
+ * Check whether two date ranges overlap (inclusive on both ends).
+ * Returns true if [aStart, aEnd] overlaps with [bStart, bEnd].
+ */
+function periodsOverlap(
+  aStart: Date,
+  aEnd: Date,
+  bStart: Date,
+  bEnd: Date,
+): boolean {
+  return aStart.getTime() <= bEnd.getTime() && bStart.getTime() <= aEnd.getTime();
+}
+
+/**
+ * Compute extended budget totals from budgets, budget lines, and actual usage.
+ *
+ * This is a PURE function — no side effects, no database queries, no mutations.
+ *
+ * Filtering logic:
+ * - Only budgets with status "active" are included.
+ * - If filter.projectId is provided and non-null, only budgets matching that projectId are included.
+ * - If filter.periodStart and/or filter.periodEnd are provided, only budgets whose
+ *   [periodStart, periodEnd] overlaps the filter range are included.
+ *   When only one bound is provided, the range is open-ended on the missing side.
+ *
+ * Computation:
+ * - totalAllocated: sum of budget.totalAmount for all matching active budgets.
+ * - totalUsedPersisted: sum of budgetLines.usedAmount for lines belonging to matching budgets.
+ * - totalUsedActual: sum of budgetActualUsage.actualAmount for records belonging to matching budgets.
+ * - remaining: totalAllocated - totalUsedActual.
+ * - absorptionPercentage: (totalUsedActual / totalAllocated) * 100, or 0 if totalAllocated is 0.
+ * - isOverBudget: totalUsedActual > totalAllocated.
+ * - persistedDiffersFromActual: totalUsedPersisted !== totalUsedActual.
+ *
+ * Requirements: 1.6, 1.7, 1.8, 9.3, 10.2
+ */
+export function computeFilteredBudgetTotals(
+  budgets: readonly BudgetEntity[],
+  budgetLines: readonly BudgetLineDetail[],
+  budgetActualUsage: readonly BudgetActualUsage[],
+  filter?: BudgetTotalsFilter | null,
+): FilteredBudgetTotals {
+  // Step 1: Filter budgets to active status only
+  let activeBudgets = budgets.filter((b) => b.status === "active");
+
+  // Step 2: Apply projectId filter if provided
+  if (filter?.projectId != null) {
+    activeBudgets = activeBudgets.filter((b) => b.projectId === filter.projectId);
+  }
+
+  // Step 3: Apply period overlap filter if provided
+  if (filter?.periodStart != null || filter?.periodEnd != null) {
+    const filterStart = filter.periodStart ?? new Date(0);
+    const filterEnd = filter.periodEnd ?? new Date(8640000000000000); // max safe date
+
+    activeBudgets = activeBudgets.filter((b) =>
+      periodsOverlap(b.periodStart, b.periodEnd, filterStart, filterEnd),
+    );
+  }
+
+  // Step 4: Collect matching budget IDs for line/usage lookup
+  const activeBudgetIds = new Set(activeBudgets.map((b) => b.id));
+
+  // Step 5: Compute totalAllocated from budget.totalAmount
+  const totalAllocated = activeBudgets.reduce((sum, b) => sum + b.totalAmount, 0);
+
+  // Step 6: Compute totalUsedPersisted from budget lines
+  const totalUsedPersisted = budgetLines
+    .filter((line) => activeBudgetIds.has(line.budgetId))
+    .reduce((sum, line) => sum + line.usedAmount, 0);
+
+  // Step 7: Compute totalUsedActual from actual usage
+  const totalUsedActual = budgetActualUsage
+    .filter((usage) => activeBudgetIds.has(usage.budgetId))
+    .reduce((sum, usage) => sum + usage.actualAmount, 0);
+
+  // Step 8: Derive computed values
+  const remaining = totalAllocated - totalUsedActual;
+  const absorptionPercentage =
+    totalAllocated === 0 ? 0 : (totalUsedActual / totalAllocated) * 100;
+  const isOverBudget = totalUsedActual > totalAllocated;
+  const persistedDiffersFromActual = totalUsedPersisted !== totalUsedActual;
+
+  return {
+    totalAllocated,
+    totalUsedPersisted,
+    totalUsedActual,
+    remaining,
+    absorptionPercentage,
+    isOverBudget,
+    persistedDiffersFromActual,
+  };
+}
+
 export default computeBudgetTotals;

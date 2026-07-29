@@ -9,7 +9,7 @@ import { hashPassword } from "better-auth/crypto";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { writeAuditLog } from "./audit";
+import { writeAuditLog } from "@/server/services/audit.service";
 
 const createUserSchema = z.object({
   name: z.string().min(2, "Nama minimal 2 karakter"),

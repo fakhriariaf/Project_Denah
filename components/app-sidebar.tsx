@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation"
 import Link from "next/link"
 import { authClient } from "@/lib/auth-client"
 import { useI18n } from "@/lib/i18n"
-import { LayoutDashboard, Users, Home, Map, CircleDollarSign, HardHat, FileText, Settings, Building2, Store, UserCog, User, Landmark, ShieldCheck, Banknote, Clock, Target, Wrench, Bell, GitCompareArrows, ChevronRight } from "lucide-react"
+import { LayoutDashboard, Users, Home, Map, CircleDollarSign, HardHat, FileText, Settings, Building2, Store, UserCog, User, Landmark, ShieldCheck, Banknote, Clock, Target, Wrench, Bell, GitCompareArrows, ChevronRight, Timer } from "lucide-react"
 import { useNotificationContext } from "@/components/providers/notification-provider"
 
 import {
@@ -47,6 +47,7 @@ const data = {
         { tKey: "nav.masterData.accounts", fallback: "Data Rekening Bank", url: "/master/accounts", icon: Landmark },
         { tKey: "nav.masterData.banks", fallback: "Data Bank Rekanan", url: "/master/banks", icon: Banknote },
         { tKey: "nav.masterData.workItems", fallback: "Data Item Pekerjaan & RAB", url: "/master/work-items", icon: Wrench },
+        { tKey: "nav.masterData.kprSla", fallback: "Data SLA KPR", url: "/master/kpr-sla", icon: Timer },
       ],
     },
     {
@@ -98,6 +99,7 @@ const rolePermissions: Record<string, string[]> = {
   "/master/accounts": ["role_super_admin", "role_admin_kantor", "role_admin_keuangan", "role_direksi"],
   "/master/banks": ["role_super_admin", "role_admin_kantor", "role_marketing_manager", "role_marketing", "role_admin_keuangan", "role_direksi"],
   "/master/work-items": ["role_super_admin", "role_admin_kantor", "role_direksi"],
+  "/master/kpr-sla": ["role_super_admin", "role_admin_kantor", "role_marketing_manager", "role_marketing", "role_direksi"],
   "/marketing/leads": ["role_super_admin", "role_admin_kantor", "role_marketing_manager", "role_marketing", "role_direksi"],
   "/marketing/waiting-list": ["role_super_admin", "role_admin_kantor", "role_marketing_manager", "role_marketing", "role_direksi"],
   "/marketing/bookings": ["role_super_admin", "role_admin_kantor", "role_marketing_manager", "role_marketing", "role_admin_keuangan", "role_direksi"],
@@ -118,6 +120,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { data: session } = authClient.useSession()
   const userRoleId = (session?.user as any)?.roleId
   const { t } = useI18n()
+
+  const translateLabel = (key: string, fallback: string) => {
+    const translated = t(key as any)
+    return !translated || translated === key ? fallback : translated
+  }
 
   const { unreadCount } = useNotificationContext()
 
@@ -220,7 +227,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               role="button"
               aria-expanded={isOpen}
             >
-              <span>{t(group.tKey as any) || group.fallback}</span>
+              <span>{translateLabel(group.tKey, group.fallback)}</span>
               <ChevronRight className={`h-3 w-3 shrink-0 transition-transform duration-200 ${isOpen ? "rotate-90" : ""}`} />
             </SidebarGroupLabel>
             <div
@@ -241,7 +248,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                           }`}
                       >
                         <item.icon className={`h-4 w-4 shrink-0 transition-transform duration-200 ${active ? "text-secondary-foreground" : "group-hover:scale-110"}`} />
-                        <span suppressHydrationWarning>{t(item.tKey as any) || item.fallback}</span>
+                        <span suppressHydrationWarning>{translateLabel(item.tKey, item.fallback)}</span>
                         {item.url === "/dashboard/notifications" && unreadCount > 0 && (
                           <span className="ml-auto inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary/70 px-1.5 text-[10px] font-bold leading-none text-primary-foreground font-mono tabular-nums shadow-sm">
                             {unreadCount}

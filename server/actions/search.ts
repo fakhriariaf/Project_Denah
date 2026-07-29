@@ -6,8 +6,21 @@ import { bookings, leads } from "@/db/schema/marketing";
 import { invoices } from "@/db/schema/finance";
 import { spks } from "@/db/schema/production";
 import { ilike, or } from "drizzle-orm";
-import { requireAnyRole } from "@/server/permissions";
+import { z } from "zod";
+import { requireAnyRole, FINANCE_MODULE_ROLES } from "@/server/permissions";
 import { applyRateLimit } from "@/server/middleware/apply-rate-limit";
+
+/** Global search keyword guard: trimmed, 2..100 chars. */
+const searchQuerySchema = z.string().trim().min(2).max(100);
+
+/**
+ * Escapes PostgreSQL LIKE/ILIKE metacharacters. Drizzle parameterises the value,
+ * so this is not SQL injection — but an unescaped `%` still widens the pattern
+ * and makes the search return unrelated rows.
+ */
+function escapeLikePattern(value: string): string {
+  return value.replace(/[\\%_]/g, (char) => `\\${char}`);
+}
 
 export interface SearchResult {
   id: string;
@@ -22,12 +35,22 @@ export interface SearchResult {
  * Returns max 5 results per category, sorted by relevance.
  */
 export async function globalSearch(query: string): Promise<SearchResult[]> {
-  const user = await requireAnyRole(["Super Admin", "Admin Kantor", "Direksi / Manager", "Marketing", "Marketing Manager", "Finance", "Pengawas Lapangan"]);
+  // P1 BUGFIX: the previous role-set contained "Finance", which is not a role that
+  // exists in `getSessionRole` — the actual finance role is "Admin Keuangan".
+  // Every Admin Keuangan account was therefore redirected to /unauthorized when
+  // using global search. Reuses FINANCE_MODULE_ROLES (identical 7-role set) so the
+  // list stays in sync; this does not widen access.
+  const user = await requireAnyRole([...FINANCE_MODULE_ROLES]);
   applyRateLimit(user.id, "search");
 
-  if (!query || query.trim().length < 2) return [];
+  // Runtime validation: short queries produce table-wide LIKE scans, long ones are
+  // pure abuse. Invalid input returns an empty result instead of throwing.
+  const parsed = searchQuerySchema.safeParse(query);
+  if (!parsed.success) return [];
 
-  const q = `%${query.trim()}%`;
+  // Escape LIKE metacharacters so a keyword such as "50%" or "INV_" matches
+  // literally instead of turning into a wildcard scan.
+  const q = `%${escapeLikePattern(parsed.data)}%`;
   const results: SearchResult[] = [];
 
   // Run all searches in parallel for performance

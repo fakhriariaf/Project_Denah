@@ -1,11 +1,7 @@
 "use server";
 
 import { db } from "@/db";
-import type { PgTransaction } from "drizzle-orm/pg-core";
-
-// Type alias for functions that accept either the db instance or a transaction
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type DbOrTx = typeof db | PgTransaction<any, any, any>;
+import type { DbOrTx } from "@/server/types";
 
 import { 
   leads, 
@@ -41,12 +37,20 @@ import {
 } from "@/server/services/booking-construction-readiness";
 import { generateInvoiceSchedule, computeInvoiceSchedule, round2, computeOutstanding, validateBookingCancellation } from "@/server/services/booking.service";
 import { requireAnyRole, getSessionRole, getUserRole } from "../permissions";
-import { eq, and, or, sql, inArray, desc, asc, sum, lte, isNotNull, ilike, count } from "drizzle-orm";
+import { eq, and, or, sql, inArray, desc, asc, sum, lte, isNotNull, isNull, ilike, count } from "drizzle-orm";
 import { calculateOffset, validatePaginationParams, type PaginatedResult } from "@/lib/pagination";
 import { revalidatePath } from "next/cache";
-import { writeAuditLog, safeWriteBlockedTransitionLog } from "./audit";
-import { createNotification, notifyUsersWithRoles } from "./notification";
+import { writeAuditLog, safeWriteBlockedTransitionLog } from "@/server/services/audit.service";
+import { createNotification, notifyUsersWithRoles } from "@/server/services/notification.service";
+import { runFollowupReminderScan } from "@/server/services/reminder.service";
 import { applyRateLimit } from "@/server/middleware/apply-rate-limit";
+import { openInitialStageVisit } from "@/server/services/kpr-sla/orchestrator";
+import { applyStageTransitionTracking } from "@/server/services/kpr-sla/orchestrator";
+import { kprStageVisits } from "@/db/schema/marketing";
+import {
+  resolveCutoverState,
+  KPR_SLA_CUTOVER_UNAVAILABLE_WRITE_MESSAGE,
+} from "@/server/services/kpr-sla/config";
 
 const KPR_PIPELINE_STATUSES = [
   "bi_checking",
@@ -73,6 +77,26 @@ function parseKprPipelineStatus(status: string): KprPipelineStatus {
     throw new Error("Status KPR tidak valid.");
   }
   return status as KprPipelineStatus;
+}
+
+/**
+ * Fail-closed cutover resolver untuk mutasi yang menyentuh tracking SLA KPR.
+ *
+ * Mengembalikan nilai `cutoverActive` hanya bila status cutover benar-benar
+ * diketahui (`active`/`inactive`). Bila `app_settings` tidak dapat dibaca
+ * (`unavailable`), mutasi DIBATALKAN — TIDAK ada fallback ke legacy sync dan
+ * tidak ada penulisan status KPR sebagian tanpa tracking (Req 25.11).
+ *
+ * Helper ini HANYA boleh dipanggil pada jalur yang benar-benar membuat atau
+ * mengubah proses/tracking KPR. Booking cash/installment tidak boleh terblokir
+ * oleh gangguan pembacaan konfigurasi SLA.
+ */
+async function resolveCutoverActiveForKprWrite(): Promise<boolean> {
+  const state = await resolveCutoverState();
+  if (state.status === "unavailable") {
+    throw new Error(KPR_SLA_CUTOVER_UNAVAILABLE_WRITE_MESSAGE);
+  }
+  return state.active;
 }
 
 // --- LEADS ---
@@ -363,6 +387,19 @@ export async function createBooking(data: unknown) {
   // BUG 4 FIX: Add random suffix to prevent duplicate bookingNumber on concurrent ms-same requests
   const bookingNumber = parsed.bookingNumber || `BOOK-${Date.now().toString().slice(-8)}-${crypto.randomUUID().replace(/-/g, "").slice(0, 4).toUpperCase()}`;
 
+  // SLA cutover state — controls whether legacy fields are still synced.
+  // Pre-cutover (false): sync legacy fields. Post-cutover (true): skip legacy sync.
+  //
+  // Diresolve HANYA untuk booking skema KPR (satu-satunya jalur di fungsi ini
+  // yang membuka stage visit / tracking SLA). Booking cash & installment tidak
+  // boleh terblokir hanya karena `app_settings` tidak terbaca.
+  // Resolve dilakukan SEBELUM transaction dibuka agar pembatalan terjadi
+  // sebelum ada perubahan bisnis apa pun.
+  let cutoverActive = false;
+  if (parsed.paymentScheme === "kpr") {
+    cutoverActive = await resolveCutoverActiveForKprWrite();
+  }
+
   // Run as atomic database transaction
   const result = await db.transaction(async (tx) => {
     // 1. Verify Unit Status is Available
@@ -484,21 +521,10 @@ export async function createBooking(data: unknown) {
       changedAt: new Date(),
     }).run();
 
-    // 7. If Skema KPR, initialize KPR Process with 5-day SLA
+    // 7. If Skema KPR, initialize KPR Process and open initial SLA stage visit
     if (parsed.paymentScheme === "kpr") {
       const kprId = crypto.randomUUID();
       const now = new Date();
-      
-      // Calculate 5 working/business days (skipping Saturday and Sunday)
-      const deadline = new Date(now.getTime());
-      let addedDays = 0;
-      while (addedDays < 5) {
-        deadline.setDate(deadline.getDate() + 1);
-        const day = deadline.getDay();
-        if (day !== 0 && day !== 6) { // 0 = Sunday, 6 = Saturday
-          addedDays++;
-        }
-      }
       
       await tx.insert(kprProcesses).values({
         id: kprId,
@@ -507,10 +533,21 @@ export async function createBooking(data: unknown) {
         biCheckStatus: "pending",
         documentStatus: "incomplete",
         slaStartAt: now,
-        slaDeadlineAt: deadline,
+        slaDeadlineAt: now, // Will be overwritten by openInitialStageVisit legacy sync
         createdAt: now,
         updatedAt: now,
       }).run();
+
+      // Open initial stage visit atomically (Req 6.5, 6.6).
+      // If this fails, the entire transaction rolls back — KPR is not created
+      // without a valid SLA snapshot.
+      await openInitialStageVisit(tx as unknown as DbOrTx, {
+        kprProcessId: kprId,
+        projectId: parsed.projectId,
+        enteredAt: now,
+        actorId: user.id,
+        syncLegacy: !cutoverActive,
+      });
     }
 
     // 8. Auto-generate invoice schedule (BF, DP, and installments if applicable)
@@ -553,6 +590,12 @@ export async function updateBooking(id: string, data: unknown) {
   const user = await requireAnyRole(["Super Admin", "Admin Kantor", "Marketing", "Marketing Manager"]);
   applyRateLimit(user.id);
   const parsed = bookingUpdateSchema.parse(data);
+
+  // Catatan: status cutover SLA diresolve di dalam transaction, tepat pada
+  // branch non-KPR → KPR (satu-satunya jalur di fungsi ini yang membuka stage
+  // visit baru), sebelum perubahan bisnis apa pun pada branch tersebut.
+  // Branch KPR → non-KPR (hanya menghapus) dan edit booking cash/installment
+  // TIDAK memanggilnya, sehingga tidak terblokir oleh gangguan baca konfigurasi.
 
   // Run as atomic database transaction
   const result = await db.transaction(async (tx) => {
@@ -601,6 +644,13 @@ export async function updateBooking(id: string, data: unknown) {
       const kpr = await tx.select().from(kprProcesses).where(eq(kprProcesses.bookingId, id)).get();
       if (kpr) {
         await tx.delete(bankSubmissions).where(eq(bankSubmissions.kprProcessId, kpr.id)).run();
+        // Hapus tracking SLA secara eksplisit sebelum menghapus KPR process.
+        // FK `kpr_stage_visits.kpr_process_id` sudah ON DELETE CASCADE, jadi ini
+        // BUKAN untuk mencegah orphan — cascade sudah menjaminnya. Penghapusan
+        // eksplisit dipertahankan agar lifecycle tracking terlihat jelas di kode
+        // dan tidak bergantung pada perilaku DB yang implisit. Keduanya berada
+        // dalam transaksi yang sama sehingga atomik.
+        await tx.delete(kprStageVisits).where(eq(kprStageVisits.kprProcessId, kpr.id)).run();
         await tx.delete(kprProcesses).where(eq(kprProcesses.bookingId, id)).run();
       }
       
@@ -614,19 +664,12 @@ export async function updateBooking(id: string, data: unknown) {
     else if (existingBooking.paymentScheme !== "kpr" && parsed.paymentScheme === "kpr") {
       const existingKpr = await tx.select().from(kprProcesses).where(eq(kprProcesses.bookingId, id)).get();
       if (!existingKpr) {
+        // Fail-closed: bila status cutover tidak terbaca, batalkan SEBELUM ada
+        // penulisan bisnis pada branch ini (throw → rollback transaction).
+        const cutoverActive = await resolveCutoverActiveForKprWrite();
+
         const kprId = crypto.randomUUID();
         const now = new Date();
-        
-        // Calculate 5 working/business days (skipping Saturday and Sunday)
-        const deadline = new Date(now.getTime());
-        let addedDays = 0;
-        while (addedDays < 5) {
-          deadline.setDate(deadline.getDate() + 1);
-          const day = deadline.getDay();
-          if (day !== 0 && day !== 6) { // 0 = Sunday, 6 = Saturday
-            addedDays++;
-          }
-        }
         
         await tx.insert(kprProcesses).values({
           id: kprId,
@@ -635,10 +678,21 @@ export async function updateBooking(id: string, data: unknown) {
           biCheckStatus: "pending",
           documentStatus: "incomplete",
           slaStartAt: now,
-          slaDeadlineAt: deadline,
+          slaDeadlineAt: now, // Will be overwritten by openInitialStageVisit legacy sync
           createdAt: now,
           updatedAt: now,
         }).run();
+
+        // Open initial stage visit atomically (Req 6.5, 6.6).
+        // If this fails, the entire transaction rolls back — payment scheme
+        // change and KPR creation are not persisted without a valid SLA snapshot.
+        await openInitialStageVisit(tx as unknown as DbOrTx, {
+          kprProcessId: kprId,
+          projectId: existingBooking.projectId,
+          enteredAt: now,
+          actorId: user.id,
+          syncLegacy: !cutoverActive,
+        });
       }
       
       // Update unit status to booking
@@ -1148,6 +1202,10 @@ export async function updateKprProcess(id: string, data: unknown) {
   let bookingProjectId = "";
   let bookingIdToTransition = "";
 
+  // SLA cutover state — controls whether legacy fields are still synced.
+  // Fail-closed: status `unavailable` membatalkan mutasi sebelum transaction.
+  const cutoverActive = await resolveCutoverActiveForKprWrite();
+
   await db.transaction(async (tx) => {
     let derivedDocumentStatus: "complete" | "incomplete" = "incomplete";
     // Call KPR State Transition validator first, logging blocked attempts
@@ -1291,6 +1349,22 @@ export async function updateKprProcess(id: string, data: unknown) {
       }
     }
 
+    // ── SLA Tracking (Req 7.1, 7.2, 7.3, 7.4) ──
+    try {
+      await applyStageTransitionTracking(tx, {
+        kprProcessId: id,
+        projectId: bookingProjectId,
+        fromStatus: kpr.status,
+        toStatus: parsed.status,
+        at: new Date(),
+        actorId: user.id,
+        revisionNotes: parsed.bankNotes ?? null,
+        syncLegacy: !cutoverActive,
+      });
+    } catch (err) {
+      throw new Error("Gagal mencatat tracking SLA. Perubahan status dibatalkan.");
+    }
+
     bookingIdToTransition = kpr.bookingId;
   });
 
@@ -1329,6 +1403,10 @@ export async function updateKprStatusDirect(id: string, newStatus: string, revis
   
   let bookingProjectId = "";
   let bookingIdToTransition = "";
+
+  // SLA cutover state — controls whether legacy fields are still synced.
+  // Fail-closed: status `unavailable` membatalkan mutasi sebelum transaction.
+  const cutoverActive = await resolveCutoverActiveForKprWrite();
 
   await db.transaction(async (tx) => {
     // Call KPR State Transition validator first, logging blocked attempts
@@ -1461,6 +1539,22 @@ export async function updateKprStatusDirect(id: string, newStatus: string, revis
           changedAt: new Date(),
         }).run();
       }
+    }
+
+    // ── SLA Tracking (Req 7.1, 7.2, 9.3, 9.4) ──
+    try {
+      await applyStageTransitionTracking(tx, {
+        kprProcessId: id,
+        projectId: bookingProjectId,
+        fromStatus: kpr.status,
+        toStatus: parsedStatus,
+        at: new Date(),
+        actorId: user.id,
+        revisionNotes: revisionNotes ?? null,
+        syncLegacy: !cutoverActive,
+      });
+    } catch (err) {
+      throw new Error("Gagal mencatat tracking SLA. Perubahan status dibatalkan.");
     }
 
     bookingIdToTransition = kpr.bookingId;
@@ -2104,8 +2198,60 @@ export async function uploadPaymentProof(
     details: { bookingId, fileName: data.fileName, paymentType },
   });
 
-  // If there is a valid target invoice, create a payment record linked to that invoice
+  // If there is a valid target invoice, attach the proof to its single pending
+  // payment without proof when available. This closes the manual-payment →
+  // booking-proof flow without creating a duplicate PAY-AUTO record.
   if (targetInvoice) {
+    // Serialize proof attachment/payment creation per invoice. This prevents two
+    // concurrent uploads from both deciding that no reusable pending payment exists.
+    await tx.execute(sql`SELECT id FROM invoices WHERE id = ${targetInvoice.id} FOR UPDATE`);
+
+    const reusablePendingPayments = await tx
+      .select({
+        id: payments.id,
+        paymentNumber: payments.paymentNumber,
+        amount: payments.amount,
+      })
+      .from(payments)
+      .where(
+        and(
+          eq(payments.invoiceId, targetInvoice.id),
+          eq(payments.status, "pending"),
+          isNull(payments.proofAttachmentId)
+        )
+      )
+      .orderBy(desc(payments.createdAt), asc(payments.id))
+      .limit(2);
+
+    if (reusablePendingPayments.length > 1) {
+      throw new Error(
+        "Terdapat lebih dari satu pembayaran menunggu verifikasi tanpa bukti untuk invoice ini. Pilih pembayaran yang tepat dari detail booking terlebih dahulu."
+      );
+    }
+
+    const reusablePayment = reusablePendingPayments[0];
+    if (reusablePayment) {
+      await tx
+        .update(payments)
+        .set({
+          proofAttachmentId: attachmentId,
+          // Menyimpan pengunggah bukti aktual mempertahankan self-verify guard.
+          uploadedBy: user.id,
+        })
+        .where(eq(payments.id, reusablePayment.id));
+
+      await notifyUsersWithRoles({
+        roleNames: ["Admin Keuangan", "Super Admin"],
+        type: "approval_pending",
+        title: "Verifikasi Pembayaran Baru",
+        message: `Pembayaran ${reusablePayment.paymentNumber} senilai Rp ${Number(reusablePayment.amount).toLocaleString("id-ID")} dari konsumen memerlukan verifikasi keuangan.`,
+        entityId: reusablePayment.id,
+        entityType: "payment",
+      });
+
+      return;
+    }
+
     // ── Req 2.11: Outstanding guard — validate payment amount does not exceed outstanding ──
     const [sumResult] = await tx
       .select({ total: sum(payments.amount) })
@@ -2233,7 +2379,7 @@ export async function attachExistingPaymentProof(
 
     await tx
       .update(payments)
-      .set({ proofAttachmentId: attachmentId })
+      .set({ proofAttachmentId: attachmentId, uploadedBy: user.id })
       .where(eq(payments.id, paymentId));
   });
 
@@ -2767,83 +2913,17 @@ export async function deleteCustomerDocument(docId: string) {
   return { success: true };
 }
 
+/**
+ * Manual trigger for the overdue follow-up reminder scan (Settings page button).
+ *
+ * RBAC hardening (P0): previously had NO guard at all while living in a
+ * "use server" module, so an anonymous caller could trigger repeated full-table
+ * scans plus bulk notification inserts. Restricted to marketing-supervisory
+ * roles. The scan itself lives in an internal service.
+ */
 export async function checkFollowupReminders() {
-  const now = new Date();
-  
-  const overdueFollowups = await db
-    .select({
-      id: customerFollowups.id,
-      nextFollowupAt: customerFollowups.nextFollowupAt,
-      customerId: customerFollowups.customerId,
-      leadId: customerFollowups.leadId,
-      createdBy: customerFollowups.createdBy,
-      customerName: customers.name,
-      leadName: leads.name,
-      customerAssignedMkt: customers.assignedMarketingId,
-      leadAssignedMkt: leads.assignedMarketingId,
-    })
-    .from(customerFollowups)
-    .leftJoin(customers, eq(customerFollowups.customerId, customers.id))
-    .leftJoin(leads, eq(customerFollowups.leadId, leads.id))
-    .where(
-      and(
-        isNotNull(customerFollowups.nextFollowupAt),
-        lte(customerFollowups.nextFollowupAt, now)
-      )
-    );
-
-  if (overdueFollowups.length === 0) {
-    return { success: true, notifiedCount: 0 };
-  }
-
-  const followupIds = overdueFollowups.map(item => item.id);
-
-  // Check which notifications already exist in a single batch query
-  const existingNotifications = await db
-    .select({ entityId: notifications.entityId })
-    .from(notifications)
-    .where(
-      and(
-        inArray(notifications.entityId, followupIds),
-        eq(notifications.entityType, "followup_reminder")
-      )
-    );
-
-  const existingEntityIds = new Set(
-    existingNotifications
-      .map(n => n.entityId)
-      .filter((id): id is string => id !== null)
-  );
-
-  const batchValues: typeof notifications.$inferInsert[] = [];
-
-  for (const item of overdueFollowups) {
-    if (existingEntityIds.has(item.id)) continue;
-
-    const targetUserId = item.customerAssignedMkt || item.leadAssignedMkt || item.createdBy;
-    if (!targetUserId) continue;
-
-    const name = item.customerName || item.leadName || "Konsumen";
-    const typeLabel = item.customerId ? "konsumen" : "prospek/lead";
-
-    batchValues.push({
-      id: crypto.randomUUID(),
-      userId: targetUserId,
-      type: "info",
-      title: "Jadwal Follow-up Terlewat",
-      message: `Jadwal follow-up berikutnya untuk ${typeLabel} "${name}" seharusnya pada ${new Date(item.nextFollowupAt!).toLocaleDateString("id-ID")}. Silakan lakukan tindakan.`,
-      entityId: item.id,
-      entityType: "followup_reminder",
-      isRead: false,
-      createdAt: new Date(),
-    });
-  }
-
-  if (batchValues.length > 0) {
-    await db.insert(notifications).values(batchValues);
-  }
-
-  return { success: true, notifiedCount: batchValues.length };
+  await requireAnyRole(["Super Admin", "Admin Kantor", "Marketing Manager"]);
+  return runFollowupReminderScan();
 }
 
 export async function deleteBookingAttachment(attachmentId: string) {
@@ -3134,6 +3214,10 @@ export async function realizeKprFunds(data: unknown) {
   let oldKprStatus = "";
   let oldUnitStatus = "";
 
+  // SLA cutover state — controls whether legacy fields are still synced.
+  // Fail-closed: status `unavailable` membatalkan realisasi sebelum transaction.
+  const cutoverActive = await resolveCutoverActiveForKprWrite();
+
   // 5. Synchronous Transaction Atomic
   await db.transaction(async (tx) => {
     // 5.1. Get & Validate KPR status
@@ -3280,6 +3364,21 @@ export async function realizeKprFunds(data: unknown) {
       attachmentId: parsed.realizedAttachmentId,
       createdBy: activeUser.id,
     }).run();
+
+    // 5.9. SLA Tracking: akad → realisasi (Req 9.4, 9.6, 9.7)
+    try {
+      await applyStageTransitionTracking(tx, {
+        kprProcessId: parsed.kprProcessId,
+        projectId: booking.projectId,
+        fromStatus: "akad",
+        toStatus: "realisasi",
+        at: new Date(),
+        actorId: activeUser.id,
+        syncLegacy: !cutoverActive,
+      });
+    } catch (err) {
+      throw new Error("Gagal mencatat tracking SLA. Perubahan status dibatalkan.");
+    }
   });
 
   // 6. Audit Log

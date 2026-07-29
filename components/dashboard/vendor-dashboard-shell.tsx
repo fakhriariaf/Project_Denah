@@ -56,7 +56,7 @@ import {
   getSpkDetails 
 } from "@/server/actions/production";
 import { useRouter } from "next/navigation";
-import { getSpkStatusLabel, getComplaintStatusLabel } from "@/lib/label-helpers";
+import { getComplaintCategoryLabel, getComplaintStatusLabel, getSpkStatusLabel } from "@/lib/label-helpers";
 
 interface VendorDashboardShellProps {
   data: {
@@ -406,7 +406,7 @@ export function VendorDashboardShell({ data, userName }: VendorDashboardShellPro
       case "cancelled":
         return <Badge variant="outline" className="text-gray-500 border-gray-300">Batal</Badge>;
       default:
-        return <Badge variant="outline">{status}</Badge>;
+        return <Badge variant="outline">{getSpkStatusLabel(status)}</Badge>;
     }
   };
 
@@ -687,7 +687,7 @@ export function VendorDashboardShell({ data, userName }: VendorDashboardShellPro
                             </div>
                             <div>
                               <h5 className="text-xs font-bold text-[#2C3E2D]">
-                                Kavling {c.unitCode} &bull; <span className="text-primary">{c.category === "quality" ? "Kualitas" : c.category === "delay" ? "Keterlambatan" : c.category === "document" ? "Dokumen" : c.category === "payment" ? "Keuangan" : "Lainnya"}</span>
+                                Kavling {c.unitCode} &bull; <span className="text-primary">{getComplaintCategoryLabel(c.category)}</span>
                               </h5>
                               <p className="text-xs text-[#5C6E5D] leading-relaxed pt-0.5">{c.description}</p>
                             </div>

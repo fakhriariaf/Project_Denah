@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { invoices, payments } from "@/db/schema/finance";
+import { invoices, payments, transactions } from "@/db/schema/finance";
 import { projects, units, customers } from "@/db/schema/master";
 import { bookings } from "@/db/schema/marketing";
 import { attachments } from "@/db/schema/system";
@@ -12,9 +12,9 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
-  CardDescription,
 } from "@/components/ui/card";
 import {
   Table,
@@ -24,10 +24,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { PageHeader } from "@/components/ui/page-header";
 import {
   FileText,
-  ArrowLeft,
   Printer,
   Calendar,
   Building2,
@@ -36,7 +34,8 @@ import {
   Hash,
   Receipt,
   ClipboardCheck,
-  History,
+  Ticket,
+  ExternalLink,
 } from "lucide-react";
 import { formatRupiah, formatDate } from "@/lib/format-utils";
 import {
@@ -45,37 +44,47 @@ import {
   getPaymentStatusLabel,
   invoiceScheduleLabel,
 } from "@/lib/label-helpers";
-import { computeInvoicePaymentSummary } from "@/lib/finance-invoice-summary";
+import {
+  computeInvoicePaymentSummary,
+  getInvoiceDocumentContext,
+} from "@/lib/finance-invoice-summary";
+import {
+  FinanceDetailLayout,
+  FinanceDetailGrid,
+  FinanceDetailField,
+} from "@/components/finance/finance-detail-layout";
 import { FinanceTimeline } from "@/components/finance/finance-timeline";
 import { FinanceDocLink } from "@/components/finance/finance-doc-link";
 
 export const revalidate = 0;
 
+/** Invoice status badge via the centralized Bahasa Indonesia label helper (Req 3.1, 14.5). */
 function getStatusBadge(status: string) {
   const label = getInvoiceStatusLabel(status);
   switch (status) {
     case "paid":
-      return <Badge className="bg-green-100 text-green-800 border-green-300">{label}</Badge>;
+      return <Badge className="border-green-300 bg-green-100 text-green-800">{label}</Badge>;
     case "partial":
-      return <Badge className="bg-amber-100 text-amber-800 border-amber-300">{label}</Badge>;
+      return <Badge className="border-amber-300 bg-amber-100 text-amber-800">{label}</Badge>;
     case "unpaid":
-      return <Badge className="bg-red-100 text-red-800 border-red-300">{label}</Badge>;
+      return <Badge className="border-red-300 bg-red-100 text-red-800">{label}</Badge>;
     case "cancelled":
-      return <Badge className="bg-gray-100 text-gray-700 border-gray-300">{label}</Badge>;
+      return <Badge className="border-gray-300 bg-gray-100 text-gray-700">{label}</Badge>;
     default:
       return <Badge variant="outline">{label}</Badge>;
   }
 }
 
+/** Payment verification badge (Req 3.3, 14.3). */
 function getPaymentStatusBadge(status: string) {
   const label = getPaymentStatusLabel(status);
   switch (status) {
     case "verified":
-      return <Badge className="bg-green-100 text-green-800 border-green-300">{label}</Badge>;
+      return <Badge className="border-green-300 bg-green-100 text-green-800">{label}</Badge>;
     case "pending":
-      return <Badge className="bg-amber-100 text-amber-800 border-amber-300">{label}</Badge>;
+      return <Badge className="border-amber-300 bg-amber-100 text-amber-800">{label}</Badge>;
     case "rejected":
-      return <Badge className="bg-red-100 text-red-800 border-red-300">{label}</Badge>;
+      return <Badge className="border-red-300 bg-red-100 text-red-800">{label}</Badge>;
     default:
       return <Badge variant="outline">{label}</Badge>;
   }
@@ -88,16 +97,18 @@ export default async function InvoiceDetailPage({
 }) {
   const { id } = await params;
 
-  // Auth check
+  // Auth (Req 3): requireAuth redirects unauthenticated users; then gate by role.
   const activeUser = await requireAuth();
-  const { isSuperAdmin, isKeuangan, isDireksi, isAdminKantor } = await getSessionRole(activeUser.id);
+  const { isSuperAdmin, isKeuangan, isDireksi, isAdminKantor } = await getSessionRole(
+    activeUser.id,
+  );
 
   const hasAccess = isSuperAdmin || isKeuangan || isDireksi || isAdminKantor;
   if (!hasAccess) {
     redirect("/unauthorized");
   }
 
-  // Fetch invoice with relations
+  // Fetch invoice with relations.
   const [invoice] = await db
     .select({
       id: invoices.id,
@@ -132,6 +143,38 @@ export default async function InvoiceDetailPage({
     notFound();
   }
 
+  // Read-only additive verification for internal classification (Req 3.5, 2.4):
+  // an invoice is "Pengeluaran Internal" ONLY when notes = "trxId:<id>" and
+  // <id> resolves to a real EXPENSE transaction. customerId=null / type=other
+  // alone is never sufficient. This does not mutate any data.
+  const trxIdFromNotes = invoice.notes?.startsWith("trxId:")
+    ? invoice.notes.slice("trxId:".length).trim()
+    : null;
+
+  let relatedExpenseTransactionId: string | null = null;
+  if (trxIdFromNotes) {
+    const [expenseTrx] = await db
+      .select({ id: transactions.id })
+      .from(transactions)
+      .where(and(eq(transactions.id, trxIdFromNotes), eq(transactions.type, "expense")))
+      .limit(1);
+    relatedExpenseTransactionId = expenseTrx?.id ?? null;
+  }
+
+  const docContext = getInvoiceDocumentContext({
+    type: invoice.type,
+    customerId: invoice.customerId,
+    bookingId: invoice.bookingId,
+    customerName: invoice.customerName,
+    notes: invoice.notes,
+    scheduleKind: invoice.scheduleKind,
+    relatedExpenseTransactionId,
+    // The approval detail route is keyed by transactions.id (design decision #3).
+    relatedApprovalId: relatedExpenseTransactionId,
+  });
+  const isInternal = docContext.kind === "internal";
+  const relatedApprovalId = docContext.relatedApprovalId ?? null;
+
   // Older booking flows store the uploaded proof under the Booking attachment
   // rather than payments.proofAttachmentId. Reuse that same file for the
   // matching BF, DP, or Pelunasan Cash invoice detail without duplicating it.
@@ -152,14 +195,14 @@ export default async function InvoiceDetailPage({
           .where(
             and(
               eq(attachments.entityId, invoice.bookingId),
-              eq(attachments.entityType, bookingProofEntityType)
-            )
+              eq(attachments.entityType, bookingProofEntityType),
+            ),
           )
           .orderBy(desc(attachments.createdAt))
           .limit(1)
       : [];
 
-  // Fetch all payments linked to this invoice
+  // Payment history: newest → oldest (Req 3.3).
   const paymentsList = await db
     .select({
       id: payments.id,
@@ -181,206 +224,187 @@ export default async function InvoiceDetailPage({
     Boolean(bookingProof?.fileUrl) &&
     !paymentsList.some((payment) => Boolean(payment.proofFileUrl));
 
-  // Calculate totals (verified payments only; remaining balance never negative)
+  // Summary (Req 3.2): verified payments only; remaining balance never negative.
   const { totalPaid, remainingBalance } = computeInvoicePaymentSummary(
     invoice.amount,
     paymentsList,
     { invoiceStatus: invoice.status },
   );
-  const relatedApprovalId = invoice.notes?.startsWith("trxId:")
-    ? invoice.notes.slice("trxId:".length)
-    : null;
-  const isExpenseApprovalInvoice = Boolean(relatedApprovalId);
+  const progressPct =
+    invoice.amount > 0 ? Math.min(100, Math.round((totalPaid / invoice.amount) * 100)) : 0;
 
-  return (
-    <div className="space-y-6 p-6">
-      {/* Header */}
-      <PageHeader
-        title={invoice.invoiceNumber}
-        icon={<FileText className="h-6 w-6" />}
-        description={
-          <span className="flex items-center gap-2">
-            {getStatusBadge(invoice.status)}
-            {invoice.customerName && (
-              <span className="text-muted-foreground">— {invoice.customerName}</span>
-            )}
-          </span>
-        }
-        actions={
-          <div className="flex items-center gap-2">
-            <Link href="/finance?tab=invoices">
-              <Button variant="outline" size="sm" className="gap-1">
-                <ArrowLeft className="h-4 w-4" />
-                Kembali
-              </Button>
-            </Link>
-            <Link href={`/finance/invoices/${id}/print`} target="_blank">
-              <Button size="sm" className="gap-1 bg-primary hover:bg-primary/90 text-primary-foreground">
-                <Printer className="h-4 w-4" />
-                Cetak Invoice
-              </Button>
-            </Link>
-          </div>
-        }
-      />
+  const scheduleText = invoiceScheduleLabel({
+    type: invoice.type,
+    scheduleKind: invoice.scheduleKind ?? null,
+    scheduleSequence: invoice.scheduleSequence ?? null,
+    scheduleLabel: invoice.scheduleLabel ?? null,
+  });
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {/* Invoice Info Card */}
-        <Card className="lg:col-span-2 border-border">
-          <CardHeader>
-            <CardTitle className="text-lg text-foreground">Detail Invoice</CardTitle>
-            <CardDescription className="text-muted-foreground">
-              Informasi lengkap tagihan
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-3">
-                <div className="flex items-start gap-3">
-                  <Hash className="h-4 w-4 text-primary/70 mt-0.5 shrink-0" />
-                  <div>
-                    <p className="text-xs text-muted-foreground font-medium">Nomor Invoice</p>
-                    <p className="text-sm font-semibold text-foreground font-mono">{invoice.invoiceNumber}</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <Receipt className="h-4 w-4 text-primary/70 mt-0.5 shrink-0" />
-                  <div>
-                    <p className="text-xs text-muted-foreground font-medium">Jenis Tagihan</p>
-                    <p className="text-sm font-semibold text-foreground">{invoiceScheduleLabel({
-                      type: invoice.type,
-                      scheduleKind: invoice.scheduleKind ?? null,
-                      scheduleSequence: invoice.scheduleSequence ?? null,
-                      scheduleLabel: invoice.scheduleLabel ?? null,
-                    })}</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <CreditCard className="h-4 w-4 text-primary/70 mt-0.5 shrink-0" />
-                  <div>
-                    <p className="text-xs text-muted-foreground font-medium">Jumlah Tagihan</p>
-                    <p className="text-sm font-bold text-foreground font-mono tabular-nums">{formatRupiah(invoice.amount)}</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <Calendar className="h-4 w-4 text-primary/70 mt-0.5 shrink-0" />
-                  <div>
-                    <p className="text-xs text-muted-foreground font-medium">Jatuh Tempo</p>
-                    <p className="text-sm text-foreground">{formatDate(invoice.dueDate)}</p>
-                  </div>
-                </div>
-              </div>
-              <div className="space-y-3">
-                <div className="flex items-start gap-3">
-                  <Building2 className="h-4 w-4 text-primary/70 mt-0.5 shrink-0" />
-                  <div>
-                    <p className="text-xs text-muted-foreground font-medium">Proyek</p>
-                    <p className="text-sm font-semibold text-foreground">{invoice.projectName}</p>
-                  </div>
-                </div>
-                {invoice.unitCode && (
-                  <div className="flex items-start gap-3">
-                    <Building2 className="h-4 w-4 text-primary/70 mt-0.5 shrink-0" />
-                    <div>
-                      <p className="text-xs text-muted-foreground font-medium">Unit / Kavling</p>
-                      <p className="text-sm font-semibold font-mono text-foreground">{invoice.unitCode}</p>
-                    </div>
-                  </div>
-                )}
-                <div className="flex items-start gap-3">
-                  <User className="h-4 w-4 text-primary/70 mt-0.5 shrink-0" />
-                  <div>
-                    <p className="text-xs text-muted-foreground font-medium">Pelanggan</p>
-                    <p className="text-sm font-semibold text-foreground">{invoice.customerName || "—"}</p>
-                  </div>
-                </div>
-                {invoice.bookingNumber && (
-                  <div className="flex items-start gap-3">
-                    <FileText className="h-4 w-4 text-primary/70 mt-0.5 shrink-0" />
-                    <div>
-                      <p className="text-xs text-muted-foreground font-medium">No. Booking</p>
-                      <p className="text-sm font-mono text-foreground">{invoice.bookingNumber}</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-            {invoice.notes && (
-              <div className="mt-4 pt-4 border-t border-border">
-                <p className="text-xs text-muted-foreground font-medium mb-1">Catatan</p>
-                <p className="text-sm text-foreground">{invoice.notes}</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Summary Card */}
+  // -------------------------------------------------------------------------
+  // Summary cards (Req 3.2) — Total Tagihan, Sudah Dibayar, Sisa Tagihan.
+  // -------------------------------------------------------------------------
+  const summary = (
+    <div className="space-y-4">
+      <FinanceDetailGrid cols={3}>
         <Card className="border-border">
+          <CardHeader className="pb-2">
+            <CardDescription className="text-muted-foreground">Total Tagihan</CardDescription>
+            <CardTitle className="font-mono text-2xl tabular-nums text-foreground">
+              {formatRupiah(invoice.amount)}
+            </CardTitle>
+          </CardHeader>
+        </Card>
+        <Card className="border-border">
+          <CardHeader className="pb-2">
+            <CardDescription className="text-muted-foreground">Sudah Dibayar</CardDescription>
+            <CardTitle className="font-mono text-2xl tabular-nums text-green-700">
+              {formatRupiah(totalPaid)}
+            </CardTitle>
+          </CardHeader>
+        </Card>
+        <Card className="border-border">
+          <CardHeader className="pb-2">
+            <CardDescription className="text-muted-foreground">Sisa Tagihan</CardDescription>
+            <CardTitle
+              className={`font-mono text-2xl tabular-nums ${
+                remainingBalance > 0 ? "text-red-700" : "text-green-700"
+              }`}
+            >
+              {formatRupiah(remainingBalance)}
+            </CardTitle>
+          </CardHeader>
+        </Card>
+      </FinanceDetailGrid>
+
+      {/* Progress pembayaran (visual di-cap pada 100%). */}
+      <div className="space-y-1">
+        <div className="flex justify-between text-xs text-muted-foreground">
+          <span>Progress Pembayaran</span>
+          <span className="tabular-nums">{progressPct}%</span>
+        </div>
+        <div className="h-2 overflow-hidden rounded-full bg-secondary">
+          <div
+            className="h-full rounded-full bg-primary transition-all"
+            style={{ width: `${progressPct}%` }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+
+  // -------------------------------------------------------------------------
+  // Detail metadata (Req 13.1 order #3) + payment history (Req 3.3, 3.4, 3.5).
+  // Payment history is rendered inside `details` so the top-to-bottom order is:
+  // header → summary → metadata → riwayat pembayaran → dokumen terkait → timeline.
+  // -------------------------------------------------------------------------
+  const details = (
+    <div className="space-y-6">
+      {/* Internal expense context (Req 3.5): only when verified as internal. */}
+      {isInternal && (
+        <Card className="border-primary/30 bg-primary/5">
           <CardHeader>
-            <CardTitle className="text-lg text-foreground">Ringkasan</CardTitle>
+            <CardTitle className="flex items-center gap-2 text-base text-foreground">
+              <ClipboardCheck className="h-5 w-5 text-primary/70" />
+              Pengeluaran Internal
+            </CardTitle>
             <CardDescription className="text-muted-foreground">
-              Status pembayaran
+              Invoice ini merupakan dokumen pengeluaran internal yang diselesaikan melalui
+              pengajuan kas keluar, bukan pembayaran customer.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-muted-foreground">Total Tagihan</span>
-              <span className="text-sm font-bold font-mono tabular-nums text-foreground">
-                {formatRupiah(invoice.amount)}
-              </span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-muted-foreground">Sudah Dibayar</span>
-              <span className="text-sm font-bold font-mono tabular-nums text-green-700">
-                {formatRupiah(totalPaid)}
-              </span>
-            </div>
-            <div className="border-t border-border pt-3">
-              <div className="flex justify-between items-center">
-                <span className="text-sm font-semibold text-foreground">Sisa Tagihan</span>
-                <span
-                  className={`text-base font-black font-mono tabular-nums ${
-                    remainingBalance > 0 ? "text-red-700" : "text-green-700"
-                  }`}
-                >
-                  {formatRupiah(remainingBalance)}
-                </span>
-              </div>
-            </div>
-            {/* Progress bar */}
-            <div className="space-y-1">
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>Progress Pembayaran</span>
-                <span>
-                  {invoice.amount > 0
-                    ? Math.min(100, Math.round((totalPaid / invoice.amount) * 100))
-                    : 0}
-                  %
-                </span>
-              </div>
-              <div className="h-2 rounded-full bg-secondary overflow-hidden">
-                <div
-                  className="h-full rounded-full bg-primary transition-all"
-                  style={{
-                    width: `${
-                      invoice.amount > 0
-                        ? Math.min(100, Math.round((totalPaid / invoice.amount) * 100))
-                        : 0
-                    }%`,
-                  }}
-                />
-              </div>
-            </div>
-          </CardContent>
+          {relatedApprovalId && (
+            <CardContent>
+              <Link href={`/finance/approvals/${relatedApprovalId}`}>
+                <Button variant="outline" size="sm" className="gap-2">
+                  <ClipboardCheck className="h-4 w-4" />
+                  Lihat Pengajuan Kas Keluar
+                </Button>
+              </Link>
+            </CardContent>
+          )}
         </Card>
-      </div>
+      )}
 
-      {/* Payment History Table */}
+      {/* Metadata */}
+      <Card className="border-border">
+        <CardHeader>
+          <CardTitle className="text-lg text-foreground">Detail Invoice</CardTitle>
+          <CardDescription className="text-muted-foreground">
+            Informasi lengkap tagihan
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <FinanceDetailGrid cols={2}>
+            <div className="space-y-3">
+              <FinanceDetailField
+                label="Nomor Invoice"
+                icon={<Hash className="h-4 w-4" />}
+                value={invoice.invoiceNumber}
+                mono
+              />
+              <FinanceDetailField
+                label="Jenis Tagihan"
+                icon={<Receipt className="h-4 w-4" />}
+                value={scheduleText}
+              />
+              <FinanceDetailField
+                label="Jumlah Tagihan"
+                icon={<CreditCard className="h-4 w-4" />}
+                value={formatRupiah(invoice.amount)}
+                mono
+                money
+              />
+              <FinanceDetailField
+                label="Jatuh Tempo"
+                icon={<Calendar className="h-4 w-4" />}
+                value={invoice.dueDate ? formatDate(invoice.dueDate) : null}
+              />
+              <FinanceDetailField
+                label="Tanggal Dibuat"
+                icon={<Calendar className="h-4 w-4" />}
+                value={formatDate(invoice.createdAt)}
+              />
+            </div>
+            <div className="space-y-3">
+              <FinanceDetailField
+                label="Proyek"
+                icon={<Building2 className="h-4 w-4" />}
+                value={invoice.projectName}
+              />
+              <FinanceDetailField
+                label="Unit / Kavling"
+                icon={<Building2 className="h-4 w-4" />}
+                value={invoice.unitCode}
+                mono
+              />
+              <FinanceDetailField
+                label={isInternal ? "Penerima" : "Pelanggan"}
+                icon={<User className="h-4 w-4" />}
+                value={invoice.customerName}
+              />
+              <FinanceDetailField
+                label="No. Booking"
+                icon={<Ticket className="h-4 w-4" />}
+                value={invoice.bookingNumber}
+                mono
+              />
+            </div>
+          </FinanceDetailGrid>
+          {invoice.notes && (
+            <div className="mt-4 border-t border-border pt-4">
+              <p className="mb-1 text-xs font-medium text-muted-foreground">Catatan</p>
+              <p className="text-sm text-foreground">{invoice.notes}</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Riwayat Pembayaran (Req 3.3, 3.4, 3.5) */}
       <Card className="border-border">
         <CardHeader>
           <CardTitle className="text-lg text-foreground">Riwayat Pembayaran</CardTitle>
           <CardDescription className="text-muted-foreground">
-            Seluruh pembayaran yang terkait dengan invoice ini
+            Seluruh pembayaran yang terkait dengan invoice ini, terbaru ke terlama
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -398,22 +422,23 @@ export default async function InvoiceDetailPage({
                 href={bookingProof.fileUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-sm font-semibold text-primary hover:underline"
+                className="inline-flex items-center gap-1 text-sm font-semibold text-[#4F6F52] hover:text-[#3D563F] hover:underline"
               >
+                <ExternalLink className="h-4 w-4" />
                 Lihat Bukti
               </a>
             </div>
           )}
           {paymentsList.length === 0 ? (
-            isExpenseApprovalInvoice ? (
+            isInternal ? (
               <div className="rounded-md border border-dashed border-border bg-[#F7F8F3] px-4 py-8 text-center">
-                <ClipboardCheck className="h-8 w-8 mx-auto mb-3 text-primary/50" />
+                <ClipboardCheck className="mx-auto mb-3 h-8 w-8 text-primary/50" />
                 <p className="text-sm font-semibold text-foreground">
-                  Invoice ini diselesaikan melalui persetujuan kas keluar.
+                  Diselesaikan melalui persetujuan kas keluar
                 </p>
                 <p className="mx-auto mt-1 max-w-xl text-sm text-muted-foreground">
-                  Tidak ada pembayaran customer yang dicatat pada invoice ini. Status lunas
-                  mengikuti pengajuan kas keluar terkait.
+                  Tidak ada pembayaran customer yang dicatat pada invoice ini. Status
+                  pembayaran mengikuti pengajuan kas keluar terkait.
                 </p>
                 {relatedApprovalId && (
                   <Link href={`/finance/approvals/${relatedApprovalId}`}>
@@ -425,9 +450,12 @@ export default async function InvoiceDetailPage({
                 )}
               </div>
             ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                <CreditCard className="h-8 w-8 mx-auto mb-2 opacity-40" />
-                <p className="text-sm">Belum ada pembayaran customer untuk invoice ini.</p>
+              <div className="rounded-md border border-dashed border-border bg-[#F7F8F3] px-4 py-8 text-center">
+                <CreditCard className="mx-auto mb-2 h-8 w-8 text-muted-foreground/40" />
+                <p className="text-sm font-medium text-foreground">Belum ada pembayaran</p>
+                <p className="mx-auto mt-1 max-w-sm text-xs text-muted-foreground">
+                  Belum ada pembayaran customer yang tercatat untuk invoice ini.
+                </p>
               </div>
             )
           ) : (
@@ -469,12 +497,12 @@ export default async function InvoiceDetailPage({
                             href={payment.proofFileUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-primary hover:underline text-sm font-medium"
+                            className="text-sm font-medium text-[#4F6F52] hover:text-[#3D563F] hover:underline"
                           >
                             Lihat Bukti
                           </a>
                         ) : (
-                          <span className="text-muted-foreground text-sm">—</span>
+                          <span className="text-sm text-muted-foreground">{"\u2014"}</span>
                         )}
                       </TableCell>
                       <TableCell>{getPaymentStatusBadge(payment.status)}</TableCell>
@@ -486,34 +514,117 @@ export default async function InvoiceDetailPage({
           )}
         </CardContent>
       </Card>
-
-      {/* Timeline */}
-      <FinanceTimeline
-        entityType="invoice"
-        entityId={id}
-        emptyState={
-          isExpenseApprovalInvoice ? (
-            <div className="rounded-md border border-dashed border-border bg-[#F7F8F3] px-4 py-8 text-center">
-              <History className="h-8 w-8 mx-auto mb-3 text-primary/50" />
-              <p className="text-sm font-semibold text-foreground">
-                Aktivitas utama tersedia di pengajuan kas keluar.
-              </p>
-              <p className="mx-auto mt-1 max-w-xl text-sm text-muted-foreground">
-                Invoice kas keluar mengikuti timeline approval transaksi terkait, bukan
-                timeline pembayaran customer.
-              </p>
-              {relatedApprovalId && (
-                <Link href={`/finance/approvals/${relatedApprovalId}`}>
-                  <Button variant="outline" size="sm" className="mt-4 gap-2">
-                    <ClipboardCheck className="h-4 w-4" />
-                    Lihat Timeline Pengajuan
-                  </Button>
-                </Link>
-              )}
-            </div>
-          ) : undefined
-        }
-      />
     </div>
+  );
+
+  // -------------------------------------------------------------------------
+  // Dokumen Terkait (Req 3.7, 13.2, 13.3): only relations that actually exist.
+  // Routes: expense approval → /finance/approvals/<trxId> (FinanceDocLink).
+  // Booking / unit have no detail route here → monospace non-clickable text.
+  // -------------------------------------------------------------------------
+  const hasRelated =
+    Boolean(relatedApprovalId) ||
+    Boolean(invoice.bookingNumber) ||
+    Boolean(invoice.unitCode) ||
+    Boolean(invoice.customerName);
+
+  const relatedDocuments = hasRelated ? (
+    <Card className="border-border">
+      <CardContent className="pt-6">
+        <FinanceDetailGrid cols={2}>
+          <div className="space-y-3">
+            {isInternal && (
+              <FinanceDetailField
+                label="Pengajuan Kas Keluar"
+                icon={<ClipboardCheck className="h-4 w-4" />}
+              >
+                <FinanceDocLink
+                  href={relatedApprovalId ? `/finance/approvals/${relatedApprovalId}` : null}
+                >
+                  {relatedApprovalId ?? "\u2014"}
+                </FinanceDocLink>
+              </FinanceDetailField>
+            )}
+            <FinanceDetailField
+              label="No. Booking"
+              icon={<Ticket className="h-4 w-4" />}
+              value={invoice.bookingNumber}
+              mono
+            />
+          </div>
+          <div className="space-y-3">
+            <FinanceDetailField
+              label="Unit / Kavling"
+              icon={<Building2 className="h-4 w-4" />}
+              value={invoice.unitCode}
+              mono
+            />
+            <FinanceDetailField
+              label={isInternal ? "Penerima" : "Pelanggan"}
+              icon={<User className="h-4 w-4" />}
+              value={invoice.customerName}
+            />
+          </div>
+        </FinanceDetailGrid>
+      </CardContent>
+    </Card>
+  ) : null;
+
+  return (
+    <FinanceDetailLayout
+      docNumber={invoice.invoiceNumber}
+      icon={<FileText className="h-6 w-6" />}
+      statusBadge={getStatusBadge(invoice.status)}
+      projectName={invoice.projectName}
+      descriptionExtra={
+        <span className="text-muted-foreground">
+          {"\u2014"} {docContext.label}
+        </span>
+      }
+      backHref="/finance?tab=invoices"
+      headerActions={
+        <Link href={`/finance/invoices/${id}/print`} target="_blank">
+          <Button
+            size="sm"
+            className="gap-1 bg-primary text-primary-foreground hover:bg-primary/90"
+          >
+            <Printer className="h-4 w-4" />
+            Cetak Invoice
+          </Button>
+        </Link>
+      }
+      summary={summary}
+      details={details}
+      relatedDocuments={relatedDocuments}
+      relatedEmptyState="Belum ada dokumen lain yang berelasi dengan invoice ini."
+      timeline={
+        <FinanceTimeline
+          entityType="invoice"
+          entityId={id}
+          emptyState={
+            isInternal ? (
+              <div className="rounded-md border border-dashed border-border bg-[#F7F8F3] px-4 py-8 text-center">
+                <ClipboardCheck className="mx-auto mb-3 h-8 w-8 text-primary/50" />
+                <p className="text-sm font-semibold text-foreground">
+                  Aktivitas utama tersedia di pengajuan kas keluar
+                </p>
+                <p className="mx-auto mt-1 max-w-xl text-sm text-muted-foreground">
+                  Invoice pengeluaran internal mengikuti timeline approval transaksi
+                  terkait, bukan timeline pembayaran customer.
+                </p>
+                {relatedApprovalId && (
+                  <Link href={`/finance/approvals/${relatedApprovalId}`}>
+                    <Button variant="outline" size="sm" className="mt-4 gap-2">
+                      <ClipboardCheck className="h-4 w-4" />
+                      Lihat Timeline Pengajuan
+                    </Button>
+                  </Link>
+                )}
+              </div>
+            ) : undefined
+          }
+        />
+      }
+    />
   );
 }

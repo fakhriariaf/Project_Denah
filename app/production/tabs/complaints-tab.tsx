@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Plus, AlertTriangle, Eye } from "lucide-react";
 import Link from "next/link";
+import { getComplaintCategoryLabel, getComplaintStatusLabel } from "@/lib/label-helpers";
 
 interface Complaint {
   id: string;
@@ -96,7 +97,7 @@ export function ComplaintsTab({
                   <TableCell className="font-semibold text-foreground">{c.unitCode}</TableCell>
                   <TableCell>
                     <Badge variant="outline" className="text-xs border-primary/50 text-primary bg-[#8FAF9A]/5 font-semibold shadow-none">
-                      {c.category === "quality" ? t("production.cat_quality") : c.category === "delay" ? t("production.cat_delay") : c.category === "document" ? t("production.cat_document") : c.category === "payment" ? t("production.cat_payment") : t("production.cat_other")}
+                      {getComplaintCategoryLabel(c.category)}
                     </Badge>
                   </TableCell>
                   <TableCell className="font-medium text-foreground max-w-[240px] truncate">{c.description}</TableCell>
@@ -111,7 +112,7 @@ export function ComplaintsTab({
                           : "bg-amber-50 text-amber-700 border border-amber-200"
                       }`}
                     >
-                      {c.status === "resolved" ? t("production.status_done") : t("production.status_open")}
+                      {getComplaintStatusLabel(c.status)}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right">

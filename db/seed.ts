@@ -2,6 +2,7 @@ import { db } from "./index";
 import { roles } from "./schema/access";
 import { user } from "./schema/auth";
 import { financeCategories } from "./schema/master";
+import { kprSlaConfigs } from "./schema/marketing";
 import { auth } from "../server/auth";
 
 /**
@@ -42,6 +43,68 @@ export async function seedReversalCategories() {
       }
     } catch (err) {
       console.error(`Failed to seed reversal category ${cat.name}:`, err);
+    }
+  }
+}
+
+/**
+ * Seed the 5 default global KPR SLA configurations for measured stages.
+ * Each config sets the target working days for a stage at the global scope.
+ * Idempotent: skips insertion when an active global config for the same stage
+ * already exists, preserving any user-modified values.
+ *
+ * Stages seeded: bi_checking (2), pemberkasan (5), proses_bank (7),
+ * offering (3), approved (3).
+ * NOT seeded: akad, rejected, realisasi (terminal SLA stages).
+ */
+export async function seedKprSlaGlobalDefaults() {
+  const { and, eq } = await import("drizzle-orm");
+
+  const globalDefaults: Array<{
+    stage: "bi_checking" | "pemberkasan" | "proses_bank" | "offering" | "approved";
+    workingDays: number;
+  }> = [
+    { stage: "bi_checking", workingDays: 2 },
+    { stage: "pemberkasan", workingDays: 5 },
+    { stage: "proses_bank", workingDays: 7 },
+    { stage: "offering", workingDays: 3 },
+    { stage: "approved", workingDays: 3 },
+  ];
+
+  for (const config of globalDefaults) {
+    try {
+      // Check if an active global config for this stage already exists
+      const existing = await db
+        .select()
+        .from(kprSlaConfigs)
+        .where(
+          and(
+            eq(kprSlaConfigs.scope, "global"),
+            eq(kprSlaConfigs.stage, config.stage),
+            eq(kprSlaConfigs.isActive, true)
+          )
+        )
+        .limit(1);
+
+      if (existing.length === 0) {
+        await db.insert(kprSlaConfigs).values({
+          id: crypto.randomUUID(),
+          scope: "global",
+          projectId: null,
+          stage: config.stage,
+          workingDays: config.workingDays,
+          isActive: true,
+          createdBy: null,
+          updatedBy: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+        console.log(`KPR SLA global default created: ${config.stage} = ${config.workingDays} hari kerja`);
+      } else {
+        console.log(`KPR SLA global default already exists: ${config.stage} (skipped)`);
+      }
+    } catch (err) {
+      console.error(`Failed to seed KPR SLA global default for ${config.stage}:`, err);
     }
   }
 }
@@ -217,6 +280,10 @@ async function main() {
   // 5. Reversal / correction finance categories (Phase 4)
   console.log("Seeding reversal finance categories...");
   await seedReversalCategories();
+
+  // 6. KPR SLA global default configurations (5 measured stages)
+  console.log("Seeding KPR SLA global defaults...");
+  await seedKprSlaGlobalDefaults();
 
   console.log("Seeding complete.");
   process.exit(0);

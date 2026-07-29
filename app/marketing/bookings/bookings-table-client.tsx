@@ -17,6 +17,7 @@ import { useRouter } from "next/navigation";
 // Dialog imports — instantiated here in Client Component to avoid Server→Client function prop error
 import EditBookingDialog from "@/app/marketing/bookings/edit-booking-dialog";
 import CancelBookingDialog from "@/app/marketing/bookings/cancel-booking-dialog";
+import { getBookingStatusLabel, getPaymentSchemeLabel } from "@/lib/label-helpers";
 
 export interface BookingRow {
   id: string;
@@ -41,6 +42,13 @@ interface BookingsTableClientProps {
   bookings: BookingRow[];
   /** Whether user has role to perform bulk delete (Super Admin / Admin Kantor) */
   canBulkDelete: boolean;
+  /**
+   * Whether user has role to perform bulk export
+   * (Super Admin / Admin Kantor / Marketing Manager).
+   * Must mirror the `bulkExport` server guard so the button is never offered to
+   * a role the server will reject.
+   */
+  canBulkExport: boolean;
   /** Whether user can cancel bookings */
   canCancel: boolean;
   /** Session role info for action buttons */
@@ -64,12 +72,13 @@ const statusColorMap: Record<string, { bg: string; label: string }> = {
   active: { bg: "bg-emerald-50 text-emerald-700 border-emerald-200", label: "Aktif" },
   cancelled: { bg: "bg-rose-50 text-rose-700 border-rose-200", label: "Batal" },
   akad: { bg: "bg-blue-50 text-blue-700 border-blue-200", label: "Akad" },
-  completed: { bg: "bg-teal-50 text-teal-700 border-teal-200", label: "Akad Kredit" },
+  completed: { bg: "bg-teal-50 text-teal-700 border-teal-200", label: "Selesai" },
 };
 
 export function BookingsTableClient({
   bookings,
   canBulkDelete,
+  canBulkExport,
   totalFilteredItems,
   renderActions,
   canCancel,
@@ -177,7 +186,7 @@ export function BookingsTableClient({
       {/* Bulk Action Bar */}
       <BulkActionBar
         selectedCount={selectedCount}
-        onExport={handleExport}
+        onExport={canBulkExport ? handleExport : undefined}
         onDelete={canBulkDelete ? () => setShowDeleteDialog(true) : undefined}
         isProcessing={isProcessing || isPending}
         className="mb-3"
@@ -248,9 +257,7 @@ export function BookingsTableClient({
                   // `completed` berlaku untuk cash, cash bertahap, maupun KPR.
                   // Skema sudah ditampilkan di kolom sendiri, jadi jangan salah
                   // menyebut seluruh transaksi selesai sebagai Akad Kredit.
-                  const statusLabel = booking.status === "completed"
-                    ? "Selesai"
-                    : statusStyle?.label || booking.status;
+                  const statusLabel = statusStyle?.label ?? getBookingStatusLabel(booking.status);
                   const selected = isSelected(booking.id);
 
                   return (
@@ -344,13 +351,7 @@ export function BookingsTableClient({
                           variant="outline"
                           className="uppercase font-semibold text-[10px] text-muted-foreground bg-muted/30 border-border rounded-md"
                         >
-                          <Translate
-                            namespace="booking"
-                            translationKey={
-                              `scheme_${booking.paymentScheme}`
-                            }
-                            fallback={booking.paymentScheme}
-                          />
+                          {getPaymentSchemeLabel(booking.paymentScheme)}
                         </Badge>
                       </td>
                       <td className="py-4 px-6 text-center">

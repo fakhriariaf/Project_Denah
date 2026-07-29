@@ -35,6 +35,14 @@ import { cn } from "@/lib/utils";
  * - Requirement 2.13: reverse chronological order is the standard for all
  *   entity-specific finance timelines.
  *
+ * Finance UI Revamp (Req 3.6, 8.4):
+ * - Each event renders actor + timestamp + action + note/reason when present,
+ *   with the note explicitly labelled "Catatan" for clarity.
+ * - Action labels (submitted, approved, rejected, revised, resubmitted, ...)
+ *   are rendered in Bahasa Indonesia via `getActivityActionLabel`.
+ * - The empty state is explicit: a clear title plus an explanatory description
+ *   so an entity with no recorded activity is never an unexplained blank area.
+ *
  * Sage Green design system, light theme only, Bahasa Indonesia labels via
  * `lib/label-helpers.ts`, `tabular-nums` for the timestamp.
  */
@@ -58,7 +66,9 @@ export interface FinanceTimelineProps {
   className?: string;
 }
 
-const EMPTY_MESSAGE = "Data dibuat sebelum timeline finance aktif";
+const EMPTY_TITLE = "Belum ada aktivitas tercatat";
+const EMPTY_MESSAGE =
+  "Dokumen ini dibuat sebelum timeline finance aktif, sehingga riwayat aktivitasnya belum terekam.";
 
 interface TimelineEntry {
   id: string;
@@ -193,7 +203,10 @@ export async function FinanceTimeline({
           emptyState ?? (
             <div className="rounded-md border border-dashed border-border bg-[#F7F8F3] px-4 py-8 text-center">
               <History className="mx-auto mb-2 h-8 w-8 text-muted-foreground/40" />
-              <p className="text-sm text-muted-foreground">{EMPTY_MESSAGE}</p>
+              <p className="text-sm font-medium text-foreground">{EMPTY_TITLE}</p>
+              <p className="mx-auto mt-1 max-w-sm text-xs text-muted-foreground">
+                {EMPTY_MESSAGE}
+              </p>
             </div>
           )
         ) : (
@@ -223,9 +236,12 @@ export async function FinanceTimeline({
                   </time>
                 </div>
                 {entry.reason && entry.reason.trim() !== "" && (
-                  <p className="mt-1.5 rounded-md bg-[#F7F8F3] px-3 py-2 text-sm text-foreground">
-                    {entry.reason}
-                  </p>
+                  <div className="mt-1.5 rounded-md bg-[#F7F8F3] px-3 py-2">
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                      Catatan
+                    </p>
+                    <p className="mt-0.5 text-sm text-foreground">{entry.reason}</p>
+                  </div>
                 )}
               </li>
             ))}

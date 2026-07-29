@@ -1,12 +1,8 @@
 "use client";
-import { useRouter } from "next/navigation";
 
 import * as React from "react";
-import { toast } from "sonner";
-import { useI18n } from "@/lib/i18n";
-import { invoiceScheduleLabel } from "@/lib/label-helpers";
-import { FinanceDocLink } from "@/components/finance/finance-doc-link";
-import { InvoicePrintModal } from "@/components/invoice-print-modal";
+import { useSearchParams, useRouter } from "next/navigation";
+import { FileText, MoreVertical, Printer, Receipt, Eye, CheckCircle2, CircleDot, Circle, Ban, AlertTriangle } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -14,9 +10,7 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -26,15 +20,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -42,23 +27,39 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Plus,
-  FileText,
-  Eye,
-  Trash2,
-} from "lucide-react";
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
+import { FinanceDocLink } from "@/components/finance/finance-doc-link";
+import { FinanceDocumentContextBadge } from "@/components/finance/finance-document-context-badge";
+import { FinanceTableState } from "@/components/finance/finance-table-state";
+import { FinanceTableScroll } from "@/components/finance/finance-table-scroll";
 import { DataTablePagination } from "@/components/ui/data-table-pagination";
-import { createInvoice, deleteInvoice } from "@/server/actions/finance";
-import type { PaginatedResult } from "@/lib/pagination";
+import {
+  getInvoiceDocumentContext,
+  computeInvoicePaymentSummary,
+} from "@/lib/finance-invoice-summary";
+import { getInvoiceStatusLabel, getInvoiceTypeLabel } from "@/lib/label-helpers";
+import { cn } from "@/lib/utils";
 
-type InvoiceListItem = {
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+type InvoiceItem = {
   id: string;
   invoiceNumber: string;
   projectId: string;
+  unitId: string | null;
+  customerId: string | null;
+  bookingId: string | null;
   type: "booking_fee" | "dp" | "installment" | "other";
   amount: number;
   dueDate: Date | null;
   status: "unpaid" | "partial" | "paid" | "cancelled";
+  notes: string | null;
   createdAt: Date;
   projectName: string;
   customerName: string | null;
@@ -68,34 +69,25 @@ type InvoiceListItem = {
   scheduleLabel: string | null;
   bookingProofFileUrl: string | null;
   bookingProofFileName: string | null;
+  // Additive fields from Task 14.1
+  totalPaidVerified?: number;
+  remainingBalance?: number;
+  relatedExpenseTransactionId?: string | null;
+  relatedApprovalId?: string | null;
 };
 
-interface InvoicesTabProps {
+type PaymentItem = {
+  id: string;
+  invoiceId: string | null;
+  amount: number;
+  status: "pending" | "verified" | "rejected" | "voided";
+};
+
+export interface InvoicesTabProps {
   projects: Array<{ id: string; name: string; code: string }>;
   units: Array<{ id: string; code: string; projectId: string; price: number }>;
   customers: Array<{ id: string; name: string; phone: string }>;
-  initialInvoices: Array<{
-    id: string;
-    invoiceNumber: string;
-    projectId: string;
-    unitId: string | null;
-    customerId: string | null;
-    bookingId: string | null;
-    type: "booking_fee" | "dp" | "installment" | "other";
-    amount: number;
-    dueDate: Date | null;
-    status: "unpaid" | "partial" | "paid" | "cancelled";
-    notes: string | null;
-    createdAt: Date;
-    projectName: string;
-    customerName: string | null;
-    unitCode: string | null;
-    scheduleKind: string | null;
-    scheduleSequence: number | null;
-    scheduleLabel: string | null;
-    bookingProofFileUrl: string | null;
-    bookingProofFileName: string | null;
-  }>;
+  initialInvoices: InvoiceItem[];
   initialPayments: Array<{
     id: string;
     invoiceId: string | null;
@@ -119,500 +111,643 @@ interface InvoicesTabProps {
   }>;
   selectedProjectId: string;
   searchQuery: string;
+  /**
+   * Global period filter (null = Semua Periode). Applied on the invoice period
+   * basis `dueDate ?? createdAt` so the tab stays consistent with the Finance
+   * Home "Piutang Berjalan" summary and the Reports tab (Req 1.3, 1.10).
+   */
+  periodStart?: Date | null;
+  periodEnd?: Date | null;
 }
+
+// ---------------------------------------------------------------------------
+// Sub-filter definitions — Jenis chip bar + Status dropdown (Req 4.2)
+// ---------------------------------------------------------------------------
+
+type InvoiceDocumentFilter = "all" | "customer" | "internal";
+type InvoiceStatusFilter = "all" | "belum_lunas" | "lunas" | "jatuh_tempo";
+
+const DOCUMENT_FILTERS: Array<{ key: InvoiceDocumentFilter; label: string }> = [
+  { key: "all", label: "Semua" },
+  { key: "customer", label: "Customer" },
+  { key: "internal", label: "Internal" },
+];
+
+const STATUS_FILTERS: Array<{ key: InvoiceStatusFilter; label: string }> = [
+  { key: "all", label: "Semua Status" },
+  { key: "belum_lunas", label: "Belum Lunas" },
+  { key: "lunas", label: "Lunas" },
+  { key: "jatuh_tempo", label: "Jatuh Tempo" },
+];
+
+function getStatusFilterLabel(value: InvoiceStatusFilter): string {
+  return STATUS_FILTERS.find((filter) => filter.key === value)?.label ?? "Semua Status";
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Format Rupiah with tabular-nums */
+function formatRupiah(amount: number): string {
+  return `Rp\u00A0${amount.toLocaleString("id-ID")}`;
+}
+
+/** Format date to locale ID short string */
+function formatDate(date: Date | null): string {
+  if (!date) return "—";
+  return new Date(date).toLocaleDateString("id-ID", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+/** Is the invoice overdue? dueDate < today AND status is not paid/cancelled */
+function isOverdue(inv: InvoiceItem): boolean {
+  if (!inv.dueDate) return false;
+  if (inv.status === "paid" || inv.status === "cancelled") return false;
+  return new Date(inv.dueDate) < new Date();
+}
+
+/** Build a filter context description for empty state */
+function buildFilterContext(
+  documentFilter: InvoiceDocumentFilter,
+  statusFilter: InvoiceStatusFilter,
+  searchQuery: string,
+  selectedProjectId: string,
+  projects: Array<{ id: string; name: string }>,
+): string {
+  const parts: string[] = ["Invoice & Tagihan"];
+  const documentLabel = DOCUMENT_FILTERS.find((f) => f.key === documentFilter)?.label;
+  const statusLabel = STATUS_FILTERS.find((f) => f.key === statusFilter)?.label;
+  if (documentLabel && documentFilter !== "all") parts.push(documentLabel);
+  if (statusLabel && statusFilter !== "all") parts.push(statusLabel);
+  if (selectedProjectId !== "all") {
+    const proj = projects.find((p) => p.id === selectedProjectId);
+    if (proj) parts.push(proj.name);
+  }
+  if (searchQuery) parts.push(`"${searchQuery}"`);
+  return parts.join(" — ");
+}
+
+// ---------------------------------------------------------------------------
+// Status badge styles
+// ---------------------------------------------------------------------------
+
+function InvoiceStatusBadge({
+  status,
+  overdue,
+}: {
+  status: InvoiceItem["status"];
+  overdue: boolean;
+}) {
+  // Badge icons (never color-only — UX Rule: always icon + text)
+  const IconMap: Record<InvoiceItem["status"], React.ElementType> = {
+    paid: CheckCircle2,
+    partial: CircleDot,
+    unpaid: Circle,
+    cancelled: Ban,
+  };
+
+  if (overdue && status !== "paid" && status !== "cancelled") {
+    return (
+      <Badge className="bg-rose-50 text-rose-700 border border-rose-200/80 text-[10px] font-semibold">
+        <AlertTriangle className="h-3 w-3 mr-1" aria-hidden="true" />
+        Jatuh Tempo
+      </Badge>
+    );
+  }
+  const styles: Record<InvoiceItem["status"], string> = {
+    paid: "bg-emerald-50 text-emerald-700 border border-emerald-200/80",
+    partial: "bg-amber-50 text-amber-700 border border-amber-200/80",
+    unpaid: "bg-slate-50 text-slate-600 border border-slate-200/80",
+    cancelled: "bg-gray-100 text-gray-500 border border-gray-200/80",
+  };
+  const Icon = IconMap[status];
+  return (
+    <Badge className={cn("text-[10px] font-semibold", styles[status])}>
+      <Icon className="h-3 w-3 mr-1" aria-hidden="true" />
+      {getInvoiceStatusLabel(status)}
+    </Badge>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Summary Cards (Req 4.3) — 3 inline cards above table
+// ---------------------------------------------------------------------------
+
+function InvoiceSummaryCards({
+  invoices,
+}: {
+  invoices: InvoiceItem[];
+}) {
+  const totalTagihan = invoices.reduce((s, i) => s + i.amount, 0);
+  const sudahDibayar = invoices.reduce((s, i) => s + (i.totalPaidVerified ?? 0), 0);
+  const sisaTagihan = invoices.reduce(
+    (s, i) => s + Math.max(0, i.remainingBalance ?? i.amount - (i.totalPaidVerified ?? 0)),
+    0,
+  );
+  const docCount = invoices.length;
+  const pctPaid = totalTagihan > 0 ? ((sudahDibayar / totalTagihan) * 100).toFixed(1) : "0.0";
+  const pctSisa = totalTagihan > 0 ? ((sisaTagihan / totalTagihan) * 100).toFixed(1) : "0.0";
+
+  const cards = [
+    {
+      label: "Total Tagihan",
+      value: formatRupiah(totalTagihan),
+      sub: `${docCount} dokumen`,
+      color: "text-foreground",
+      accent: false,
+    },
+    {
+      label: "Sudah Dibayar",
+      value: formatRupiah(sudahDibayar),
+      sub: `${pctPaid}% dari total`,
+      color: "text-emerald-700",
+      accent: false,
+    },
+    {
+      label: "Sisa Tagihan",
+      value: formatRupiah(sisaTagihan),
+      sub: `${pctSisa}% dari total`,
+      color: sisaTagihan > 0 ? "text-rose-700" : "text-emerald-700",
+      accent: sisaTagihan > 0,
+    },
+  ];
+
+  return (
+    <div className="grid grid-cols-1 gap-3 px-4 pt-4 pb-2 sm:grid-cols-3">
+      {cards.map(({ label, value, sub, color, accent }) => (
+        <div
+          key={label}
+          className={cn(
+            "flex flex-col gap-0.5 rounded-lg border px-3 py-2.5",
+            accent
+              ? "border-rose-200/80 bg-rose-50/30"
+              : "border-border/60 bg-secondary/30",
+          )}
+        >
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            {label}
+          </span>
+          <span className={cn("font-mono text-sm font-bold tabular-nums", color)}>
+            {value}
+          </span>
+          <span className="text-[10px] text-muted-foreground">{sub}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main Component
+// ---------------------------------------------------------------------------
+
+const PAGE_SIZE = 20;
+
+/**
+ * Check if the print route is available for an invoice.
+ * The route /finance/invoices/[id]/print exists in the app router.
+ */
+const PRINT_ROUTE_AVAILABLE = true;
 
 export function InvoicesTab({
   projects,
-  units,
-  customers,
   initialInvoices,
   initialPayments,
   selectedProjectId,
   searchQuery,
+  periodStart = null,
+  periodEnd = null,
 }: InvoicesTabProps) {
   const router = useRouter();
-  const { t } = useI18n();
+  const searchParams = useSearchParams();
 
-  // Internal state for dialogs/forms
-  const [invoiceOpen, setInvoiceOpen] = React.useState(false);
-  const [isSubmitting, setIsSubmitting] = React.useState(false);
-  const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
-  const [printInvoice, setPrintInvoice] = React.useState<typeof initialInvoices[0] | null>(null);
+  // Filter state (Req 4.2)
+  const [jenisFilter, setJenisFilter] = React.useState<InvoiceDocumentFilter>("all");
+  const [statusFilter, setStatusFilter] = React.useState<InvoiceStatusFilter>("all");
 
-  // Use a proof attached directly to the payment first. Older flows upload
-  // the same file to Booking, so BF, DP, and Pelunasan Cash then fall back to
-  // that matching booking attachment without duplicating data.
-  const proofByInvoiceId = React.useMemo(() => {
-    const proofByInvoice = new Map<
-      string,
-      { fileUrl: string; paymentNumber: string | null; source: "payment" | "booking" }
-    >();
-    for (const payment of initialPayments) {
-      if (payment.invoiceId && payment.proofFileUrl && !proofByInvoice.has(payment.invoiceId)) {
-        proofByInvoice.set(payment.invoiceId, {
-          fileUrl: payment.proofFileUrl,
-          paymentNumber: payment.paymentNumber,
-          source: "payment",
-        });
+  // Pagination via URL namespace "invoicePage" (Req 10.8)
+  const invoicePage = Number(searchParams.get("invoicePage")) || 1;
+
+  /** Reset pagination to 1 when filter changes (Req 10.7) */
+  const resetPage = React.useCallback(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("invoicePage", "1");
+    router.push(`?${params.toString()}`);
+  }, [searchParams, router]);
+
+  const handleJenisChange = (key: InvoiceDocumentFilter) => {
+    setJenisFilter(key);
+    resetPage();
+  };
+
+  const handleStatusChange = (value: InvoiceStatusFilter | null) => {
+    setStatusFilter(value ?? "all");
+    resetPage();
+  };
+
+  // Build per-invoice payment map for fallback computation
+  const paymentsPerInvoice = React.useMemo(() => {
+    const map = new Map<string, PaymentItem[]>();
+    for (const p of initialPayments) {
+      if (!p.invoiceId) continue;
+      const existing = map.get(p.invoiceId) ?? [];
+      existing.push({ id: p.id, invoiceId: p.invoiceId, amount: p.amount, status: p.status });
+      map.set(p.invoiceId, existing);
+    }
+    return map;
+  }, [initialPayments]);
+
+  // Enrich invoices with computed payment summary if additive fields missing
+  const enrichedInvoices = React.useMemo(() => {
+    return initialInvoices.map((inv) => {
+      if (inv.totalPaidVerified !== undefined && inv.remainingBalance !== undefined) {
+        return inv;
       }
-    }
-    for (const invoice of initialInvoices) {
-      if (!proofByInvoice.has(invoice.id) && invoice.bookingProofFileUrl) {
-        proofByInvoice.set(invoice.id, {
-          fileUrl: invoice.bookingProofFileUrl,
-          paymentNumber: null,
-          source: "booking",
-        });
-      }
-    }
-    return proofByInvoice;
-  }, [initialInvoices, initialPayments]);
-
-  const [invoiceForm, setInvoiceForm] = React.useState({
-    projectId: "",
-    unitId: "",
-    customerId: "",
-    type: "booking_fee" as "booking_fee" | "dp" | "installment" | "other",
-    amount: "",
-    dueDate: "",
-    notes: "",
-  });
-
-  // Set default project on mount
-  React.useEffect(() => {
-    if (projects.length > 0) {
-      setInvoiceForm(f => ({ ...f, projectId: projects[0].id }));
-    }
-  }, [projects]);
-
-  // Client-side paginated invoice state
-  const INVOICE_PAGE_SIZE = 20;
-  const invoicePageData: PaginatedResult<InvoiceListItem> = React.useMemo(() => {
-    const filtered = initialInvoices.filter(inv => {
-      const matchesProj = selectedProjectId === "all" || inv.projectId === selectedProjectId;
-      const matchesQuery = searchQuery === "" ||
-        inv.invoiceNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (inv.customerName && inv.customerName.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (inv.unitCode && inv.unitCode.toLowerCase().includes(searchQuery.toLowerCase()));
-      return matchesProj && matchesQuery;
-    });
-    const totalCount = filtered.length;
-    const totalPages = Math.max(1, Math.ceil(totalCount / INVOICE_PAGE_SIZE));
-    const data = filtered.slice(0, INVOICE_PAGE_SIZE);
-    return { data, totalCount, page: 1, pageSize: INVOICE_PAGE_SIZE, totalPages };
-  }, [initialInvoices, selectedProjectId, searchQuery]);
-
-  // Pre-filter units for selected project
-  const currentProjUnits = units.filter(u => u.projectId === invoiceForm.projectId);
-
-  // Handlers
-  const handleCreateInvoiceSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-    setErrorMsg(null);
-    try {
-      const res = await createInvoice({
-        projectId: invoiceForm.projectId,
-        unitId: invoiceForm.unitId || null,
-        customerId: invoiceForm.customerId || null,
-        type: invoiceForm.type,
-        amount: Number(invoiceForm.amount),
-        dueDate: invoiceForm.dueDate ? new Date(invoiceForm.dueDate) : null,
-        notes: invoiceForm.notes || null,
+      const payments = paymentsPerInvoice.get(inv.id) ?? [];
+      const summary = computeInvoicePaymentSummary(inv.amount, payments, {
+        invoiceStatus: inv.status,
       });
-      if (res.success) {
-        toast.success(t("finance.invoice_created"));
-        setInvoiceForm(f => ({ ...f, amount: "", notes: "", dueDate: "" }));
-        setInvoiceOpen(false);
-        router.refresh();
-      }
-    } catch (err: any) {
-      const msg = err.message || "Gagal membuat invoice";
-      setErrorMsg(msg);
-      toast.error(msg);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+      return {
+        ...inv,
+        totalPaidVerified: summary.totalPaid,
+        remainingBalance: summary.remainingBalance,
+      };
+    });
+  }, [initialInvoices, paymentsPerInvoice]);
 
-  const handleDeleteInvoice = async (invoiceId: string) => {
-    if (!confirm("Apakah Anda yakin ingin menghapus invoice ini secara permanen dari sistem?")) return;
+  // Apply filters — AND logic (Req 4.2)
+  const filteredInvoices = React.useMemo(() => {
+    const now = new Date();
 
-    setIsSubmitting(true);
-    setErrorMsg(null);
-    try {
-      const res = await deleteInvoice(invoiceId);
-      if (res.success) {
-        toast.success(t("finance.invoice_deleted"));
-        router.refresh();
+    return enrichedInvoices.filter((inv) => {
+      // Project filter
+      if (selectedProjectId !== "all" && inv.projectId !== selectedProjectId) {
+        return false;
       }
-    } catch (err: any) {
-      toast.error(err.message || "Gagal menghapus invoice");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+
+      // Period filter — basis dueDate fallback createdAt
+      if (periodStart || periodEnd) {
+        const dateForPeriod = inv.dueDate ?? inv.createdAt;
+        if (!dateForPeriod) return false;
+        const d = new Date(dateForPeriod);
+        if (periodStart && d < periodStart) return false;
+        if (periodEnd && d > periodEnd) return false;
+      }
+
+      // Search filter
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        const matches =
+          inv.invoiceNumber.toLowerCase().includes(q) ||
+          (inv.customerName && inv.customerName.toLowerCase().includes(q)) ||
+          (inv.unitCode && inv.unitCode.toLowerCase().includes(q)) ||
+          inv.projectName.toLowerCase().includes(q);
+        if (!matches) return false;
+      }
+
+      const ctx = getInvoiceDocumentContext({
+        type: inv.type,
+        customerId: inv.customerId,
+        bookingId: inv.bookingId,
+        customerName: inv.customerName,
+        notes: inv.notes,
+        scheduleKind: inv.scheduleKind,
+        relatedExpenseTransactionId: inv.relatedExpenseTransactionId,
+        relatedApprovalId: inv.relatedApprovalId,
+      });
+
+      // Jenis filter (document type context)
+      if (jenisFilter === "customer" && ctx.kind !== "customer") return false;
+      if (jenisFilter === "internal" && ctx.kind !== "internal") return false;
+
+      // Status filter — Indonesian labels mapped to logic
+      if (statusFilter === "lunas") return inv.status === "paid";
+      if (statusFilter === "belum_lunas")
+        return inv.status === "unpaid" || inv.status === "partial";
+      if (statusFilter === "jatuh_tempo") {
+        if (!inv.dueDate) return false;
+        if (inv.status === "paid" || inv.status === "cancelled") return false;
+        return new Date(inv.dueDate) < now;
+      }
+
+      return true;
+    });
+  }, [enrichedInvoices, selectedProjectId, searchQuery, jenisFilter, statusFilter, periodStart, periodEnd]);
+
+  // Pagination
+  const totalCount = filteredInvoices.length;
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const safePage = Math.min(invoicePage, totalPages);
+  const pagedInvoices = filteredInvoices.slice(
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE,
+  );
+
+  const filterContext = buildFilterContext(
+    jenisFilter,
+    statusFilter,
+    searchQuery,
+    selectedProjectId,
+    projects,
+  );
 
   return (
-    <>
-      <Card className="bg-card border-input">
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle className="text-lg text-foreground">{t("finance.invoice_list_title")}</CardTitle>
-            <CardDescription className="text-xs">{t("finance.invoice_list_desc")}</CardDescription>
+    <Card className="bg-card border-input">
+      {/* Header with + Buat Invoice button (Req 4.1) */}
+      <CardHeader className="pb-2">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-1">
+            <CardTitle className="text-lg text-foreground flex items-center gap-2">
+              <Receipt className="h-5 w-5 text-primary" />
+              Invoice &amp; Tagihan
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Daftar tagihan customer dan pengeluaran internal
+            </CardDescription>
           </div>
+        </div>
+      </CardHeader>
 
-          <Dialog open={invoiceOpen} onOpenChange={setInvoiceOpen}>
-            <DialogTrigger nativeButton={true} render={
-              <Button className="btn-premium bg-[#4F6F52] hover:bg-[#3D563F] text-white flex items-center gap-1.5 text-xs">
-                <Plus className="h-3.5 w-3.5" /> {t("finance.invoice_btn_new")}
-              </Button>
-            } />
-            <DialogContent className="bg-card">
-              <DialogHeader>
-                <DialogTitle>{t("finance.invoice_form_title")}</DialogTitle>
-                <DialogDescription>{t("finance.invoice_form_desc")}</DialogDescription>
-              </DialogHeader>
-              {errorMsg && (
-                <div className="p-3 bg-rose-50 text-danger border border-rose-100 rounded-md text-xs font-semibold">
-                  {errorMsg}
-                </div>
-              )}
-              <form onSubmit={handleCreateInvoiceSubmit} className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-foreground">{t("finance.invoice_lbl_project")}</label>
-                    <Select
-                      value={invoiceForm.projectId}
-                      onValueChange={(val) => setInvoiceForm(f => ({ ...f, projectId: val || "", unitId: "" }))}
-                      items={projects.map(p => ({ label: p.name, value: p.id }))}
-                    >
-                      <SelectTrigger className="bg-card border-input w-full">
-                        <SelectValue placeholder={t("finance.invoice_lbl_project")}>
-                          {invoiceForm.projectId ? projects.find(p => p.id === invoiceForm.projectId)?.name : undefined}
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {projects.map(p => (
-                          <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-foreground">{t("finance.invoice_lbl_unit")}</label>
-                    <Select
-                      value={invoiceForm.unitId}
-                      onValueChange={(val) => setInvoiceForm(f => ({ ...f, unitId: val || "" }))}
-                      items={currentProjUnits.map(u => ({ label: u.code, value: u.id }))}
-                    >
-                      <SelectTrigger className="bg-card border-input w-full">
-                        <SelectValue placeholder={t("finance.invoice_lbl_unit")}>
-                          {invoiceForm.unitId ? units.find(u => u.id === invoiceForm.unitId)?.code : undefined}
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {currentProjUnits.map(u => (
-                          <SelectItem key={u.id} value={u.id}>{u.code}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-foreground">{t("finance.invoice_lbl_customer")}</label>
-                  <Select
-                    value={invoiceForm.customerId}
-                    onValueChange={(val) => setInvoiceForm(f => ({ ...f, customerId: val || "" }))}
-                    items={customers.map(c => ({ label: `${c.name} (${c.phone})`, value: c.id }))}
-                  >
-                    <SelectTrigger className="bg-card border-input w-full">
-                      <SelectValue placeholder="Pilih Customer">
-                        {invoiceForm.customerId ? (() => {
-                          const c = customers.find(cust => cust.id === invoiceForm.customerId);
-                          return c ? `${c.name} (${c.phone})` : undefined;
-                        })() : undefined}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {customers.map(c => (
-                        <SelectItem key={c.id} value={c.id}>{c.name} ({c.phone})</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-foreground">{t("finance.invoice_lbl_type")}</label>
-                    <Select
-                      value={invoiceForm.type}
-                      onValueChange={(val: any) => setInvoiceForm(f => ({ ...f, type: val }))}
-                      items={[
-                        { label: t("finance.invoice_type_bf"), value: "booking_fee" },
-                        { label: t("finance.invoice_type_dp"), value: "dp" },
-                        { label: t("finance.invoice_type_inst"), value: "installment" },
-                        { label: t("finance.invoice_type_other"), value: "other" },
-                      ]}
-                    >
-                      <SelectTrigger className="bg-card border-input w-full">
-                        <SelectValue placeholder={t("finance.invoice_lbl_type")}>
-                          {invoiceForm.type === "booking_fee" && t("finance.invoice_type_bf")}
-                          {invoiceForm.type === "dp" && t("finance.invoice_type_dp")}
-                          {invoiceForm.type === "installment" && t("finance.invoice_type_inst")}
-                          {invoiceForm.type === "other" && t("finance.invoice_type_other")}
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="booking_fee">{t("finance.invoice_type_bf")}</SelectItem>
-                        <SelectItem value="dp">{t("finance.invoice_type_dp")}</SelectItem>
-                        <SelectItem value="installment">{t("finance.invoice_type_inst")}</SelectItem>
-                        <SelectItem value="other">{t("finance.invoice_type_other")}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-foreground">{t("finance.invoice_lbl_amount")}</label>
-                    <Input
-                      type="number"
-                      placeholder="Rp 0"
-                      value={invoiceForm.amount}
-                      onChange={(e) => setInvoiceForm(f => ({ ...f, amount: e.target.value }))}
-                      className="bg-card border-input"
-                      required
-                    />
-                  </div>
-                </div>
-
-                {invoiceForm.amount && !isNaN(Number(invoiceForm.amount)) && (
-                  <div className="p-2.5 bg-secondary/50 border border-primary/30 rounded-xl space-y-0.5 animate-in slide-in-from-top-1 duration-200">
-                    <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider block">{t("finance.invoice_format_rupiah")}</span>
-                    <span className="font-mono font-extrabold text-sm text-primary tracking-tight tabular-nums">
-                      Rp {Number(invoiceForm.amount).toLocaleString("id-ID")}
-                    </span>
-                  </div>
+      {/* Filter row — Jenis chips + Status dropdown (Req 4.2) */}
+      <div className="grid gap-4 px-4 pb-4 sm:grid-cols-[auto_220px] sm:items-start sm:gap-6">
+        <div className="flex flex-col gap-2" role="group" aria-label="Filter jenis dokumen">
+          <p className="block h-4 text-xs font-semibold uppercase leading-4 tracking-[0.08em] text-muted-foreground">Jenis</p>
+          <div className="flex flex-wrap gap-2">
+            {DOCUMENT_FILTERS.map((filter) => (
+              <button
+                key={filter.key}
+                type="button"
+                onClick={() => handleJenisChange(filter.key)}
+                aria-pressed={jenisFilter === filter.key}
+                className={cn(
+                  "inline-flex min-h-10 items-center rounded-full border px-4 text-xs font-semibold transition-colors duration-150",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+                  jenisFilter === filter.key
+                    ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                    : "border-border bg-secondary/60 text-muted-foreground hover:border-primary/30 hover:bg-secondary hover:text-foreground",
                 )}
+              >
+                {filter.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="flex w-full flex-col gap-2 sm:w-[220px]">
+          <label className="block h-4 text-xs font-semibold uppercase leading-4 tracking-[0.08em] text-muted-foreground" htmlFor="invoice-status-filter">
+            Status
+          </label>
+          <Select value={statusFilter} onValueChange={handleStatusChange}>
+            <SelectTrigger
+              id="invoice-status-filter"
+              className="min-h-10 w-full rounded-xl border-border bg-secondary/35 px-3 text-sm font-medium text-foreground hover:border-primary/30 focus-visible:border-primary focus-visible:ring-primary/20"
+            >
+              <SelectValue>{getStatusFilterLabel(statusFilter)}</SelectValue>
+            </SelectTrigger>
+            <SelectContent align="start" className="rounded-xl border-border p-1">
+              {STATUS_FILTERS.map((filter) => (
+                <SelectItem
+                  key={filter.key}
+                  value={filter.key}
+                  className="min-h-9 rounded-lg text-sm"
+                >
+                  {filter.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
 
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-foreground">{t("finance.invoice_lbl_due")}</label>
-                  <Input
-                    type="date"
-                    value={invoiceForm.dueDate}
-                    onChange={(e) => setInvoiceForm(f => ({ ...f, dueDate: e.target.value }))}
-                    className="bg-card border-input"
-                  />
-                </div>
+      {/* Summary Cards (Req 4.3) */}
+      {filteredInvoices.length > 0 && (
+        <InvoiceSummaryCards invoices={filteredInvoices} />
+      )}
 
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-foreground">{t("finance.invoice_lbl_notes")}</label>
-                  <Input
-                    placeholder={t("finance.invoice_lbl_notes_ph")}
-                    value={invoiceForm.notes}
-                    onChange={(e) => setInvoiceForm(f => ({ ...f, notes: e.target.value }))}
-                    className="bg-card border-input"
-                  />
-                </div>
-
-                <DialogFooter>
-                  <Button
-                    type="submit"
-                    className="bg-primary hover:bg-[#8FAF9A] text-white w-full"
-                    disabled={isSubmitting}
-                  >
-                    {isSubmitting ? t("finance.saving") : t("finance.invoice_btn_submit")}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
-        </CardHeader>
-
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
+      {/* Table */}
+      <CardContent className="p-0">
+        <FinanceTableScroll>
+        <Table className="min-w-[1320px] table-fixed">
+          <TableHeader className="bg-secondary/35">
+            <TableRow className="text-xs hover:bg-transparent">
+              <TableHead className="h-12 w-[170px] px-5 text-xs font-bold uppercase tracking-[0.04em] text-muted-foreground">Nomor Invoice</TableHead>
+              <TableHead className="h-12 w-[170px] px-4 text-xs font-bold uppercase tracking-[0.04em] text-muted-foreground">Tipe Dokumen</TableHead>
+              <TableHead className="h-12 w-[180px] px-4 text-xs font-bold uppercase tracking-[0.04em] text-muted-foreground">Customer/Penerima</TableHead>
+              <TableHead className="h-12 w-[160px] px-4 text-xs font-bold uppercase tracking-[0.04em] text-muted-foreground">Proyek</TableHead>
+              <TableHead className="h-12 w-[110px] px-4 text-xs font-bold uppercase tracking-[0.04em] text-muted-foreground">Unit/Kavling</TableHead>
+              <TableHead className="h-12 w-[140px] px-4 text-right text-xs font-bold uppercase tracking-[0.04em] text-muted-foreground">Total</TableHead>
+              <TableHead className="h-12 w-[140px] px-4 text-right text-xs font-bold uppercase tracking-[0.04em] text-muted-foreground">Dibayar</TableHead>
+              <TableHead className="h-12 w-[140px] px-4 text-right text-xs font-bold uppercase tracking-[0.04em] text-muted-foreground">Sisa</TableHead>
+              <TableHead className="h-12 w-[130px] px-4 text-xs font-bold uppercase tracking-[0.04em] text-muted-foreground">Jatuh Tempo</TableHead>
+              <TableHead className="h-12 w-[130px] px-4 text-center text-xs font-bold uppercase tracking-[0.04em] text-muted-foreground">Status</TableHead>
+              <TableHead className="h-12 w-[100px] px-5 text-center text-xs font-bold uppercase tracking-[0.04em] text-muted-foreground">Aksi</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {pagedInvoices.length === 0 ? (
               <TableRow>
-                <TableHead>{t("finance.col_invoice_no")}</TableHead>
-                <TableHead>{t("finance.col_customer")}</TableHead>
-                <TableHead>{t("finance.col_kavling")}</TableHead>
-                <TableHead>{t("finance.col_type")}</TableHead>
-                <TableHead className="text-right">{t("finance.col_amount")}</TableHead>
-                <TableHead className="text-center">{t("finance.col_status")}</TableHead>
-                <TableHead className="text-center">{t("finance.col_action")}</TableHead>
+                <TableCell colSpan={11} className="p-0">
+                  <FinanceTableState
+                    variant="empty"
+                    icon={<FileText className="h-6 w-6" />}
+                    filterContext={filterContext}
+                    title={
+                      jenisFilter === "all" && statusFilter === "all"
+                        ? "Belum ada invoice"
+                        : "Tidak ada invoice untuk filter yang dipilih"
+                    }
+                    description={
+                      searchQuery
+                        ? `Tidak ada invoice yang cocok dengan pencarian "${searchQuery}". Coba ubah kata kunci atau filter.`
+                        : statusFilter === "jatuh_tempo"
+                        ? "Tidak ada invoice yang melewati jatuh tempo."
+                        : statusFilter === "lunas"
+                        ? "Belum ada invoice yang berstatus Lunas."
+                        : statusFilter === "belum_lunas"
+                        ? "Semua invoice sudah lunas atau tidak ada invoice aktif."
+                        : "Tidak ada data untuk filter yang dipilih. Coba ubah filter atau pencarian."
+                    }
+                  />
+                </TableCell>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {invoicePageData.data.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="py-12 text-center">
-                    <div className="flex flex-col items-center gap-3">
-                      <div className="h-16 w-16 rounded-full bg-secondary/50 flex items-center justify-center mx-auto">
-                        <FileText className="h-8 w-8 text-primary" />
-                      </div>
-                      <div>
-                        <p className="font-semibold text-foreground text-sm">{t("finance.invoice_empty")}</p>
-                        <p className="text-xs text-muted-foreground mt-1">{t("finance.invoice_empty_desc")}</p>
-                      </div>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ) : (
-                invoicePageData.data.map((inv) => (
-                  <TableRow key={inv.id}>
-                    <TableCell className="font-mono text-xs font-semibold">
+            ) : (
+              pagedInvoices.map((inv) => {
+                const ctx = getInvoiceDocumentContext({
+                  type: inv.type,
+                  customerId: inv.customerId,
+                  bookingId: inv.bookingId,
+                  customerName: inv.customerName,
+                  notes: inv.notes,
+                  scheduleKind: inv.scheduleKind,
+                  relatedExpenseTransactionId: inv.relatedExpenseTransactionId,
+                  relatedApprovalId: inv.relatedApprovalId,
+                });
+
+                const totalPaid = inv.totalPaidVerified ?? 0;
+                const sisa = Math.max(0, inv.remainingBalance ?? inv.amount - totalPaid);
+                const overdue = isOverdue(inv);
+
+                // Tipe dokumen label: use context-aware label
+                const typeLabel = getInvoiceTypeLabel(inv.type, {
+                  context:
+                    ctx.kind === "internal"
+                      ? "expense"
+                      : ctx.kind === "customer"
+                      ? "customer"
+                      : "neutral",
+                });
+
+                return (
+                  <TableRow
+                    key={inv.id}
+                    className={cn(
+                      "h-[82px] text-xs hover:bg-secondary/25 transition-colors duration-100",
+                      overdue && "bg-rose-50/30",
+                    )}
+                  >
+                    {/* Nomor Invoice — monospace, link to detail */}
+                    <TableCell className="px-5 py-4 align-middle">
                       <FinanceDocLink
                         href={`/finance/invoices/${inv.id}`}
-                        className="text-xs font-semibold"
+                        className="font-mono text-xs font-semibold"
                       >
                         {inv.invoiceNumber}
                       </FinanceDocLink>
                     </TableCell>
-                    <TableCell className="text-xs text-foreground">
-                      {inv.customerName || "—"}
-                    </TableCell>
-                    <TableCell className="font-mono text-xs text-muted-foreground">
-                      {inv.unitCode || "—"}
-                    </TableCell>
-                    <TableCell className="text-xs">
-                      {(() => {
-                        const label = invoiceScheduleLabel({
-                          type: inv.type,
-                          scheduleKind: inv.scheduleKind ?? null,
-                          scheduleSequence: inv.scheduleSequence ?? null,
-                          scheduleLabel: inv.scheduleLabel ?? null,
-                        });
-                        if (inv.type === "dp") {
-                          return (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#FBE4C9] text-[#7A3D0E] border border-[#D47A2E]/30 text-[10px] font-bold uppercase tracking-wide">
-                              🏗️ {label}
-                            </span>
-                          );
-                        }
-                        if (inv.type === "booking_fee") {
-                          return (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#FFF0A0] text-[#6B4F00] border border-[#D4A017]/30 text-[10px] font-bold uppercase tracking-wide">
-                              {label}
-                            </span>
-                          );
-                        }
-                        if (inv.type === "installment") {
-                          return (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#C7E8F7] text-[#0E3F57] border border-[#2196C4]/30 text-[10px] font-bold uppercase tracking-wide">
-                              {label}
-                            </span>
-                          );
-                        }
-                        return (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#E7E9E7] text-[#3D4840] text-[10px] font-semibold uppercase tracking-wide">
-                            {label}
-                          </span>
-                        );
-                      })()}
-                    </TableCell>
-                    <TableCell className="text-right font-mono font-semibold text-foreground tabular-nums text-xs">
-                      Rp {inv.amount.toLocaleString("id-ID")}
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <div className="flex items-center justify-center">
-                        <Badge
-                          className={
-                            inv.status === "paid"
-                              ? "bg-[#DCECF7] text-[#33627A]"
-                              : inv.status === "partial"
-                              ? "bg-[#FBE4C9] text-[#9A5C21]"
-                              : "bg-[#F3D1D1] text-[#8A3030]"
-                          }
-                        >
-                          {inv.status === "paid"
-                            ? t("finance.status_paid")
-                            : inv.status === "partial"
-                            ? t("finance.status_partial")
-                            : t("finance.status_unpaid")}
-                        </Badge>
+
+                    {/* Tipe Dokumen — badge konteks */}
+                    <TableCell className="px-4 py-4 align-middle">
+                      <div className="flex flex-col gap-1">
+                        <FinanceDocumentContextBadge
+                          variant={ctx.badgeVariant}
+                          label={ctx.kind === "internal" ? "Pengeluaran Internal" : ctx.label}
+                        />
+                        <span className="text-[10px] text-muted-foreground">{typeLabel}</span>
                       </div>
                     </TableCell>
-                    <TableCell className="text-center">
-                      <div className="flex items-center justify-center gap-1.5">
-                        {(() => {
-                          const proof = proofByInvoiceId.get(inv.id);
-                          return proof ? (
-                            <a
-                              href={proof.fileUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              title={
-                                proof.source === "booking"
-                                  ? "Lihat bukti pembayaran yang diunggah dari Booking"
-                                  : `Lihat bukti pembayaran ${proof.paymentNumber}`
-                              }
-                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-sky-50 hover:bg-sky-600 text-sky-700 hover:text-white text-[11px] font-semibold transition-all duration-200 hover:scale-105 border border-sky-200"
-                            >
-                              <Eye className="h-3 w-3" />
-                              Bukti
-                            </a>
-                          ) : (
-                            <button
-                              type="button"
-                              disabled
-                              title="Bukti pembayaran belum tersedia"
-                              className="inline-flex cursor-not-allowed items-center gap-1 rounded-lg border border-border bg-muted px-2.5 py-1 text-[11px] font-semibold text-muted-foreground opacity-60"
-                            >
-                              <Eye className="h-3 w-3" />
-                              Bukti
-                            </button>
-                          );
-                        })()}
-                        <button
-                          onClick={() => {
-                            const fullInvoice = initialInvoices.find(i => i.id === inv.id);
-                            if (fullInvoice) setPrintInvoice(fullInvoice);
-                          }}
-                          title={t("finance.btn_print")}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-secondary hover:bg-primary text-primary hover:text-white text-[11px] font-semibold transition-all duration-200 hover:scale-105 border border-primary/30"
+
+                    {/* Customer/Penerima */}
+                    <TableCell className="px-4 py-4 text-foreground max-w-[160px] align-middle">
+                      <span className="block truncate" title={ctx.customerOrRecipientLabel || undefined}>
+                        {ctx.customerOrRecipientLabel || "—"}
+                      </span>
+                    </TableCell>
+
+                    {/* Proyek */}
+                    <TableCell className="px-4 py-4 text-muted-foreground max-w-[140px] align-middle">
+                      <span className="block truncate" title={inv.projectName}>
+                        {inv.projectName}
+                      </span>
+                    </TableCell>
+
+                    {/* Unit/Kavling */}
+                    <TableCell className="px-4 py-4 align-middle">
+                      {inv.unitCode ? (
+                        <span className="font-mono text-xs text-muted-foreground">
+                          {inv.unitCode}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground/50">—</span>
+                      )}
+                    </TableCell>
+
+                    {/* Total */}
+                    <TableCell className="px-4 py-4 text-right font-mono font-semibold tabular-nums align-middle">
+                      {formatRupiah(inv.amount)}
+                    </TableCell>
+
+                    {/* Dibayar */}
+                    <TableCell className="px-4 py-4 text-right font-mono tabular-nums text-emerald-700 align-middle">
+                      {ctx.kind === "internal" && totalPaid === 0 ? (
+                        <span className="text-muted-foreground/50">—</span>
+                      ) : (
+                        formatRupiah(totalPaid)
+                      )}
+                    </TableCell>
+
+                    {/* Sisa */}
+                    <TableCell className="px-4 py-4 text-right font-mono tabular-nums align-middle">
+                      {ctx.kind === "internal" && sisa === 0 ? (
+                        <span className="text-muted-foreground/50">—</span>
+                      ) : (
+                        <span className={sisa > 0 ? "text-rose-700" : "text-emerald-700"}>
+                          {formatRupiah(sisa)}
+                        </span>
+                      )}
+                    </TableCell>
+
+                    {/* Jatuh Tempo */}
+                    <TableCell
+                      className={cn(
+                        "px-4 py-4 whitespace-nowrap align-middle",
+                        overdue ? "text-rose-600 font-semibold" : "text-muted-foreground",
+                      )}
+                    >
+                      {formatDate(inv.dueDate)}
+                    </TableCell>
+
+                    {/* Status badge */}
+                    <TableCell className="px-4 py-4 text-center align-middle">
+                      <InvoiceStatusBadge status={inv.status} overdue={overdue} />
+                    </TableCell>
+
+                    {/* Aksi — Gear icon dropdown (Req 4.5, 11.5) */}
+                    <TableCell className="px-5 py-4 text-center align-middle">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger
+                          className={cn(
+                            "inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg",
+                            "border border-border bg-secondary/60 text-muted-foreground",
+                            "hover:bg-primary hover:text-white transition-colors duration-150",
+                            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+                            "cursor-pointer",
+                          )}
+                          aria-label={`Menu aksi ${inv.invoiceNumber}`}
+                          title="Menu aksi"
                         >
-                          🖨️ {t("finance.btn_print")}
-                        </button>
-                        <button
-                          onClick={() => handleDeleteInvoice(inv.id)}
-                          title="Hapus Invoice"
-                          disabled={isSubmitting}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-[#D77A7A] text-[#D77A7A] hover:text-white text-[11px] font-semibold transition-all duration-200 hover:scale-105 border border-rose-200 disabled:opacity-50"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                          Hapus
-                        </button>
-                      </div>
+                          <MoreVertical className="h-4 w-4" />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" side="bottom" sideOffset={4}>
+                          <DropdownMenuItem
+                            className="cursor-pointer gap-2"
+                            onClick={() => router.push(`/finance/invoices/${inv.id}`)}
+                          >
+                            <Eye className="h-4 w-4" />
+                            Lihat Detail
+                          </DropdownMenuItem>
+                          {PRINT_ROUTE_AVAILABLE && (
+                            <DropdownMenuItem
+                              className="cursor-pointer gap-2"
+                              onClick={() => window.open(`/finance/invoices/${inv.id}/print`, "_blank")}
+                            >
+                              <Printer className="h-4 w-4" />
+                              Cetak
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-          <DataTablePagination
-            totalItems={invoicePageData.totalCount}
-            itemsPerPage={invoicePageData.pageSize}
-          />
-        </CardContent>
-      </Card>
+                );
+              })
+            )}
+          </TableBody>
+        </Table>
+        </FinanceTableScroll>
 
-      {/* Invoice Print Modal */}
-      {printInvoice && (
-        <InvoicePrintModal
-          invoice={printInvoice}
-          payments={initialPayments.map(p => ({
-            id: p.id,
-            invoiceId: p.invoiceId ?? null,
-            paymentNumber: p.paymentNumber,
-            amount: p.amount,
-            paymentDate: p.paymentDate,
-            paymentMethod: p.paymentMethod,
-            proofFileUrl: p.proofFileUrl ?? null,
-            status: p.status,
-            verifiedAt: p.verifiedAt,
-          }))}
-          onClose={() => setPrintInvoice(null)}
-        />
-      )}
-    </>
+        {/* Pagination (Req 10.8 — pageParam="invoicePage") */}
+        {totalCount > 0 && (
+          <DataTablePagination
+            totalItems={totalCount}
+            itemsPerPage={PAGE_SIZE}
+            currentPage={safePage}
+            pageParam="invoicePage"
+          />
+        )}
+      </CardContent>
+    </Card>
   );
 }

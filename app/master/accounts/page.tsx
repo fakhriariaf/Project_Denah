@@ -16,6 +16,7 @@ import {
 import { SearchInput } from "@/components/ui/search-input"
 import type { FinanceAccountInput } from "@/server/validators/master"
 import { Translate } from "@/components/translate"
+import { getAccountStatusLabel, getAccountTypeLabel } from "@/lib/label-helpers"
 
 export const revalidate = 0
 
@@ -260,7 +261,7 @@ export default async function FinanceAccountsPage({
 
                       {/* Tipe */}
                       <td className="py-4 px-6">
-                        <span className="text-xs font-medium text-[#66736A]"><Translate namespace="account" translationKey={cfg?.labelKey as any ?? acc.type} /></span>
+                        <span className="text-xs font-medium text-[#66736A]">{getAccountTypeLabel(acc.type)}</span>
                       </td>
 
                       {/* Saldo Awal */}
@@ -285,7 +286,7 @@ export default async function FinanceAccountsPage({
                       {/* Status */}
                       <td className="py-4 px-6 text-center">
                         <Badge className={`border font-semibold text-xs ${st?.className} flex items-center justify-center gap-1 w-fit mx-auto rounded-full px-2.5 py-0.5`}>
-                          <Translate namespace="bank" translationKey={`status_${acc.status}`} fallback={st?.label ?? acc.status} />
+                          {st?.label ?? getAccountStatusLabel(acc.status)}
                         </Badge>
                       </td>
 
