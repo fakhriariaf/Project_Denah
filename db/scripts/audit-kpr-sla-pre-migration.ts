@@ -23,6 +23,26 @@ interface TableCheckRow {
 async function runAudit() {
   const issues: string[] = [];
 
+  // Migration 0008 must only run after the existing production schema has a
+  // trustworthy Drizzle baseline through 0006. Migration 0007 remains pending
+  // and will run immediately before 0008 after its own duplicate-income audit.
+  // An empty history can otherwise make the migrator attempt old DDL or leave
+  // environments divergent.
+  const historyResult = await db.execute(sql`
+    SELECT created_at
+    FROM drizzle.__drizzle_migrations
+    WHERE created_at = 1784120000000
+    LIMIT 1
+  `);
+  const historyRows = Array.isArray(historyResult)
+    ? historyResult
+    : ((historyResult as { rows?: unknown[] }).rows ?? []);
+  if (historyRows.length === 0) {
+    issues.push(
+      "Baseline Drizzle sampai migration 0006 belum tercatat. Jalankan audit-drizzle-baseline dan baseline recovery terlebih dahulu."
+    );
+  }
+
   // ─── Check 1: Referenced tables must exist ───────────────────────────────────
   const requiredTables = ["kpr_processes", "projects", "user"];
 
@@ -70,7 +90,7 @@ async function runAudit() {
     console.log("AUDIT PASSED — aman menjalankan migration 0008_kpr_sla_master_tracking");
     console.log("  ✓ Tabel referensi (kpr_processes, projects, user) tersedia");
     console.log("  ✓ Tabel baru (kpr_sla_configs, kpr_stage_visits) belum ada");
-    return;
+    process.exit(0);
   }
 
   console.error("AUDIT BLOCKED");
@@ -80,12 +100,12 @@ async function runAudit() {
   }
   console.error("");
   console.error("Migrasi 0008 tidak boleh dijalankan sebelum masalah di atas diselesaikan.");
-  process.exitCode = 1;
+  process.exit(1);
 }
 
 runAudit().catch((error) => {
   console.error("AUDIT BLOCKED");
   console.error("Audit gagal dijalankan. Migrasi 0008 tidak boleh dilanjutkan.");
   console.error(error);
-  process.exitCode = 1;
+  process.exit(1);
 });
