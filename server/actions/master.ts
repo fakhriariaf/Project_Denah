@@ -9,10 +9,10 @@ import { spks, spmbs } from "@/db/schema/production";
 import { transactions, budgetLines } from "@/db/schema/finance";
 import { eq, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { writeAuditLog, safeWriteBlockedTransitionLog } from "./audit";
+import { writeAuditLog, safeWriteBlockedTransitionLog } from "@/server/services/audit.service";
 import { user as userTable, vendorProfiles } from "@/db/schema/auth";
 import { auth } from "@/server/auth";
-import { notifyNewSpkCreated } from "./production";
+import { notifySpkCreated } from "@/server/services/spk-notification.service";
 import { applyRateLimit } from "@/server/middleware/apply-rate-limit";
 
 // --- PROJECTS ---
@@ -272,7 +272,7 @@ export async function createUnit(data: unknown) {
   await writeAuditLog({ action: "create", module: "master", entityId: id, entityType: "unit", details: { code: parsed.code, autoSpk: !!newSpkId } });
 
   if (newSpkId) {
-    await notifyNewSpkCreated(newSpkId, true);
+    await notifySpkCreated(newSpkId, true);
   }
 
   revalidatePath("/master/units");
@@ -428,7 +428,7 @@ export async function updateUnit(id: string, data: unknown) {
   await writeAuditLog({ action: "update", module: "master", entityId: id, entityType: "unit", details: { code: parsed.code, autoSpk: !!newSpkId } });
 
   if (newSpkId) {
-    await notifyNewSpkCreated(newSpkId, true);
+    await notifySpkCreated(newSpkId, true);
   }
 
   revalidatePath("/master/units");

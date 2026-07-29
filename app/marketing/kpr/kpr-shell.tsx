@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -14,16 +14,37 @@ import {
   Search,
   AlertTriangle,
   CheckCircle,
+  XCircle,
   FolderOpen,
-  User
+  User,
+  Timer,
+  CalendarClock
 } from "lucide-react";
 import KprCardDetailDialog from "./kpr-card-detail-dialog";
 import KprDetailViewSheet from "./kpr-detail-view-sheet";
 import { useI18n } from "@/lib/i18n";
-import { getBankSubmissionStatusLabel } from "@/lib/label-helpers";
+import { getBankSubmissionStatusLabel, getKprStatusLabel, getSlaStatusLabel } from "@/lib/label-helpers";
 import { updateKprStatusDirect } from "@/server/actions/marketing";
 import { Progress } from "@/components/ui/progress";
 import { KprMilestoneTracker } from "./kpr-milestone-tracker";
+import type { KprSlaDisplayResult } from "@/server/services/kpr-sla/dual-read";
+import {
+  filterKprSlaCardsByStatus,
+  aggregateKprSlaKpi,
+  type KprSlaFilterValue,
+  type KprSlaCardStatus,
+} from "@/server/services/kpr-sla/selectors";
+
+/** SLA filter options for the dropdown (Requirement 13.1) */
+const SLA_FILTER_OPTIONS: { value: KprSlaFilterValue; label: string }[] = [
+  { value: "semua_sla", label: "Semua SLA" },
+  { value: "tepat_waktu", label: "Tepat Waktu" },
+  { value: "perlu_dicek", label: "Perlu Dicek" },
+  { value: "jatuh_tempo_hari_ini", label: "Jatuh Tempo Hari Ini" },
+  { value: "terlambat", label: "Terlambat" },
+  { value: "belum_dimulai", label: "Belum Dimulai" },
+  { value: "tidak_berlaku", label: "Tidak Berlaku" },
+];
 
 interface KprCard {
   id: string;
@@ -78,6 +99,20 @@ interface CustomerDocument {
   notes?: string | null;
 }
 
+function getKprStageNote(rawNotes: string | null, stage: string): string | null {
+  if (!rawNotes?.trim()) return null;
+
+  try {
+    const parsed = JSON.parse(rawNotes) as Record<string, unknown>;
+    const stageNote = parsed[stage];
+    return typeof stageNote === "string" && stageNote.trim()
+      ? stageNote.trim()
+      : null;
+  } catch {
+    return rawNotes.trim();
+  }
+}
+
 export function KprShell({
   initialKpr,
   bankPartners,
@@ -86,6 +121,8 @@ export function KprShell({
   accounts = [],
   canVerifyDocs = false,
   canApproveHandover = false,
+  slaDisplayMap = {},
+  slaError = null,
 }: {
   initialKpr: KprCard[];
   bankPartners: BankPartner[];
@@ -94,6 +131,8 @@ export function KprShell({
   accounts?: any[];
   canVerifyDocs?: boolean;
   canApproveHandover?: boolean;
+  slaDisplayMap?: Record<string, KprSlaDisplayResult>;
+  slaError?: string | null;
 }) {
   const { t } = useI18n();
   const router = useRouter();
@@ -156,6 +195,42 @@ export function KprShell({
   // Mirrors the (authoritative) guards in handleDrop; it is a UX projection only.
   const STAGE_ORDER = ["bi_checking", "pemberkasan", "proses_bank", "offering", "approved", "akad"];
   const TERMINAL_COLUMNS = ["realisasi", "physical_waiting", "handover_waiting", "bast_developer", "handover_done"];
+  const getInvalidDropMessage = (card: KprCard, targetStatus: string): string | null => {
+    if (TERMINAL_COLUMNS.includes(targetStatus)) {
+      return "Tahap ini dikelola melalui aksi pada detail KPR dan tidak dapat diubah dengan geser kartu.";
+    }
+    if (card.status === targetStatus) {
+      return `Pengajuan sudah berada pada tahap ${getKprStatusLabel(targetStatus)}.`;
+    }
+    if (card.status === "rejected") {
+      return "Pengajuan yang sudah ditolak bersifat terminal dan tidak dapat dipindahkan kembali melalui Kanban.";
+    }
+    if (card.status === "realisasi" || card.unitStatus === "menunggu_serah_terima" || card.unitStatus === "handover_complete" || card.unitStatus === "sold") {
+      return "Tahap pasca-Realisasi dan Serah Terima dikelola melalui aksi pada detail KPR.";
+    }
+    if (targetStatus === "rejected") {
+      return card.status === "approved"
+        ? "Pengajuan yang sudah Disetujui tidak dapat dipindahkan ke Ditolak karena tahap persetujuan bersifat satu arah."
+        : null;
+    }
+
+    const currentIndex = STAGE_ORDER.indexOf(card.status);
+    const newIndex = STAGE_ORDER.indexOf(targetStatus);
+    if (currentIndex === -1 || newIndex === -1) {
+      return "Perpindahan tahap KPR ini tidak tersedia melalui Kanban.";
+    }
+    if (newIndex < currentIndex) {
+      if (card.status === "approved" || card.status === "realisasi") {
+        return "Pengajuan yang sudah Disetujui tidak dapat dikembalikan ke tahap sebelumnya.";
+      }
+      return null;
+    }
+    if (newIndex !== currentIndex + 1) {
+      const nextStage = STAGE_ORDER[currentIndex + 1];
+      return `Alur KPR harus bertahap. Lanjutkan lebih dulu ke ${getKprStatusLabel(nextStage)}.`;
+    }
+    return null;
+  };
   const isValidDropTarget = (card: KprCard, targetStatus: string): boolean => {
     if (TERMINAL_COLUMNS.includes(targetStatus)) return false;
     if (card.status === targetStatus) return false;
@@ -179,7 +254,7 @@ export function KprShell({
   const [projectFilter, setProjectFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [docFilter, setDocFilter] = useState("all");
-  const [slaFilter, setSlaFilter] = useState("all");
+  const [slaFilter, setSlaFilter] = useState<KprSlaFilterValue>("semua_sla");
   const [viewingKpr, setViewingKpr] = useState<KprCard | null>(null);
 
   // Drag and Drop States
@@ -189,48 +264,85 @@ export function KprShell({
   // Get unique project names for the filter
   const projects = Array.from(new Set(initialKpr.map(k => k.projectName)));
 
-  // Filtering Logic
-  const filteredKpr = initialKpr.filter(k => {
-    // 1. Project Filter
-    if (projectFilter !== "all" && k.projectName !== projectFilter) return false;
-
-    // 2. Text Search (Customer Name or Unit Code)
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      const matchName = k.customerName.toLowerCase().includes(q);
-      const matchCode = k.unitCode.toLowerCase().includes(q);
-      if (!matchName && !matchCode) return false;
-    }
-
-    // 3. Document Status Filter
-    if (docFilter !== "all" && k.documentStatus !== docFilter) return false;
-
-    // 4. SLA Status Filter
-    if (slaFilter !== "all") {
-      let isOverdue = false;
-      if (k.slaDeadlineAt && k.status === "pemberkasan") {
-        isOverdue = new Date(k.slaDeadlineAt) < now;
+  // ──────────────────────────────────────────────────────────────────────
+  // SLA Status derivation (single source of truth)
+  // Uses slaDisplayMap (from server via page.tsx / task 5.1) to derive
+  // per-card SLA status. The map is pre-computed server-side.
+  // ──────────────────────────────────────────────────────────────────────
+  const cardsWithSla = useMemo(() => {
+    return initialKpr.map((k) => {
+      const display = slaDisplayMap[k.id];
+      // Map the display status to KprSlaCardStatus for filter/KPI
+      let slaStatus: KprSlaCardStatus;
+      if (!display) {
+        // Fallback: no SLA data available for this card
+        slaStatus = "belum_dimulai";
+      } else {
+        switch (display.status) {
+          case "tepat_waktu":
+          case "perlu_dicek":
+          case "jatuh_tempo_hari_ini":
+          case "terlambat":
+          case "belum_dimulai":
+          case "tidak_berlaku":
+          case "data_legacy_tidak_valid":
+            slaStatus = display.status as KprSlaCardStatus;
+            break;
+          case "selesai_tepat_waktu":
+            slaStatus = "tepat_waktu";
+            break;
+          case "selesai_terlambat":
+            slaStatus = "terlambat";
+            break;
+          default:
+            slaStatus = "belum_dimulai";
+        }
       }
-      if (slaFilter === "overdue" && !isOverdue) return false;
-      if (slaFilter === "safe" && isOverdue) return false;
-      if (slaFilter === "safe" && k.status === "pemberkasan" && !k.slaDeadlineAt) return false;
-    }
+      return { ...k, slaStatus };
+    });
+  }, [initialKpr, slaDisplayMap]);
 
-    return true;
-  });
+  // ──────────────────────────────────────────────────────────────────────
+  // Single-source filtering chain (Req 14.8 — KPI consistent with cards)
+  // 1. Apply project/search/doc filters → "base filtered"
+  // 2. Compute KPI from base filtered set
+  // 3. Apply SLA filter for visible cards
+  // ──────────────────────────────────────────────────────────────────────
 
-  // KPI Calculations (based on current project filter for relevance)
+  // Step 1: Project + Search + Document filters (base)
+  const baseFilteredCards = useMemo(() => {
+    return cardsWithSla.filter(k => {
+      // 1. Project Filter
+      if (projectFilter !== "all" && k.projectName !== projectFilter) return false;
+
+      // 2. Text Search (Customer Name or Unit Code)
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        const matchName = k.customerName.toLowerCase().includes(q);
+        const matchCode = k.unitCode.toLowerCase().includes(q);
+        if (!matchName && !matchCode) return false;
+      }
+
+      // 3. Document Status Filter
+      if (docFilter !== "all" && k.documentStatus !== docFilter) return false;
+
+      return true;
+    });
+  }, [cardsWithSla, projectFilter, searchQuery, docFilter]);
+
+  // Step 2: KPI aggregation from base filtered (before SLA filter applied)
+  const kpiCounts = useMemo(() => {
+    return aggregateKprSlaKpi(baseFilteredCards);
+  }, [baseFilteredCards]);
+
+  // Step 3: Apply SLA filter on top for visible cards
+  const filteredKpr = useMemo(() => {
+    return filterKprSlaCardsByStatus(baseFilteredCards, slaFilter);
+  }, [baseFilteredCards, slaFilter]);
+
+  // Legacy KPI (kept for backward compat with existing cards)
   const projectScopedKpr = initialKpr.filter(k => projectFilter === "all" || k.projectName === projectFilter);
-  const kpiTotalActive = projectScopedKpr.filter(k => k.status !== "akad" && k.status !== "rejected").length;
   const kpiIncompleteDocs = projectScopedKpr.filter(k => k.documentStatus === "incomplete").length;
-  
-  const kpiSlaOverdue = projectScopedKpr.filter(k => {
-    if (k.status === "pemberkasan" && k.slaDeadlineAt) {
-      return new Date(k.slaDeadlineAt) < now;
-    }
-    return false;
-  }).length;
-
   const kpiBankApproved = projectScopedKpr.filter(k => 
     submissions.some(sub => sub.kprProcessId === k.id && sub.status === "approved")
   ).length;
@@ -238,6 +350,11 @@ export function KprShell({
   // HTML5 Drag Handlers
   const handleDragStart = (e: React.DragEvent, id: string) => {
     const card = initialKpr.find(k => k.id === id);
+    if (card?.status === "rejected") {
+      e.preventDefault();
+      alert("Pengajuan KPR yang sudah Ditolak bersifat terminal dan tidak dapat dipindahkan kembali melalui Kanban.");
+      return;
+    }
     if (card && (card.status === "realisasi" || card.unitStatus === "menunggu_serah_terima" || card.unitStatus === "handover_complete" || card.unitStatus === "sold")) {
       e.preventDefault();
       alert("Tahapan pasca-Realisasi dan Serah Terima dikelola melalui Tombol Aksi di Detail Kelola KPR, bukan dengan geser kartu.");
@@ -246,6 +363,11 @@ export function KprShell({
     setDraggingId(id);
     e.dataTransfer.setData("text/plain", id);
     e.dataTransfer.effectAllowed = "move";
+  };
+
+  const resetDragState = () => {
+    setDraggingId(null);
+    setDraggedOverColId(null);
   };
 
   const handleDragOver = (e: React.DragEvent, colId: string) => {
@@ -261,8 +383,8 @@ export function KprShell({
 
   const handleDrop = async (e: React.DragEvent, targetStatus: string) => {
     e.preventDefault();
-    setDraggedOverColId(null);
     const id = e.dataTransfer.getData("text/plain") || draggingId;
+    resetDragState();
     if (!id) return;
 
     if (TERMINAL_COLUMNS.includes(targetStatus)) {
@@ -272,7 +394,13 @@ export function KprShell({
     }
 
     const targetCard = initialKpr.find(k => k.id === id);
-    if (!targetCard || targetCard.status === targetStatus) return;
+    if (!targetCard) return;
+
+    const invalidDropMessage = getInvalidDropMessage(targetCard, targetStatus);
+    if (invalidDropMessage) {
+      alert(`Status KPR tidak dapat dipindahkan:\n\n${invalidDropMessage}`);
+      return;
+    }
 
     // Check for unverified files — only mandatory KPR docs (KTP, NPWP, Slip Gaji, KK)
     // Supporting docs (BAST, SPJB, kpr_doc) are uploaded AFTER akad/realisasi — do NOT gate here
@@ -281,7 +409,7 @@ export function KprShell({
     const mandatoryClientDocs = allClientDocs.filter(d => MANDATORY_DOC_TYPES.includes(d.documentType));
     const hasUnverifiedDocs = mandatoryClientDocs.some(d => d.status !== "verified");
 
-    if (hasUnverifiedDocs || mandatoryClientDocs.length === 0) {
+    if (targetStatus !== "rejected" && (hasUnverifiedDocs || mandatoryClientDocs.length === 0)) {
       alert(
         "Pemberitahuan: Berkas wajib KPR (KTP, NPWP, Slip Gaji, KK) belum lengkap atau belum terverifikasi.\n\n" +
         "Pihak yang perlu/berwenang memverifikasi berkas tersebut adalah:\n" +
@@ -412,7 +540,17 @@ export function KprShell({
     }
 
     let revisionNotes = "";
-    if (currentIndex !== -1 && newIndex !== -1 && newIndex < currentIndex) {
+    if (targetStatus === "rejected") {
+      const rejectionReason = prompt(
+        `Pengajuan KPR ${targetCard.customerName} akan ditolak.\n\nMasukkan alasan penolakan agar tindak lanjut pembatalan atau refund dapat dipahami oleh pengguna lain:`
+      );
+      if (rejectionReason === null) return;
+      if (!rejectionReason.trim()) {
+        alert("Alasan penolakan KPR wajib diisi.");
+        return;
+      }
+      revisionNotes = rejectionReason.trim();
+    } else if (currentIndex !== -1 && newIndex !== -1 && newIndex < currentIndex) {
       const targetColName = COLUMNS.find(c => c.id === targetStatus)?.label || targetStatus;
       const notesInput = prompt(
         `Anda sedang mengembalikan alur KPR konsumen ${targetCard.customerName} ke tahap sebelumnya (${targetColName}).\n\n` +
@@ -438,7 +576,7 @@ export function KprShell({
     } catch (err: any) {
       alert(`Gagal memindahkan status KPR: ${err.message}`);
     } finally {
-      setDraggingId(null);
+      resetDragState();
     }
   };
 
@@ -485,56 +623,69 @@ export function KprShell({
         </div>
       </div>
 
-      {/* ── KPI METRICS BAR (Opsi B) ── */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-        {/* KPI 1: Active KPR */}
+      {/* ── SLA KPI METRICS BAR ── */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+        {/* KPI: Tepat Waktu */}
         <Card className="border-border bg-card rounded-2xl shadow-sm hover:shadow-md transition-all">
           <CardContent className="p-4 flex items-center justify-between">
             <div className="space-y-1">
-              <span className="text-[10px] font-black text-muted-foreground uppercase tracking-wider block">{t("kpr_board.kpi_active")}</span>
-              <span className="font-mono text-2xl font-black text-foreground block">{kpiTotalActive}</span>
+              <span className="text-[10px] font-black text-muted-foreground uppercase tracking-wider block">Tepat Waktu</span>
+              <span className="text-2xl font-black text-primary tabular-nums block">{kpiCounts.tepatWaktu}</span>
+            </div>
+            <div className="h-10 w-10 bg-secondary/50 text-primary rounded-xl flex items-center justify-center">
+              <CheckCircle className="h-5 w-5" />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* KPI: Perlu Dicek */}
+        <Card className="border-border bg-card rounded-2xl shadow-sm hover:shadow-md transition-all">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div className="space-y-1">
+              <span className="text-[10px] font-black text-muted-foreground uppercase tracking-wider block">Perlu Dicek</span>
+              <span className="text-2xl font-black text-amber-700 tabular-nums block">{kpiCounts.perluDicek}</span>
+            </div>
+            <div className="h-10 w-10 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center">
+              <AlertTriangle className="h-5 w-5" />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* KPI: Jatuh Tempo Hari Ini */}
+        <Card className="border-border bg-card rounded-2xl shadow-sm hover:shadow-md transition-all">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div className="space-y-1">
+              <span className="text-[10px] font-black text-muted-foreground uppercase tracking-wider block">Jatuh Tempo</span>
+              <span className="text-2xl font-black text-orange-700 tabular-nums block">{kpiCounts.jatuhTempoHariIni}</span>
+            </div>
+            <div className="h-10 w-10 bg-orange-50 text-orange-600 rounded-xl flex items-center justify-center">
+              <CalendarClock className="h-5 w-5" />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* KPI: Terlambat */}
+        <Card className="border-border bg-card rounded-2xl shadow-sm hover:shadow-md transition-all">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div className="space-y-1">
+              <span className="text-[10px] font-black text-muted-foreground uppercase tracking-wider block">Terlambat</span>
+              <span className="text-2xl font-black text-rose-700 tabular-nums block">{kpiCounts.terlambat}</span>
+            </div>
+            <div className="h-10 w-10 bg-rose-50 text-rose-600 rounded-xl flex items-center justify-center">
+              <Timer className="h-5 w-5" />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* KPI: Total KPR Aktif (excl. terminal SLA) */}
+        <Card className="border-border bg-card rounded-2xl shadow-sm hover:shadow-md transition-all">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div className="space-y-1">
+              <span className="text-[10px] font-black text-muted-foreground uppercase tracking-wider block">Total KPR Aktif</span>
+              <span className="text-2xl font-black text-foreground tabular-nums block">{kpiCounts.totalAktif}</span>
             </div>
             <div className="h-10 w-10 bg-secondary/50 text-primary rounded-xl flex items-center justify-center">
               <Layers className="h-5 w-5" />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* KPI 2: Incomplete Docs */}
-        <Card className="border-border bg-card rounded-2xl shadow-sm hover:shadow-md transition-all">
-          <CardContent className="p-4 flex items-center justify-between">
-            <div className="space-y-1">
-              <span className="text-[10px] font-black text-muted-foreground uppercase tracking-wider block">{t("kpr_board.kpi_incomplete")}</span>
-              <span className="font-mono text-2xl font-black text-amber-700 block">{kpiIncompleteDocs}</span>
-            </div>
-            <div className="h-10 w-10 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center">
-              <FolderOpen className="h-5 w-5" />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* KPI 3: SLA Overdue */}
-        <Card className="border-border bg-card rounded-2xl shadow-sm hover:shadow-md transition-all">
-          <CardContent className="p-4 flex items-center justify-between">
-            <div className="space-y-1">
-              <span className="text-[10px] font-black text-muted-foreground uppercase tracking-wider block">{t("kpr_board.kpi_overdue")}</span>
-              <span className="font-mono text-2xl font-black text-rose-700 block">{kpiSlaOverdue}</span>
-            </div>
-            <div className="h-10 w-10 bg-rose-50 text-rose-600 rounded-xl flex items-center justify-center">
-              <Clock className="h-5 w-5" />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* KPI 4: Bank Approved */}
-        <Card className="border-border bg-card rounded-2xl shadow-sm hover:shadow-md transition-all">
-          <CardContent className="p-4 flex items-center justify-between">
-            <div className="space-y-1">
-              <span className="text-[10px] font-black text-muted-foreground uppercase tracking-wider block">{t("kpr_board.kpi_approved")}</span>
-              <span className="font-mono text-2xl font-black text-emerald-700 block">{kpiBankApproved}</span>
-            </div>
-            <div className="h-10 w-10 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center">
-              <CheckCircle className="h-5 w-5" />
             </div>
           </CardContent>
         </Card>
@@ -574,27 +725,43 @@ export function KprShell({
           </Select>
         </div>
 
-        {/* SLA Warning filter */}
+        {/* SLA Status filter (7 options — Req 13.1) */}
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-bold text-muted-foreground uppercase whitespace-nowrap">{t("kpr_board.filter_sla")}</span>
-          <Select value={slaFilter} onValueChange={(val: string | null) => setSlaFilter(val || "all")}>
-            <SelectTrigger className="w-[140px] h-9 text-xs border-border rounded-xl bg-card">
+          <Select value={slaFilter} onValueChange={(val: string | null) => setSlaFilter((val as KprSlaFilterValue) || "semua_sla")}>
+            <SelectTrigger className="w-[180px] h-9 text-xs border-border rounded-xl bg-card">
               <SelectValue>
-                {slaFilter === "all"
-                  ? t("kpr_board.sla_all")
-                  : slaFilter === "safe"
-                    ? t("kpr_board.sla_safe")
-                    : t("kpr_board.sla_overdue_filter")}
+                {SLA_FILTER_OPTIONS.find(o => o.value === slaFilter)?.label ?? "Semua SLA"}
               </SelectValue>
             </SelectTrigger>
             <SelectContent className="rounded-xl">
-              <SelectItem value="all" className="text-xs">{t("kpr_board.sla_all")}</SelectItem>
-              <SelectItem value="safe" className="text-xs">{t("kpr_board.sla_safe")}</SelectItem>
-              <SelectItem value="overdue" className="text-xs">{t("kpr_board.sla_overdue_filter")}</SelectItem>
+              {SLA_FILTER_OPTIONS.map(opt => (
+                <SelectItem key={opt.value} value={opt.value} className="text-xs">{opt.label}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
       </div>
+
+      {/* Empty state for SLA filter (Req 13.6) */}
+      {filteredKpr.length === 0 && slaFilter !== "semua_sla" && (
+        <div className="rounded-2xl border-2 border-dashed border-border/50 bg-card p-8 text-center">
+          <Filter className="mx-auto h-8 w-8 text-muted-foreground/50 mb-3" />
+          <p className="text-sm font-bold text-muted-foreground">Tidak ada proses KPR yang sesuai dengan filter</p>
+          <p className="text-xs text-muted-foreground/70 mt-1">
+            Coba ubah filter SLA atau perumahan untuk melihat data KPR lainnya.
+          </p>
+        </div>
+      )}
+
+      {/* SLA Error Banner (non-destructive, does not block cards) */}
+      {slaError && (
+        <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50/70 px-4 py-2.5 text-xs text-amber-700">
+          <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />
+          <span className="font-semibold">{slaError}</span>
+          <span className="text-amber-600/70">— Data SLA mungkin tidak ditampilkan pada beberapa kartu.</span>
+        </div>
+      )}
 
       {/* Pipeline kanban board */}
       <div className="flex gap-5 overflow-x-auto pb-6 items-start scrollbar-thin scrollbar-thumb-[#8FAF9A]/30 scrollbar-track-[#F7F8F3] w-full">
@@ -607,13 +774,13 @@ export function KprShell({
           return (
             <div 
               key={col.id} 
-              onDragOver={(e) => { if (isInvalidTarget) return; handleDragOver(e, col.id); }}
+              onDragOver={(e) => handleDragOver(e, col.id)}
               onDragLeave={handleDragLeave}
-              onDrop={(e) => { if (isInvalidTarget) { e.preventDefault(); return; } handleDrop(e, col.id); }}
+              onDrop={(e) => handleDrop(e, col.id)}
               aria-disabled={isInvalidTarget}
               className={`p-3.5 rounded-[26px] flex flex-col h-[calc(100vh-330px)] min-h-[540px] w-[320px] shrink-0 shadow-sm transition-all duration-200 ${
                 isInvalidTarget
-                  ? "opacity-40 grayscale border border-border"
+                  ? "opacity-65 border border-dashed border-border bg-muted/20 cursor-not-allowed"
                   : isOver
                     ? "bg-secondary/60 border-2 border-dashed border-primary scale-[1.01]"
                     : "bg-gradient-to-b from-secondary/35 to-card border border-primary/15 hover:shadow-sage-md"
@@ -630,6 +797,15 @@ export function KprShell({
                 </Badge>
               </div>
 
+              {isOver && isInvalidTarget && draggingCard && (
+                <div
+                  role="status"
+                  className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[9px] font-semibold leading-relaxed text-amber-800"
+                >
+                  {getInvalidDropMessage(draggingCard as KprCard, col.id)}
+                </div>
+              )}
+
               {/* Cards List */}
               <div className="space-y-3.5 flex-1 overflow-y-auto pr-1.5 scrollbar-thin scrollbar-thumb-[#D6DED2]">
                 {colCards.length > 0 ? (
@@ -637,32 +813,36 @@ export function KprShell({
                     const clientSubmissions = submissions.filter(sub => sub.kprProcessId === kprCard.id);
                     const clientDocs = documents.filter(doc => doc.customerId === kprCard.customerId);
 
-                    // SLA Countdown calculations
+                    // ── SLA Display from pre-computed server data ──
+                    const slaDisplay = slaDisplayMap[kprCard.id];
+                    const slaStatus = slaDisplay?.status ?? "belum_dimulai";
+                    const isSlaOverdue = slaStatus === "terlambat";
+                    const isSlaDueSoon = slaStatus === "perlu_dicek" || slaStatus === "jatuh_tempo_hari_ini";
+
+                    // Derive remaining days for description text (legacy compat)
                     let remainingDays = 0;
-                    let isSlaOverdue = false;
-                    const hasSlaDeadline = Boolean(kprCard.slaDeadlineAt);
-                    if (kprCard.slaDeadlineAt) {
-                      const limit = new Date(kprCard.slaDeadlineAt);
+                    if (slaDisplay?.deadline) {
+                      const limit = new Date(slaDisplay.deadline);
                       remainingDays = Math.ceil((limit.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-                      if (remainingDays < 0) {
-                        isSlaOverdue = true;
-                      }
                     }
-                    const isSlaDueSoon = hasSlaDeadline && !isSlaOverdue && remainingDays <= 1;
-                    const slaDescription = !hasSlaDeadline
-                      ? "Belum mulai"
-                      : isSlaOverdue
-                        ? `Terlambat ${Math.abs(remainingDays)} hari`
-                        : remainingDays === 0
-                          ? "Jatuh tempo hari ini"
-                          : `${remainingDays} hari tersisa`;
-                    const slaBadgeLabel = !hasSlaDeadline
-                      ? "Menunggu"
-                      : isSlaOverdue
-                        ? "Terlambat"
-                        : isSlaDueSoon
-                          ? "Perlu Dicek"
-                          : "Tepat Waktu";
+
+                    // SLA description and badge label from helper
+                    const slaBadgeLabel = getSlaStatusLabel(slaStatus);
+                    const slaDescription = slaStatus === "belum_dimulai"
+                      ? "Belum Dimulai"
+                      : slaStatus === "tidak_berlaku"
+                        ? "Tidak Berlaku"
+                        : slaStatus === "data_legacy_tidak_valid"
+                          ? "Data SLA Lama Tidak Valid"
+                          : isSlaOverdue
+                            ? `Terlambat ${Math.abs(remainingDays)} hari`
+                            : slaStatus === "jatuh_tempo_hari_ini"
+                              ? "Jatuh Tempo Hari Ini"
+                              : `${Math.max(remainingDays, 0)} hari tersisa`;
+                    const isLegacySource = slaDisplay?.source === "legacy";
+                    const slaTargetLabel = slaDisplay?.targetWorkingDays
+                      ? `Target: ${slaDisplay.targetWorkingDays} hari kerja`
+                      : null;
 
                     // Checklist Documents uploaded indicators (KTP, NPWP, Slip Gaji, KK)
                     const hasKtp = clientDocs.some(d => d.documentType === "ktp" && d.status !== "rejected");
@@ -678,18 +858,28 @@ export function KprShell({
                       ? bankPartners.find(b => b.id === primarySubmission.bankPartnerId)?.name
                       : null;
                     const colInfo = COLUMNS.find(c => c.id === kprCard.status);
-                    const kprStatusLabel = colInfo?.label || kprCard.status;
+                    const kprStatusLabel = colInfo?.label ?? getKprStatusLabel(kprCard.status);
+                    const isRejected = kprCard.status === "rejected";
+                    const rejectionReason = isRejected
+                      ? getKprStageNote(kprCard.bankNotes, "rejected")
+                      : null;
+                    const isCardDraggable = !isRejected &&
+                      kprCard.status !== "realisasi" &&
+                      !["menunggu_serah_terima", "handover_complete", "sold"].includes(kprCard.unitStatus);
 
                     return (
                       <div
                         key={kprCard.id}
-                        draggable={true}
+                        draggable={isCardDraggable}
                         onDragStart={(e) => handleDragStart(e, kprCard.id)}
+                        onDragEnd={resetDragState}
                       >
                         <Card 
                           onClick={() => setViewingKpr(kprCard)}
                           className={`cursor-pointer active:scale-[0.99] shadow-[0_10px_24px_rgba(79,111,82,0.09)] bg-gradient-to-b from-white to-secondary/20 border rounded-[22px] relative transition-all duration-200 group hover:shadow-sage-md hover:-translate-y-0.5 ${
-                            isSlaOverdue 
+                            isRejected
+                              ? "border-rose-300 bg-gradient-to-b from-rose-50/70 to-white"
+                              : isSlaOverdue
                               ? "shadow-[0_0_15px_rgba(215,122,122,0.25)] border-[#D77A7A]/70" 
                               : "border-primary/20 hover:border-primary/45"
                           }`}
@@ -757,72 +947,70 @@ export function KprShell({
                               </div>
                             </div>
                             <div className={`rounded-xl border px-2.5 py-2.5 text-[10px] ${
-                              !hasSlaDeadline
-                                ? "border-primary/20 bg-secondary/30 text-primary"
-                                : isSlaOverdue
-                                  ? "border-[#D77A7A]/35 bg-[#D77A7A]/10 text-[#9A3B48]"
-                                  : isSlaDueSoon
-                                    ? "border-amber-200 bg-amber-50 text-amber-700"
-                                    : "border-primary/25 bg-secondary/35 text-primary"
+                              slaStatus === "belum_dimulai" || slaStatus === "tidak_berlaku"
+                                ? "border-slate-200 bg-slate-50/50 text-slate-600"
+                                : slaStatus === "data_legacy_tidak_valid"
+                                  ? "border-slate-200 bg-slate-50/50 text-slate-500"
+                                  : isSlaOverdue
+                                    ? "border-rose-200 bg-rose-50 text-rose-700"
+                                    : slaStatus === "jatuh_tempo_hari_ini"
+                                      ? "border-orange-200 bg-orange-50 text-orange-700"
+                                      : isSlaDueSoon
+                                        ? "border-amber-200 bg-amber-50 text-amber-700"
+                                        : "border-primary/25 bg-secondary/35 text-primary"
                             }`}>
                               <div className="flex items-center justify-between gap-2">
                                 <div className="flex min-w-0 items-center gap-2">
-                                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
+                                  <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
+                                    slaStatus === "belum_dimulai" || slaStatus === "tidak_berlaku" || slaStatus === "data_legacy_tidak_valid"
+                                      ? "bg-slate-100 text-slate-500"
+                                      : isSlaOverdue
+                                        ? "bg-rose-100 text-rose-600"
+                                        : slaStatus === "jatuh_tempo_hari_ini"
+                                          ? "bg-orange-100 text-orange-600"
+                                          : isSlaDueSoon
+                                            ? "bg-amber-100 text-amber-600"
+                                            : "bg-primary/15 text-primary"
+                                  }`}>
                                     <Clock className="h-4 w-4" />
                                   </div>
                                   <div className="min-w-0">
-                                    <p className="font-extrabold leading-tight">SLA Submission</p>
-                                    <p className="mt-0.5 font-semibold text-muted-foreground">
+                                    <div className="flex items-center gap-1.5">
+                                      <p className="font-extrabold leading-tight">SLA Tahap</p>
+                                      {isLegacySource && (
+                                        <span className="inline-flex items-center gap-0.5 rounded border border-muted-foreground/20 bg-muted/50 px-1 py-0 text-[8px] font-bold text-muted-foreground">
+                                          Legacy
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className="mt-0.5 font-semibold text-muted-foreground truncate">
                                       {slaDescription}
                                     </p>
+                                    {slaTargetLabel && (
+                                      <p className="mt-0.5 font-medium text-muted-foreground/70 text-[9px] tabular-nums">
+                                        {slaTargetLabel}
+                                      </p>
+                                    )}
                                   </div>
                                 </div>
-                                <span className={`shrink-0 rounded-lg border px-2 py-1 font-bold ${
-                                  !hasSlaDeadline
-                                    ? "border-primary/20 bg-white/70 text-primary"
-                                    : isSlaOverdue
-                                      ? "border-[#D77A7A]/30 bg-white/70 text-[#9A3B48]"
-                                      : isSlaDueSoon
-                                        ? "border-amber-200 bg-white/70 text-amber-700"
-                                        : "border-primary/20 bg-white/70 text-primary"
+                                <span className={`shrink-0 rounded-lg border px-2 py-1 font-bold text-[9px] ${
+                                  slaStatus === "belum_dimulai"
+                                    ? "border-slate-200 bg-slate-50 text-slate-600"
+                                    : slaStatus === "tidak_berlaku"
+                                      ? "border-slate-200 bg-slate-50 text-slate-500"
+                                      : slaStatus === "data_legacy_tidak_valid"
+                                        ? "border-slate-200 bg-slate-50 text-slate-500"
+                                        : isSlaOverdue
+                                          ? "border-rose-200 bg-white/70 text-rose-700"
+                                          : slaStatus === "jatuh_tempo_hari_ini"
+                                            ? "border-orange-200 bg-white/70 text-orange-700"
+                                            : isSlaDueSoon
+                                              ? "border-amber-200 bg-white/70 text-amber-700"
+                                              : "border-primary/20 bg-white/70 text-primary"
                                 }`}>
                                   {slaBadgeLabel}
                                 </span>
                               </div>
-                            </div>
-                            <div className="hidden">
-                            {kprCard.status === "pemberkasan" && kprCard.slaDeadlineAt && (
-                              <div className={`rounded-xl border px-2.5 py-2.5 text-[10px] ${
-                                isSlaOverdue
-                                  ? "border-[#D77A7A]/35 bg-[#D77A7A]/10 text-[#9A3B48]"
-                                  : remainingDays <= 1
-                                    ? "border-amber-200 bg-amber-50 text-amber-700"
-                                    : "border-primary/25 bg-secondary/35 text-primary"
-                              }`}>
-                                <div className="flex items-center justify-between gap-2">
-                                  <div className="flex min-w-0 items-center gap-2">
-                                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
-                                      <Clock className="h-4 w-4" />
-                                    </div>
-                                    <div className="min-w-0">
-                                      <p className="font-extrabold leading-tight">SLA Submission</p>
-                                      <p className="mt-0.5 font-semibold text-muted-foreground">
-                                        {isSlaOverdue ? "Melewati batas" : `${Math.abs(remainingDays)} hari tersisa`}
-                                      </p>
-                                    </div>
-                                  </div>
-                                  <span className={`shrink-0 rounded-lg border px-2 py-1 font-bold ${
-                                    isSlaOverdue
-                                      ? "border-[#D77A7A]/30 bg-white/70 text-[#9A3B48]"
-                                      : remainingDays <= 1
-                                        ? "border-amber-200 bg-white/70 text-amber-700"
-                                        : "border-primary/20 bg-white/70 text-primary"
-                                  }`}>
-                                    {isSlaOverdue ? "Terlambat" : "Tepat Waktu"}
-                                  </span>
-                                </div>
-                              </div>
-                            )}
                             </div>
 
                             <div className="rounded-xl border border-primary/20 bg-card px-2.5 py-2 text-[10px]">
@@ -836,6 +1024,23 @@ export function KprShell({
                                 <span className="text-primary text-base leading-none">›</span>
                               </div>
                             </div>
+
+                            {isRejected && (
+                              <div className="rounded-xl border border-rose-200 bg-rose-50/80 px-3 py-2.5 text-rose-800">
+                                <div className="flex items-start gap-2">
+                                  <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-600" aria-hidden="true" />
+                                  <div className="min-w-0">
+                                    <p className="text-[10px] font-extrabold">Pengajuan KPR Ditolak</p>
+                                    <p className="mt-1 text-[9px] font-medium leading-relaxed text-rose-700">
+                                      {rejectionReason || "Alasan penolakan belum tercatat pada data lama."}
+                                    </p>
+                                    <p className="mt-1.5 text-[8px] font-semibold text-rose-600">
+                                      Status terminal — tindak lanjut pembatalan atau refund dilakukan melalui detail booking.
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
                             <div className="hidden">
                             {/* Status Bank Rekanan Terkait */}
                               {(() => {
@@ -896,7 +1101,7 @@ export function KprShell({
                             {/* Status KPR & BI Checking */}
                             {(() => {
                               const colInfo = COLUMNS.find(c => c.id === kprCard.status);
-                              const kprStatusLabel = colInfo?.label || kprCard.status;
+                              const kprStatusLabel = colInfo?.label ?? getKprStatusLabel(kprCard.status);
                               return (
                                 <div className="grid grid-cols-2 gap-2 text-[9px] font-bold">
                                   <div className="bg-muted/30/70 p-2 rounded-xl border border-border/30 flex flex-col gap-0.5">
@@ -1018,8 +1223,14 @@ export function KprShell({
                 ) : (
                   <div className="py-20 text-center text-[10px] text-muted-foreground/70 border-dashed border-2 border-border/40 rounded-2xl bg-white/40 flex flex-col justify-center items-center px-4 space-y-2">
                     <Layers className="w-6 h-6 text-muted-foreground/70 opacity-60" />
-                    <p className="font-bold">{t("kpr_board.empty")}</p>
-                    <p className="text-[9px] text-muted-foreground/60 leading-normal">{t("kpr_board.empty_desc")}</p>
+                    <p className="font-bold">
+                      {col.id === "rejected" ? "Belum Ada Pengajuan Ditolak" : t("kpr_board.empty")}
+                    </p>
+                    <p className="text-[9px] text-muted-foreground/60 leading-normal">
+                      {col.id === "rejected"
+                        ? "Pengajuan yang ditolak sebelum tahap Disetujui akan muncul di kolom ini."
+                        : t("kpr_board.empty_desc")}
+                    </p>
                   </div>
                 )}
               </div>

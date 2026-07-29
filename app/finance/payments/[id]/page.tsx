@@ -40,6 +40,7 @@ import {
 import { FinanceDocLink } from "@/components/finance/finance-doc-link";
 import { FinanceTimeline } from "@/components/finance/finance-timeline";
 import { RevisionButton } from "./revision-button";
+import { VoidPaymentButton } from "./void-payment-button";
 
 export const revalidate = 0;
 
@@ -171,6 +172,7 @@ export default async function PaymentDetailPage({
       : [];
 
   const isRejected = payment.status === "rejected";
+  const canVoid = payment.status === "verified" && (isKeuangan || isSuperAdmin);
   const canRevise = isKeuangan || isSuperAdmin; // Req 6.5 mutation-visibility gate.
 
   // Latest rejection reason from finance_activity_history (Req 4.1, 6.5).
@@ -404,6 +406,14 @@ export default async function PaymentDetailPage({
         ) : null
       }
       backHref="/finance?tab=payments"
+      headerActions={
+        canVoid ? (
+          <VoidPaymentButton
+            paymentId={payment.id}
+            paymentNumber={payment.paymentNumber}
+          />
+        ) : undefined
+      }
       summary={summary}
       details={details}
       timeline={<FinanceTimeline entityType="payment" entityId={id} />}

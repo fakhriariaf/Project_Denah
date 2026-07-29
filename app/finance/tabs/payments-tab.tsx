@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useI18n } from "@/lib/i18n";
+import { useSearchParams } from "next/navigation";
 import {
   Card,
   CardContent,
@@ -29,12 +29,36 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
   Plus,
   Eye,
+  CreditCard,
+  Clock,
+  CheckCircle2,
+  XCircle,
+  Ban,
 } from "lucide-react";
 import { FinanceDocLink } from "@/components/finance/finance-doc-link";
-import { getPaymentMethodLabel } from "@/lib/label-helpers";
+import { FinanceDocumentContextBadge } from "@/components/finance/finance-document-context-badge";
+import { FinanceTableState } from "@/components/finance/finance-table-state";
+import { FinanceTableScroll } from "@/components/finance/finance-table-scroll";
+import { DataTablePagination } from "@/components/ui/data-table-pagination";
+import { getPaymentMethodLabel, getPaymentStatusLabel, getInvoiceTypeLabel } from "@/lib/label-helpers";
+import { getInvoiceDocumentContext } from "@/lib/finance-invoice-summary";
+import { cn } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n";
 import type { PaginatedResult } from "@/lib/pagination";
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
 type PaymentListItem = {
   id: string;
@@ -60,7 +84,7 @@ type PaymentListItem = {
   invoiceId?: string | null;
 };
 
-interface PaymentsTabProps {
+export interface PaymentsTabProps {
   projects: Array<{ id: string; name: string; code: string }>;
   units: Array<{ id: string; code: string; projectId: string; price: number }>;
   customers: Array<{ id: string; name: string; phone: string }>;
@@ -145,10 +169,86 @@ interface PaymentsTabProps {
   errorMsg: string | null;
   isSubmitting: boolean;
   isSuperAdmin: boolean;
+  /**
+   * Mirrors the server-side role gate on `createPayment`
+   * (Super Admin / Admin Keuangan / Admin Kantor). When false the
+   * "Catat Pembayaran" trigger is hidden so no role sees an action that would
+   * be rejected on submit.
+   */
+  canRecordPayment?: boolean;
   onCreatePaymentSubmit: (e: React.FormEvent) => Promise<void>;
   onVerifyPaymentSubmit: (isApproved: boolean) => Promise<void>;
   onDeletePaymentSubmit: () => Promise<void>;
 }
+
+// ---------------------------------------------------------------------------
+// Sub-filter definitions (Req 4.1)
+// ---------------------------------------------------------------------------
+
+type PaymentSubFilter = "all" | "pending" | "verified" | "rejected" | "voided";
+
+const SUB_FILTERS: Array<{ key: PaymentSubFilter; label: string }> = [
+  { key: "all", label: "Semua" },
+  { key: "pending", label: "Menunggu Verifikasi" },
+  { key: "verified", label: "Terverifikasi" },
+  { key: "rejected", label: "Ditolak" },
+  { key: "voided", label: "Dibatalkan" },
+];
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Format Rupiah with tabular-nums */
+function formatRupiah(amount: number): string {
+  return `Rp\u00A0${amount.toLocaleString("id-ID")}`;
+}
+
+/** Format date to locale ID short string */
+function formatDate(date: Date | null | undefined): string {
+  if (!date) return "\u2014";
+  return new Date(date).toLocaleDateString("id-ID", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Status badge styles (Req 4.3)
+// ---------------------------------------------------------------------------
+
+function PaymentStatusBadge({ status }: { status: PaymentListItem["status"] }) {
+  const IconMap: Record<PaymentListItem["status"], React.ElementType> = {
+    pending: Clock,
+    verified: CheckCircle2,
+    rejected: XCircle,
+    voided: Ban,
+  };
+  const styles: Record<PaymentListItem["status"], string> = {
+    pending: "bg-amber-50 text-amber-700 border border-amber-200/80",
+    verified: "bg-emerald-50 text-emerald-700 border border-emerald-200/80",
+    rejected: "bg-rose-50 text-rose-700 border border-rose-200/80",
+    voided: "bg-gray-100 text-gray-500 border border-gray-200/80",
+  };
+  const Icon = IconMap[status];
+  return (
+    <Badge className={cn("text-[10px] font-semibold", styles[status])}>
+      <Icon className="h-3 w-3 mr-1" aria-hidden="true" />
+      {getPaymentStatusLabel(status)}
+    </Badge>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const PAGE_SIZE = 20;
+
+// ---------------------------------------------------------------------------
+// Main Component
+// ---------------------------------------------------------------------------
 
 export function PaymentsTab({
   projects,
@@ -173,245 +273,574 @@ export function PaymentsTab({
   errorMsg,
   isSubmitting,
   isSuperAdmin,
+  canRecordPayment = false,
   onCreatePaymentSubmit,
   onVerifyPaymentSubmit,
   onDeletePaymentSubmit,
 }: PaymentsTabProps) {
   const { t } = useI18n();
+  const searchParams = useSearchParams();
+  const [subFilter, setSubFilter] = React.useState<PaymentSubFilter>("all");
+
   const isOwnUpload =
     !canSelfVerify &&
     (selectedPayment?.uploadedBy === currentUserId ||
       (!selectedPayment?.uploadedBy && selectedPayment?.proofUploadedBy === currentUserId));
 
+  // ---------------------------------------------------------------------------
+  // Badge counts per status (Req 5.1)
+  // Computed from the GLOBAL filtered set (paymentPageData.data)
+  // ---------------------------------------------------------------------------
+  const statusCounts = React.useMemo(() => {
+    const counts: Record<PaymentSubFilter, number> = {
+      all: 0,
+      pending: 0,
+      verified: 0,
+      rejected: 0,
+      voided: 0,
+    };
+    const allPayments = paymentPageData.data;
+    counts.all = allPayments.length;
+    for (const p of allPayments) {
+      if (p.status in counts) {
+        counts[p.status as Exclude<PaymentSubFilter, "all">]++;
+      }
+    }
+    return counts;
+  }, [paymentPageData.data]);
+
+  // The shell applies global context; this tab retains the full filtered set
+  // before applying its own status filter and pagination.
+  const filteredPayments = React.useMemo(() => {
+    const allPayments = paymentPageData.data;
+    if (subFilter === "all") return allPayments;
+    return allPayments.filter((p) => p.status === subFilter);
+  }, [paymentPageData.data, subFilter]);
+
+  // Pagination — namespaced to "paymentPage" (Req 10.8)
+  const PAGE_PARAM = "paymentPage";
+  const totalCount = filteredPayments.length;
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const requestedPage = Number(searchParams.get(PAGE_PARAM)) || 1;
+  const currentPage = Math.min(Math.max(1, requestedPage), totalPages);
+  const pagedPayments = filteredPayments.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE,
+  );
+
+  // Reset paymentPage to 1 when sub-filter changes (Req 10.7, 10.9)
+  const handleSubFilterChange = React.useCallback(
+    (key: PaymentSubFilter) => {
+      setSubFilter(key);
+      // Reset the namespaced page to 1
+      const params = new URLSearchParams(searchParams.toString());
+      params.set(PAGE_PARAM, "1");
+      window.history.replaceState(null, "", `?${params.toString()}`);
+    },
+    [searchParams],
+  );
+
+  // Build filter context for empty state
+  const filterContext = React.useMemo(() => {
+    const parts: string[] = ["Kas Masuk & Pembayaran"];
+    const label = SUB_FILTERS.find((f) => f.key === subFilter)?.label;
+    if (label && subFilter !== "all") parts.push(label);
+    return parts.join(" — ");
+  }, [subFilter]);
+
+  // ---------------------------------------------------------------------------
+  // Selectable invoices for the "Catat Pembayaran" dialog (Task 5.2)
+  //
+  // Req 5.7: only invoices with status `unpaid` or `partial` are selectable.
+  //          `paid` and `cancelled` invoices are never offered.
+  // Req 5.2: option shows monospace invoice number, customer/recipient label,
+  //          Indonesian type label, and remaining balance.
+  // Remaining balance = invoice amount - total VERIFIED payment. We compute the
+  // verified total from the payments already loaded so we never present a
+  // fictional balance. No mutation/business logic is touched here.
+  // ---------------------------------------------------------------------------
+  const selectableInvoices = React.useMemo(() => {
+    return initialInvoices
+      .filter((inv) => inv.status === "unpaid" || inv.status === "partial")
+      .map((inv) => {
+        const verifiedTotal = initialPayments
+          .filter((p) => p.invoiceId === inv.id && p.status === "verified")
+          .reduce((sum, p) => sum + p.amount, 0);
+        const remaining = Math.max(0, inv.amount - verifiedTotal);
+        const context = getInvoiceDocumentContext({
+          type: inv.type,
+          customerId: inv.customerId,
+          bookingId: inv.bookingId,
+          customerName: inv.customerName,
+          notes: inv.notes,
+        });
+        const typeLabel = getInvoiceTypeLabel(inv.type, {
+          context: context.kind === "internal" ? "expense" : "customer",
+        });
+        return {
+          id: inv.id,
+          invoiceNumber: inv.invoiceNumber,
+          remaining,
+          context,
+          typeLabel,
+        };
+      });
+  }, [initialInvoices, initialPayments]);
+
   return (
     <div className="space-y-6">
-      {/* Verification queue for Keuangan */}
-      <Card className="bg-white/70 backdrop-blur-md border border-border/80 shadow-sage hover:shadow-sage-lg transition-premium rounded-3xl">
-        <CardHeader className="flex flex-row items-center justify-between pb-3">
-          <div>
-            <CardTitle className="text-base font-bold text-foreground">{t("finance.verify_queue_title")}</CardTitle>
-            <CardDescription className="text-xs text-muted-foreground font-medium">{t("finance.verify_queue_desc")}</CardDescription>
-          </div>
-          <Dialog open={paymentOpen} onOpenChange={setPaymentOpen}>
-            <DialogTrigger nativeButton={true} render={
-              <Button className="btn-premium bg-[#4F6F52] hover:bg-[#3D563F] text-white flex items-center gap-1.5 text-xs px-2.5 h-8.5 rounded-xl">
-                <Plus className="h-3.5 w-3.5" /> {t("finance.payment_btn_new")}
-              </Button>
-            } />
-            <DialogContent className="bg-popover backdrop-blur-md border-border shadow-sage-lg rounded-3xl p-6 max-w-md sm:max-w-xl">
-              <DialogHeader>
-                <DialogTitle className="text-lg font-bold text-foreground">{t("finance.payment_form_title")}</DialogTitle>
-                <DialogDescription className="text-xs text-muted-foreground">{t("finance.payment_form_desc")}</DialogDescription>
-              </DialogHeader>
-              {errorMsg && (
-                <div className="p-3 bg-rose-50 text-[#8B3443] border border-rose-100 rounded-xl text-xs font-semibold animate-shake">
-                  {errorMsg}
-                </div>
-              )}
-              <form onSubmit={onCreatePaymentSubmit} className="space-y-4 pt-2">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-foreground uppercase tracking-wider block">{t("finance.payment_lbl_invoice")}</label>
-                  <Select
-                    value={paymentForm.invoiceId}
-                    onValueChange={(val) => {
-                      if (!val) return;
-                      const found = initialInvoices.find(inv => inv.id === val);
-                      if (found) {
-                        setPaymentForm(f => ({
-                          ...f,
-                          invoiceId: val,
-                          projectId: found.projectId,
-                          unitId: found.unitId || "",
-                          customerId: found.customerId || "",
-                          amount: found.amount.toString(),
-                        }));
-                      }
-                    }}
-                    items={initialInvoices.filter(i => i.status !== "paid").map(i => ({ label: `${i.invoiceNumber} - ${i.customerName} (Rp ${i.amount.toLocaleString()})`, value: i.id }))}
-                  >
-                    <SelectTrigger className="w-full min-w-0 bg-muted/30 border-border rounded-xl focus:ring-ring font-semibold text-xs h-9.5 text-foreground">
-                      <SelectValue
-                        placeholder={t("finance.verify_lbl_deposit_account")}
-                        className="block max-w-full truncate text-left"
-                      >
-                        {paymentForm.invoiceId ? (() => {
-                          const inv = initialInvoices.find(i => i.id === paymentForm.invoiceId);
-                          return inv ? `${inv.invoiceNumber} - ${inv.customerName} (Rp ${inv.amount.toLocaleString("id-ID")})` : undefined;
-                        })() : undefined}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent className="min-w-[min(520px,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] border-border rounded-xl">
-                      {initialInvoices.filter(i => i.status !== "paid").map(i => (
-                        <SelectItem key={i.id} value={i.id} className="text-xs font-medium">
+      <Card className="bg-card border-input">
+        {/* Header */}
+        <CardHeader className="pb-2">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div className="flex flex-col gap-1">
+              <CardTitle className="text-lg text-foreground flex items-center gap-2">
+                <CreditCard className="h-5 w-5 text-primary" />
+                Kas Masuk &amp; Pembayaran
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Daftar pembayaran customer dan setoran manual
+              </CardDescription>
+            </div>
+            {/* Dialog Catat Pembayaran — Revamped (Task 5.2) */}
+            {/* Rendered only when the session role may actually submit it — see
+                the role gate on `createPayment` in server/actions/finance.ts. */}
+            {canRecordPayment && (
+            <Dialog open={paymentOpen} onOpenChange={setPaymentOpen}>
+              <DialogTrigger nativeButton={true} render={
+                <Button className="btn-premium bg-[#4F6F52] hover:bg-[#3D563F] text-white flex items-center gap-1.5 text-xs px-3 min-h-11 rounded-xl cursor-pointer">
+                  <Plus className="h-3.5 w-3.5" /> {t("finance.payment_btn_new")}
+                </Button>
+              } />
+              <DialogContent className="w-[calc(100vw-2rem)] max-w-2xl sm:max-w-2xl max-h-[90vh] overflow-hidden rounded-2xl border-border bg-popover p-0 shadow-sage-lg">
+                <DialogHeader className="border-b border-border bg-gradient-to-r from-secondary/70 via-white to-transparent px-5 py-5 pr-12 sm:px-6 sm:pr-14">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-secondary shadow-inner">
+                      <CreditCard className="h-5 w-5 text-primary" />
+                    </div>
+                    <div className="min-w-0">
+                      <DialogTitle className="text-lg font-bold text-foreground">{t("finance.payment_form_title")}</DialogTitle>
+                      <DialogDescription className="mt-1 text-xs leading-5 text-muted-foreground">{t("finance.payment_form_desc")}</DialogDescription>
+                    </div>
+                  </div>
+                </DialogHeader>
+                <form onSubmit={onCreatePaymentSubmit} className="max-h-[calc(90vh-132px)] space-y-5 overflow-y-auto px-5 py-5 sm:px-6">
+                  {errorMsg && (
+                    <div role="alert" className="rounded-xl border border-rose-100 bg-rose-50 p-3 text-xs font-semibold text-[#8B3443] animate-shake">
+                      {errorMsg}
+                    </div>
+                  )}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-foreground uppercase tracking-wider block">{t("finance.payment_lbl_invoice")}</label>
+                    <Select
+                      value={paymentForm.invoiceId}
+                      onValueChange={(val) => {
+                        if (!val) return;
+                        if (val === "__no_invoice__") {
+                          setPaymentForm(f => ({
+                            ...f,
+                            invoiceId: "",
+                            amount: "",
+                          }));
+                          return;
+                        }
+                        const found = initialInvoices.find(inv => inv.id === val);
+                        if (found) {
+                          const verifiedTotal = initialPayments
+                            .filter(p => p.invoiceId === found.id && p.status === "verified")
+                            .reduce((sum, p) => sum + p.amount, 0);
+                          const remaining = Math.max(0, found.amount - verifiedTotal);
+                          setPaymentForm(f => ({
+                            ...f,
+                            invoiceId: val,
+                            projectId: found.projectId,
+                            unitId: found.unitId || "",
+                            customerId: found.customerId || "",
+                            amount: remaining.toString(),
+                          }));
+                        }
+                      }}
+                      items={[
+                        { label: "Tanpa Invoice", value: "__no_invoice__" },
+                        ...selectableInvoices.map(i => ({
+                          label: `${i.invoiceNumber} — ${i.context.customerOrRecipientLabel} — Sisa ${formatRupiah(i.remaining)}`,
+                          value: i.id,
+                        })),
+                      ]}
+                    >
+                      <SelectTrigger className="w-full min-w-0 bg-muted/30 border-border rounded-xl focus:ring-ring font-semibold text-xs h-9.5 text-foreground">
+                        <SelectValue
+                          placeholder="Pilih invoice atau setoran manual"
+                          className="block max-w-full truncate text-left"
+                        >
+                          {paymentForm.invoiceId ? (() => {
+                            const inv = selectableInvoices.find(i => i.id === paymentForm.invoiceId);
+                            return inv
+                              ? `${inv.invoiceNumber} — Sisa ${formatRupiah(inv.remaining)}`
+                              : undefined;
+                          })() : paymentForm.invoiceId === "" ? undefined : undefined}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent className="z-[60] max-h-[min(20rem,var(--available-height))] w-[var(--anchor-width)] max-w-[calc(100vw-2rem)] border-border rounded-xl shadow-lg">
+                        {/* Tanpa Invoice option */}
+                        <SelectItem value="__no_invoice__" className="text-xs font-medium py-2">
                           <span className="flex min-w-0 flex-col gap-0.5">
-                            <span className="font-mono font-bold text-foreground">
-                              {i.invoiceNumber}
+                            <span className="font-semibold text-foreground">
+                              Tanpa Invoice
                             </span>
-                            <span className="truncate text-muted-foreground">
-                              {i.customerName ?? "Tanpa nama"} • Rp {i.amount.toLocaleString("id-ID")}
+                            <span className="text-muted-foreground text-[10px]">
+                              Setoran manual — tidak dihubungkan ke invoice
                             </span>
                           </span>
                         </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-foreground uppercase tracking-wider block">{t("finance.payment_lbl_project")}</label>
-                    <Select
-                      value={paymentForm.projectId}
-                      onValueChange={(val) => setPaymentForm(f => ({ ...f, projectId: val || "" }))}
-                      items={projects.map(p => ({ label: p.name, value: p.id }))}
-                    >
-                      <SelectTrigger className="bg-muted/30 border-border rounded-xl focus:ring-ring font-semibold text-xs h-9.5 text-foreground">
-                        <SelectValue placeholder={t("finance.payment_lbl_project")}>
-                          {paymentForm.projectId ? projects.find(p => p.id === paymentForm.projectId)?.name : undefined}
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent className="border-border rounded-xl">
-                        {projects.map(p => (
-                          <SelectItem key={p.id} value={p.id} className="text-xs font-medium">{p.name}</SelectItem>
-                        ))}
+                        {/* Separator */}
+                        {selectableInvoices.length > 0 && (
+                          <div className="h-px bg-border mx-1.5 my-1" />
+                        )}
+                        {/* Invoice options */}
+                        {selectableInvoices.length === 0 ? (
+                          <div className="px-3 py-4 text-center">
+                            <p className="text-xs text-muted-foreground font-medium">Tidak ada invoice tersedia</p>
+                            <p className="text-[10px] text-muted-foreground mt-0.5">Semua invoice telah lunas atau dibatalkan</p>
+                          </div>
+                        ) : (
+                          selectableInvoices.map(inv => (
+                            <SelectItem key={inv.id} value={inv.id} className="text-xs font-medium py-2">
+                              <span className="flex min-w-0 w-full gap-2 items-start">
+                                <span className="flex min-w-0 flex-col gap-0.5 flex-1">
+                                  <span className="flex items-center gap-2 min-w-0">
+                                    <span className="font-mono font-bold text-foreground shrink-0">
+                                      {inv.invoiceNumber}
+                                    </span>
+                                    <FinanceDocumentContextBadge
+                                      variant={inv.context.badgeVariant}
+                                      className="text-[9px] px-1.5 py-0"
+                                    />
+                                  </span>
+                                  <span className="flex items-center gap-1.5 min-w-0">
+                                    <span className="truncate text-muted-foreground max-w-[180px]">
+                                      {inv.context.customerOrRecipientLabel}
+                                    </span>
+                                    <span className="text-muted-foreground/60">•</span>
+                                    <span className="text-muted-foreground shrink-0">
+                                      {inv.typeLabel}
+                                    </span>
+                                  </span>
+                                </span>
+                                <span className="shrink-0 text-right">
+                                  <span className="font-mono font-bold text-primary tabular-nums text-[11px]">
+                                    {formatRupiah(inv.remaining)}
+                                  </span>
+                                  <span className="block text-[9px] text-muted-foreground">sisa tagihan</span>
+                                </span>
+                              </span>
+                            </SelectItem>
+                          ))
+                        )}
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-foreground uppercase tracking-wider block">{t("finance.payment_lbl_amount")}</label>
-                    <Input
-                      type="number"
-                      placeholder="Rp 0"
-                      value={paymentForm.amount}
-                      onChange={(e) => setPaymentForm(f => ({ ...f, amount: e.target.value }))}
-                      className="bg-muted/30 border-border rounded-xl focus-visible:ring-ring font-mono font-bold text-xs h-9.5 text-foreground"
-                      required
-                    />
-                  </div>
-                </div>
 
-                {paymentForm.amount && !isNaN(Number(paymentForm.amount)) && (
-                  <div className="p-2.5 bg-secondary/50 border border-primary/30 rounded-xl space-y-0.5 animate-in slide-in-from-top-1 duration-200">
-                    <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider block">{t("finance.invoice_format_rupiah")}</span>
-                    <span className="font-mono font-extrabold text-sm text-primary tracking-tight tabular-nums">
-                      Rp {Number(paymentForm.amount).toLocaleString("id-ID")}
-                    </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-foreground uppercase tracking-wider block">{t("finance.payment_lbl_project")}</label>
+                      <Select
+                        value={paymentForm.projectId}
+                        onValueChange={(val) => setPaymentForm(f => ({ ...f, projectId: val || "" }))}
+                        items={projects.map(p => ({ label: p.name, value: p.id }))}
+                      >
+                        <SelectTrigger className="bg-muted/30 border-border rounded-xl focus:ring-ring font-semibold text-xs h-9.5 text-foreground">
+                          <SelectValue placeholder={t("finance.payment_lbl_project")}>
+                            {paymentForm.projectId ? projects.find(p => p.id === paymentForm.projectId)?.name : undefined}
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent className="border-border rounded-xl">
+                          {projects.map(p => (
+                            <SelectItem key={p.id} value={p.id} className="text-xs font-medium">{p.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-foreground uppercase tracking-wider block">{t("finance.payment_lbl_amount")}</label>
+                      <Input
+                        type="number"
+                        inputMode="numeric"
+                        placeholder="Rp 0"
+                        value={paymentForm.amount}
+                        onChange={(e) => setPaymentForm(f => ({ ...f, amount: e.target.value }))}
+                        className="bg-muted/30 border-border rounded-xl focus-visible:ring-ring font-mono font-bold text-xs h-9.5 text-foreground"
+                        required
+                      />
+                    </div>
                   </div>
-                )}
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-foreground uppercase tracking-wider block">{t("finance.payment_lbl_method")}</label>
-                    <Select
-                      value={paymentForm.paymentMethod}
-                      onValueChange={(val: any) => setPaymentForm(f => ({ ...f, paymentMethod: val }))}
-                      items={[
-                        { label: t("finance.payment_method_transfer"), value: "transfer" },
-                        { label: t("finance.payment_method_cash"), value: "cash" },
-                        { label: t("finance.payment_method_giro"), value: "giro" },
-                        { label: t("finance.payment_method_other"), value: "other" },
-                      ]}
+                  {paymentForm.amount && !isNaN(Number(paymentForm.amount)) && Number(paymentForm.amount) > 0 && (
+                    <div className="p-2.5 bg-secondary/50 border border-primary/30 rounded-xl space-y-0.5 animate-in slide-in-from-top-1 duration-200">
+                      <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider block">Preview Nominal</span>
+                      <span className="font-mono font-extrabold text-sm text-primary tracking-tight tabular-nums">
+                        {formatRupiah(Number(paymentForm.amount))}
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-foreground uppercase tracking-wider block">{t("finance.payment_lbl_method")}</label>
+                      <Select
+                        value={paymentForm.paymentMethod}
+                        onValueChange={(val: any) => setPaymentForm(f => ({ ...f, paymentMethod: val }))}
+                        items={[
+                          { label: t("finance.payment_method_transfer"), value: "transfer" },
+                          { label: t("finance.payment_method_cash"), value: "cash" },
+                          { label: t("finance.payment_method_giro"), value: "giro" },
+                          { label: t("finance.payment_method_other"), value: "other" },
+                        ]}
+                      >
+                        <SelectTrigger className="bg-muted/30 border-border rounded-xl focus:ring-ring font-semibold text-xs h-9.5 text-foreground">
+                          <SelectValue placeholder={t("finance.payment_lbl_method")}>
+                            {paymentForm.paymentMethod === "transfer" && t("finance.payment_method_transfer")}
+                            {paymentForm.paymentMethod === "cash" && t("finance.payment_method_cash")}
+                            {paymentForm.paymentMethod === "giro" && t("finance.payment_method_giro")}
+                            {paymentForm.paymentMethod === "other" && t("finance.payment_method_other")}
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent className="border-border rounded-xl">
+                          <SelectItem value="transfer" className="text-xs font-medium">{t("finance.payment_method_transfer")}</SelectItem>
+                          <SelectItem value="cash" className="text-xs font-medium">{t("finance.payment_method_cash")}</SelectItem>
+                          <SelectItem value="giro" className="text-xs font-medium">{t("finance.payment_method_giro")}</SelectItem>
+                          <SelectItem value="other" className="text-xs font-medium">{t("finance.payment_method_other")}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-foreground uppercase tracking-wider block">{t("finance.payment_lbl_date")}</label>
+                      <Input
+                        type="date"
+                        value={paymentForm.paymentDate}
+                        onChange={(e) => setPaymentForm(f => ({ ...f, paymentDate: e.target.value }))}
+                        className="bg-muted/30 border-border rounded-xl focus-visible:ring-ring font-medium text-xs h-9.5 text-foreground"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <DialogFooter className="-mx-5 -mb-5 mt-5 rounded-none border-x-0 border-b-0 px-5 py-4 sm:-mx-6 sm:-mb-5 sm:px-6">
+                    <Button
+                      type="submit"
+                      className="w-full bg-primary hover:bg-primary/90 text-white text-xs font-bold h-10 rounded-xl shadow-sage hover:shadow-sage-lg hover:-translate-y-0.5 transition-premium"
+                      disabled={isSubmitting || isOwnUpload}
                     >
-                      <SelectTrigger className="bg-muted/30 border-border rounded-xl focus:ring-ring font-semibold text-xs h-9.5 text-foreground">
-                        <SelectValue placeholder={t("finance.payment_lbl_method")}>
-                          {paymentForm.paymentMethod === "transfer" && t("finance.payment_method_transfer")}
-                          {paymentForm.paymentMethod === "cash" && t("finance.payment_method_cash")}
-                          {paymentForm.paymentMethod === "giro" && t("finance.payment_method_giro")}
-                          {paymentForm.paymentMethod === "other" && t("finance.payment_method_other")}
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent className="border-border rounded-xl">
-                        <SelectItem value="transfer" className="text-xs font-medium">{t("finance.payment_method_transfer")}</SelectItem>
-                        <SelectItem value="cash" className="text-xs font-medium">{t("finance.payment_method_cash")}</SelectItem>
-                        <SelectItem value="giro" className="text-xs font-medium">{t("finance.payment_method_giro")}</SelectItem>
-                        <SelectItem value="other" className="text-xs font-medium">{t("finance.payment_method_other")}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-foreground uppercase tracking-wider block">{t("finance.payment_lbl_date")}</label>
-                    <Input
-                      type="date"
-                      value={paymentForm.paymentDate}
-                      onChange={(e) => setPaymentForm(f => ({ ...f, paymentDate: e.target.value }))}
-                      className="bg-muted/30 border-border rounded-xl focus-visible:ring-ring font-medium text-xs h-9.5 text-foreground"
-                      required
-                    />
-                  </div>
-                </div>
-
-                <DialogFooter className="pt-2">
-                  <Button
-                    type="submit"
-                    className="w-full bg-primary hover:bg-primary/90 text-white text-xs font-bold h-10 rounded-xl shadow-sage hover:shadow-sage-lg hover:-translate-y-0.5 transition-premium"
-                    disabled={isSubmitting || isOwnUpload}
-                  >
-                    {isSubmitting ? t("finance.saving") : t("finance.payment_btn_submit")}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
+                      {isSubmitting ? t("finance.saving") : t("finance.payment_btn_submit")}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
+            )}
+          </div>
         </CardHeader>
 
-        <CardContent className="p-0 space-y-3 px-4 pb-4">
-          {paymentPageData.data.filter(p => p.status === "pending").length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground/70 text-xs font-medium">
-              {t("finance.payment_empty")}
-            </div>
-          ) : (
-            paymentPageData.data.filter(p => p.status === "pending").map((pay) => (
-              <Card key={pay.id} className="p-4 border border-border bg-gradient-to-br from-white to-[#F7F8F3] shadow-sm rounded-2xl hover:border-primary/50 hover:shadow-sage transition-premium duration-300 space-y-3 relative overflow-hidden group">
-                <div className="absolute top-0 left-0 w-1 h-full bg-[#E9C46A]" />
-                <div className="flex justify-between items-start pl-1">
-                  <div>
-                    <p className="text-xs font-bold">
+        {/* Sub-filter bar (Req 4.1, 5.1) */}
+        <div
+          className="flex overflow-x-auto gap-2 px-5 pb-4 scrollbar-none"
+          role="group"
+          aria-label="Filter pembayaran"
+        >
+          {SUB_FILTERS.map((f) => {
+            const count = statusCounts[f.key];
+            return (
+              <button
+                key={f.key}
+                type="button"
+                onClick={() => handleSubFilterChange(f.key)}
+                aria-pressed={subFilter === f.key}
+                className={cn(
+                  "inline-flex min-h-10 items-center whitespace-nowrap rounded-full border px-4 text-xs font-semibold transition-colors duration-150",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+                  subFilter === f.key
+                    ? "bg-primary text-white border-primary shadow-sm"
+                    : "bg-secondary/60 text-muted-foreground border-border hover:border-primary/30 hover:bg-secondary hover:text-foreground",
+                )}
+              >
+                {f.label}
+                <Badge
+                  className={cn(
+                    "ml-1.5 text-[9px] font-bold px-1.5 py-0 min-w-[1.25rem] h-4 rounded-full inline-flex items-center justify-center tabular-nums",
+                    subFilter === f.key
+                      ? "bg-white/20 text-white border-white/30"
+                      : "bg-muted text-muted-foreground border-border/50",
+                  )}
+                >
+                  {count}
+                </Badge>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Table (Req 4.2) */}
+        <CardContent className="p-0">
+          <FinanceTableScroll>
+          <Table className="min-w-[1100px] table-fixed">
+            <TableHeader className="bg-secondary/35">
+              <TableRow className="text-xs hover:bg-transparent">
+                <TableHead className="h-12 w-[170px] px-5 text-xs font-bold uppercase tracking-[0.04em] text-muted-foreground">Nomor Pembayaran</TableHead>
+                <TableHead className="h-12 w-[170px] px-4 text-xs font-bold uppercase tracking-[0.04em] text-muted-foreground">Invoice Terkait</TableHead>
+                <TableHead className="h-12 w-[170px] px-4 text-xs font-bold uppercase tracking-[0.04em] text-muted-foreground">Customer</TableHead>
+                <TableHead className="h-12 w-[170px] px-4 text-xs font-bold uppercase tracking-[0.04em] text-muted-foreground">Project</TableHead>
+                <TableHead className="h-12 w-[140px] px-4 text-right text-xs font-bold uppercase tracking-[0.04em] text-muted-foreground">Nominal</TableHead>
+                <TableHead className="h-12 w-[120px] px-4 text-xs font-bold uppercase tracking-[0.04em] text-muted-foreground">Metode</TableHead>
+                <TableHead className="h-12 w-[150px] px-4 text-center text-xs font-bold uppercase tracking-[0.04em] text-muted-foreground">Status</TableHead>
+                <TableHead className="h-12 w-[130px] px-4 text-xs font-bold uppercase tracking-[0.04em] text-muted-foreground">Tanggal</TableHead>
+                <TableHead className="h-12 w-[120px] px-5 text-center text-xs font-bold uppercase tracking-[0.04em] text-muted-foreground">Aksi</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {pagedPayments.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={9} className="p-0">
+                    <FinanceTableState
+                      variant="empty"
+                      icon={<CreditCard className="h-6 w-6" />}
+                      filterContext={filterContext}
+                      title={
+                        subFilter === "all"
+                          ? "Belum ada pembayaran"
+                          : `Tidak ada pembayaran untuk filter "${SUB_FILTERS.find((sf) => sf.key === subFilter)?.label ?? subFilter}"`
+                      }
+                      description={
+                        subFilter === "pending"
+                          ? "Tidak ada pembayaran yang perlu diverifikasi saat ini."
+                          : subFilter === "verified"
+                          ? "Belum ada pembayaran terverifikasi pada filter aktif."
+                          : subFilter === "rejected"
+                          ? "Belum ada pembayaran yang ditolak pada filter aktif."
+                          : subFilter === "voided"
+                          ? "Belum ada pembayaran yang dibatalkan pada filter aktif."
+                          : "Catat pembayaran baru atau ubah filter jika sedang mencari transaksi tertentu."
+                      }
+                    />
+                  </TableCell>
+                </TableRow>
+              ) : (
+                pagedPayments.map((pay) => (
+                  <TableRow key={pay.id} className="h-[76px] text-xs hover:bg-secondary/25 transition-colors duration-100">
+                    {/* Nomor Pembayaran — monospace, link to detail (Req 4.7) */}
+                    <TableCell className="px-5 py-4 align-middle">
                       <FinanceDocLink
                         href={`/finance/payments/${pay.id}`}
-                        className="text-xs font-bold"
+                        className="font-mono text-xs font-semibold"
                       >
                         {pay.paymentNumber}
                       </FinanceDocLink>
-                    </p>
-                    <p className="text-[11px] text-muted-foreground mt-1">
-                      Customer: <span className="font-semibold text-foreground">{pay.customerName || "—"}</span>
-                    </p>
-                  </div>
-                  <Badge className="bg-[#FFF2C2] text-[#9A7D21] border border-[#E9C46A]/30 text-[10px] rounded-full px-2 py-0.5">
-                    {t("finance.payment_pending")}
-                  </Badge>
-                </div>
+                    </TableCell>
 
-                <div className="flex justify-between items-center text-xs pl-1">
-                  <span className="font-mono font-extrabold text-sm text-primary tabular-nums">
-                    Rp {pay.amount.toLocaleString("id-ID")}
-                  </span>
-                  <span className="text-[10px] text-muted-foreground uppercase font-bold bg-secondary/50 px-2 py-0.5 rounded-md">
-                    {getPaymentMethodLabel(pay.paymentMethod)}
-                  </span>
-                </div>
+                    {/* Invoice Terkait — link or "Setoran Manual" (Req 4.4, 4.7) */}
+                    <TableCell className="px-4 py-4 align-middle">
+                      {pay.invoiceId && pay.invoiceNumber ? (
+                        <FinanceDocLink
+                          href={`/finance/invoices/${pay.invoiceId}`}
+                          className="font-mono text-xs"
+                        >
+                          {pay.invoiceNumber}
+                        </FinanceDocLink>
+                      ) : (
+                        <span className="text-xs text-muted-foreground italic">
+                          Setoran Manual
+                        </span>
+                      )}
+                    </TableCell>
 
-                <Button
-                  onClick={() => {
-                    setSelectedPayment(pay);
-                    if (accounts.length > 0) {
-                      setVerificationAccount(accounts[0].id);
-                    }
-                    setVerificationNotes("");
-                  }}
-                  className="w-full bg-primary hover:bg-primary/90 text-white text-xs font-bold py-1 h-8 rounded-xl btn-premium"
-                >
-                  {t("finance.payment_btn_verify")}
-                </Button>
-              </Card>
-            ))
+                    {/* Customer */}
+                    <TableCell className="px-4 py-4 text-foreground max-w-[160px] align-middle">
+                      <span className="block truncate" title={pay.customerName || undefined}>
+                        {pay.customerName || "\u2014"}
+                      </span>
+                    </TableCell>
+
+                    {/* Project */}
+                    <TableCell className="px-4 py-4 text-muted-foreground max-w-[140px] align-middle">
+                      <span className="block truncate" title={pay.projectName}>
+                        {pay.projectName}
+                      </span>
+                    </TableCell>
+
+                    {/* Nominal — tabular-nums (Req 4.2) */}
+                    <TableCell className="px-4 py-4 text-right font-mono font-semibold tabular-nums align-middle">
+                      {formatRupiah(pay.amount)}
+                    </TableCell>
+
+                    {/* Metode */}
+                    <TableCell className="px-4 py-4 whitespace-nowrap align-middle">
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase bg-secondary/50 px-2 py-0.5 rounded-md">
+                        {getPaymentMethodLabel(pay.paymentMethod)}
+                      </span>
+                    </TableCell>
+
+                    {/* Status (Req 4.3) */}
+                    <TableCell className="px-4 py-4 text-center align-middle">
+                      <PaymentStatusBadge status={pay.status} />
+                    </TableCell>
+
+                    {/* Tanggal */}
+                    <TableCell className="px-4 py-4 whitespace-nowrap text-muted-foreground align-middle">
+                      {formatDate(pay.paymentDate)}
+                    </TableCell>
+
+                    {/* Aksi (Req 4.5, 4.6) */}
+                    <TableCell className="px-5 py-4 text-center align-middle">
+                      <div className="flex items-center justify-center gap-2 flex-wrap">
+                        {/* Tinjau — hanya pada pending (Req 5.4) */}
+                        {pay.status === "pending" && (
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              setSelectedPayment(pay);
+                              if (accounts.length > 0) {
+                                setVerificationAccount(accounts[0].id);
+                              }
+                              setVerificationNotes("");
+                            }}
+                            aria-label={`Tinjau pembayaran ${pay.paymentNumber}`}
+                            className="min-h-10 rounded-xl bg-primary px-3 text-xs font-semibold text-white hover:bg-primary/90 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                          >
+                            Tinjau
+                          </Button>
+                        )}
+
+                        {pay.status !== "pending" && (
+                          <FinanceDocLink
+                            href={`/finance/payments/${pay.id}`}
+                            className="inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-primary/20 bg-card px-3 text-xs font-semibold text-primary-dark hover:bg-secondary/70"
+                          >
+                            <Eye className="h-3.5 w-3.5" /> Detail
+                          </FinanceDocLink>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+          </FinanceTableScroll>
+
+          {/* Pagination (Req 5.8, 10.8) */}
+          {totalCount > 0 && (
+            <DataTablePagination
+              totalItems={totalCount}
+              itemsPerPage={PAGE_SIZE}
+              currentPage={currentPage}
+              pageParam="paymentPage"
+            />
           )}
         </CardContent>
       </Card>
 
-      {/* Payment Verification Dialog */}
+      {/* Payment Verification Dialog — preserved from existing implementation */}
       <Dialog open={!!selectedPayment} onOpenChange={(open) => { if (!open) setSelectedPayment(null); }}>
-        <DialogContent className="bg-popover backdrop-blur-md border-border shadow-sage-lg rounded-3xl p-6 w-full max-w-md sm:max-w-md overflow-hidden">
+        <DialogContent className="bg-popover backdrop-blur-md border-border shadow-sage-lg rounded-3xl p-6 w-[calc(100vw-2rem)] max-w-md sm:w-full max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-lg font-bold text-foreground">{t("finance.verify_title")}</DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground">{t("finance.verify_desc")}</DialogDescription>

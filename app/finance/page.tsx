@@ -14,7 +14,8 @@ export default async function FinancePage({
 
   // 1. Authenticate user + RBAC guard — uses shared helper (Req 11.1, 11.2)
   const activeUser = await requireAuth();
-  const { role, isSuperAdmin } = await getSessionRole(activeUser.id);
+  const { role, isSuperAdmin, isDireksi, isKeuangan, isAdminKantor } =
+    await getSessionRole(activeUser.id);
 
   if (!canAccessFinanceModule(role)) {
     redirect("/unauthorized");
@@ -27,6 +28,10 @@ export default async function FinancePage({
     <FinanceShell
       activeUser={activeUser}
       isSuperAdmin={isSuperAdmin}
+      canApproveExpense={isDireksi || isSuperAdmin}
+      // Mirrors the server-side role gate on `createPayment` so the "Catat
+      // Pembayaran" trigger is not shown to roles whose submit would be rejected.
+      canRecordPayment={isSuperAdmin || isKeuangan || isAdminKantor}
       projects={data.projects}
       units={data.units}
       customers={data.customers}
@@ -36,6 +41,8 @@ export default async function FinancePage({
       payments={data.payments}
       transactions={data.transactions}
       budgets={data.budgets}
+      budgetLines={data.budgetLines}
+      budgetActualUsage={data.budgetActualUsage}
       defaultTab={tab as any}
     />
   );

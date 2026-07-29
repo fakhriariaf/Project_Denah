@@ -5,7 +5,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -47,7 +47,7 @@ interface EditProps extends Props {
 }
 
 function TargetForm({
-  projects, marketings, defaultValues, onSubmit, loading, errorMsg, isEdit
+  projects, marketings, defaultValues, onSubmit, loading, errorMsg, isEdit, onCancel
 }: {
   projects: Props["projects"];
   marketings: Props["marketings"];
@@ -56,6 +56,7 @@ function TargetForm({
   loading: boolean;
   errorMsg: string | null;
   isEdit?: boolean;
+  onCancel: () => void;
 }) {
   const { t } = useI18n();
 
@@ -69,22 +70,23 @@ function TargetForm({
   const monthVal = String(form.watch("periodMonth") ?? 1);
 
   return (
-    <form onSubmit={form.handleSubmit(onSubmit)} className="p-6 space-y-4 pt-3 overflow-y-auto max-h-[75vh]">
+    <form onSubmit={form.handleSubmit(onSubmit)} className="max-h-[calc(90vh-136px)] overflow-y-auto px-5 py-5 sm:px-6">
       {errorMsg && (
         <div className="flex items-start gap-2 p-3 bg-rose-50 border border-rose-100 text-rose-700 text-xs font-semibold rounded-xl">
           <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />{errorMsg.startsWith("targets_form.") ? t(errorMsg as any) : errorMsg}
         </div>
       )}
 
+      <div className="grid gap-x-4 gap-y-4 sm:grid-cols-2">
       <div className="space-y-1.5">
         <Label className="text-sm font-medium text-foreground">{t("targets_form.marketing")} <span className="text-rose-500">*</span></Label>
         <Select value={mktVal} onValueChange={(v: string | null) => form.setValue("marketingId", v ?? "")} disabled={isEdit}>
-          <SelectTrigger className="border-border focus:ring-ring/50">
+          <SelectTrigger className="w-full border-border focus:ring-ring/50">
             <SelectValue placeholder={t("targets_form.marketing_ph")}>
               {mktVal ? marketings.find(m => m.id === mktVal)?.name : undefined}
             </SelectValue>
           </SelectTrigger>
-          <SelectContent className="rounded-xl border-border bg-popover backdrop-blur-md">
+          <SelectContent className="max-h-60 rounded-xl border-border bg-popover backdrop-blur-md">
             {marketings.map(m => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}
           </SelectContent>
         </Select>
@@ -93,22 +95,22 @@ function TargetForm({
       <div className="space-y-1.5">
         <Label className="text-sm font-medium text-foreground">{t("targets_form.project")} <span className="text-rose-500">*</span></Label>
         <Select value={projVal} onValueChange={(v: string | null) => form.setValue("projectId", v ?? "")} disabled={isEdit}>
-          <SelectTrigger className="border-border focus:ring-ring/50">
+          <SelectTrigger className="w-full border-border focus:ring-ring/50">
             <SelectValue placeholder={t("targets_form.project_ph")}>
               {projVal ? projects.find(p => p.id === projVal)?.name : undefined}
             </SelectValue>
           </SelectTrigger>
-          <SelectContent className="rounded-xl border-border bg-popover backdrop-blur-md">
+          <SelectContent className="max-h-60 rounded-xl border-border bg-popover backdrop-blur-md">
             {projects.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
           </SelectContent>
         </Select>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-4 sm:col-span-2 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label className="text-sm font-medium text-foreground">{t("targets_form.month")}</Label>
           <Select value={monthVal} onValueChange={(v: string | null) => form.setValue("periodMonth", parseInt(v ?? "1"))} disabled={isEdit}>
-            <SelectTrigger className="border-border focus:ring-ring/50">
+            <SelectTrigger className="w-full border-border focus:ring-ring/50">
               <SelectValue>{monthVal ? MONTHS[parseInt(monthVal) - 1] : undefined}</SelectValue>
             </SelectTrigger>
             <SelectContent className="rounded-xl border-border bg-popover backdrop-blur-md">
@@ -122,7 +124,7 @@ function TargetForm({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-4 sm:col-span-2 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label className="text-sm font-medium text-foreground">{t("targets_form.target_unit")} <span className="text-destructive">*</span></Label>
           <Input type="number" required min={0} {...form.register("targetUnits")} className="border-border font-mono" />
@@ -133,7 +135,12 @@ function TargetForm({
         </div>
       </div>
 
-      <DialogFooter className="pt-2 gap-2">
+      </div>
+
+      <DialogFooter className="-mx-5 -mb-5 mt-5 rounded-none border-x-0 border-b-0 px-5 py-4 sm:-mx-6 sm:-mb-5 sm:px-6">
+        <DialogClose render={<Button type="button" variant="outline" disabled={loading} onClick={onCancel} />}>
+          Batal
+        </DialogClose>
         <Button type="submit" disabled={loading} className="btn-premium bg-primary hover:bg-primary/90 text-white gap-2">
           {loading && <Loader2 className="h-4 w-4 animate-spin" />}{isEdit ? "Simpan Perubahan" : t("targets_form.btn_submit")}
         </Button>
@@ -178,21 +185,21 @@ export function AddMarketingTargetDialog({ projects, marketings }: Props) {
         <PlusCircle className="h-4 w-4" /> {t("targets_form.btn_add")}
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-lg rounded-3xl bg-white/98 backdrop-blur-md border border-border shadow-[0_8px_30px_rgb(143,175,154,0.15)] p-0 overflow-hidden font-sans">
-          <div className="bg-gradient-to-r from-[#DDE8D8]/70 via-white/80 to-transparent p-6 border-b border-border">
-            <DialogHeader>
+        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-xl max-h-[90vh] rounded-3xl bg-white/98 backdrop-blur-md border border-border shadow-[0_8px_30px_rgb(143,175,154,0.15)] p-0 overflow-hidden font-sans">
+          <div className="bg-gradient-to-r from-secondary/70 via-white to-transparent border-b border-border px-5 py-5 sm:px-6">
+            <DialogHeader className="gap-1.5 pr-8">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-xl bg-secondary flex items-center justify-center shadow-inner">
                   <Target className="h-5 w-5 text-primary" />
                 </div>
-                <div>
-                  <DialogTitle className="text-xl font-black text-foreground tracking-tight">{t("targets_form.title")}</DialogTitle>
+                <div className="min-w-0">
+                  <DialogTitle className="text-lg font-bold text-foreground tracking-tight">{t("targets_form.title")}</DialogTitle>
                   <DialogDescription className="text-xs text-muted-foreground mt-1 leading-relaxed">{t("targets_form.desc")}</DialogDescription>
                 </div>
               </div>
             </DialogHeader>
           </div>
-          <TargetForm projects={projects} marketings={marketings} defaultValues={defaultValues} onSubmit={onSubmit} loading={loading} errorMsg={errorMsg} />
+          <TargetForm projects={projects} marketings={marketings} defaultValues={defaultValues} onSubmit={onSubmit} loading={loading} errorMsg={errorMsg} onCancel={() => setOpen(false)} />
         </DialogContent>
       </Dialog>
     </>
@@ -241,15 +248,15 @@ export function EditMarketingTargetDialog({ projects, marketings, target }: Edit
         <Pencil className="h-3.5 w-3.5" />
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-lg rounded-3xl bg-white/98 backdrop-blur-md border border-border shadow-[0_8px_30px_rgb(143,175,154,0.15)] p-0 overflow-hidden font-sans">
-          <div className="bg-gradient-to-r from-[#DDE8D8]/70 via-white/80 to-transparent p-6 border-b border-border">
-            <DialogHeader>
+        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-xl max-h-[90vh] rounded-3xl bg-white/98 backdrop-blur-md border border-border shadow-[0_8px_30px_rgb(143,175,154,0.15)] p-0 overflow-hidden font-sans">
+          <div className="bg-gradient-to-r from-secondary/70 via-white to-transparent border-b border-border px-5 py-5 sm:px-6">
+            <DialogHeader className="gap-1.5 pr-8">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-xl bg-secondary flex items-center justify-center shadow-inner">
                   <Pencil className="h-5 w-5 text-primary" />
                 </div>
-                <div>
-                  <DialogTitle className="text-xl font-black text-foreground tracking-tight">Edit Target Marketing</DialogTitle>
+                <div className="min-w-0">
+                  <DialogTitle className="text-lg font-bold text-foreground tracking-tight">Edit Target Marketing</DialogTitle>
                   <DialogDescription className="text-xs text-muted-foreground mt-1 leading-relaxed">
                     Ubah jumlah target unit dan nominal. Marketing, proyek, dan periode tidak bisa diubah.
                   </DialogDescription>
@@ -257,7 +264,7 @@ export function EditMarketingTargetDialog({ projects, marketings, target }: Edit
               </div>
             </DialogHeader>
           </div>
-          <TargetForm projects={projects} marketings={marketings} defaultValues={defaultValues} onSubmit={onSubmit} loading={loading} errorMsg={errorMsg} isEdit />
+          <TargetForm projects={projects} marketings={marketings} defaultValues={defaultValues} onSubmit={onSubmit} loading={loading} errorMsg={errorMsg} isEdit onCancel={() => setOpen(false)} />
         </DialogContent>
       </Dialog>
     </>

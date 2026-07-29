@@ -5,7 +5,7 @@ import { roles, permissions, rolePermissions } from "@/db/schema/access";
 import { requireAnyRole } from "../permissions";
 import { eq, and } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { writeAuditLog } from "./audit";
+import { writeAuditLog } from "@/server/services/audit.service";
 
 export async function grantPermission(roleId: string, permissionId: string) {
   await requireAnyRole(["Super Admin"]);

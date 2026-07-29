@@ -15,6 +15,7 @@ import { getTableColumns, eq, sql } from "drizzle-orm"
 import { user as userTable, vendorProfiles } from "@/db/schema/auth"
 import { VendorAccountButton } from "./vendor-account-button"
 import { DataTablePagination } from "@/components/ui/data-table-pagination"
+import { getStatusLabel } from "@/lib/label-helpers"
 
 export const revalidate = 0
 
@@ -259,7 +260,7 @@ export default async function VendorsPage({
                       </td>
                       <td className="py-4 px-6 text-center">
                         <Badge className={`border font-semibold text-xs ${st?.className || "bg-slate-50"} flex items-center justify-center gap-1 w-fit mx-auto rounded-full px-2.5 py-0.5`}>
-                          <Translate namespace="vendor_form" translationKey={`status_${v.status}`} fallback={st?.label ?? v.status} />
+                          <Translate namespace="vendor_form" translationKey={`status_${v.status}`} fallback={st?.label ?? getStatusLabel(v.status)} />
                         </Badge>
                       </td>
                       <td className="py-4 px-6 text-center">

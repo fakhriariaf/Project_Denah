@@ -4,8 +4,7 @@ import { db } from "@/db";
 import { auditLogs } from "@/db/schema/system";
 import { user as userTable } from "@/db/schema/auth";
 import { desc, eq, and, gte, lte, lt } from "drizzle-orm";
-import { getCurrentUser, requireAnyRole } from "@/server/permissions";
-import { headers } from "next/headers";
+import { requireAnyRole } from "@/server/permissions";
 import type { CursorPaginationParams, CursorPaginatedResult } from "@/lib/pagination";
 
 export async function getAuditLogs(filters?: {
@@ -281,6 +280,10 @@ export async function getAuditLogsPaginated(
 }
 
 export async function getAuditUsers() {
+  // RBAC: this returns name + email for EVERY user (PII) and only feeds the audit
+  // page filter, so it must match the audit page's own role gate.
+  await requireAnyRole(["Super Admin", "Admin Kantor", "Direksi / Manager"]);
+
   try {
     return await db
       .select({
@@ -297,80 +300,14 @@ export async function getAuditUsers() {
 }
 
 
-export async function writeAuditLog({
-  action,
-  module,
-  entityId,
-  entityType,
-  details,
-  level = "log",
-  status = "success",
-  responseCode = 200,
-  durationMs,
-  endpoint,
-}: {
-  action: string;
-  module: string;
-  entityId?: string;
-  entityType?: string;
-  details?: Record<string, unknown>;
-  level?: "log" | "info" | "error";
-  status?: "success" | "failed";
-  responseCode?: number;
-  durationMs?: number;
-  endpoint?: string;
-}) {
-  try {
-    const user = await getCurrentUser();
-    const hdrs = await headers();
-    const rawIp = hdrs.get("x-forwarded-for") ?? hdrs.get("x-real-ip") ?? "unknown";
-    const ip = rawIp.includes(",") ? rawIp.split(",")[0].trim() : rawIp;
-
-    // Auto-detect endpoint from referer or next-url header if not explicitly provided
-    const resolvedEndpoint = endpoint
-      ?? hdrs.get("x-invoke-path")
-      ?? hdrs.get("next-url")
-      ?? hdrs.get("referer")
-      ?? null;
-
-    await db.insert(auditLogs).values({
-      id: crypto.randomUUID(),
-      userId: user?.id ?? null,
-      action,
-      module,
-      entityId: entityId ?? null,
-      entityType: entityType ?? null,
-      details: details ?? null,
-      ipAddress: ip,
-      endpoint: resolvedEndpoint,
-      level,
-      status,
-      responseCode,
-      durationMs: durationMs ?? null,
-      createdAt: new Date(),
-    });
-  } catch (err) {
-    // Audit log failure must never break the main action
-    console.warn("[AuditLog] Failed to write audit log:", err);
-  }
-}
-
-export async function safeWriteBlockedTransitionLog(payload: {
-  module: string;
-  entityType: string;
-  entityId: string;
-  details: Record<string, unknown>;
-}) {
-  try {
-    await writeAuditLog({
-      action: "blocked_transition",
-      module: payload.module,
-      entityType: payload.entityType,
-      entityId: payload.entityId,
-      details: payload.details,
-    });
-  } catch (err) {
-    console.error("Failed to write blocked transition audit log:", err);
-  }
-}
+/**
+ * SECURITY BOUNDARY (P0): audit WRITERS intentionally no longer live here.
+ *
+ * This file carries "use server", so every exported function is a browser-callable
+ * RPC endpoint. `writeAuditLog` / `safeWriteBlockedTransitionLog` accept plain
+ * serialisable objects and had no guard, which let any client forge audit rows.
+ *
+ * They now live in `server/services/audit.service.ts` (no "use server").
+ * Import audit writers from there. This module is READ-ONLY.
+ */
 

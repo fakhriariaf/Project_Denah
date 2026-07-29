@@ -31,6 +31,12 @@ import {
   ChartErrorBoundary,
 } from "@/components/charts";
 import { STATUS_COLOR_MAP, PIE_COLORS } from "@/components/charts/dashboard-pie-chart";
+import {
+  getAuditActionLabel,
+  getAuditEntityTypeLabel,
+  getAuditModuleLabel,
+  getComplaintCategoryLabel,
+} from "@/lib/label-helpers";
 
 interface DashboardShellProps {
   stats: any;
@@ -423,7 +429,9 @@ export default function DashboardShell({
                                   {log.userName}
                                 </p>
                                 <span className="text-[9px] font-extrabold text-[#66736A] uppercase tracking-wider mt-0.5 inline-block">
-                                  {log.action} &bull; {log.entityType || log.module}
+                                  {getAuditActionLabel(log.action)} &bull; {log.entityType
+                                    ? getAuditEntityTypeLabel(log.entityType)
+                                    : getAuditModuleLabel(log.module)}
                                 </span>
                               </div>
                             </div>
@@ -506,7 +514,7 @@ export default function DashboardShell({
                               {c.complaintNumber}
                             </span>
                             <Badge className="bg-amber-500/10 text-amber-800 hover:bg-amber-500/15 border border-amber-200/50 text-[9px] font-extrabold uppercase py-0.5 px-2 rounded-full shadow-none shrink-0">
-                              {c.category === "quality" ? "Kualitas" : c.category === "delay" ? "Keterlambatan" : c.category === "document" ? "Dokumen" : c.category === "payment" ? "Keuangan" : "Lainnya"}
+                              {getComplaintCategoryLabel(c.category)}
                             </Badge>
                           </div>
                           

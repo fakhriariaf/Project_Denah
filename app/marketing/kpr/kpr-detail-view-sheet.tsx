@@ -31,8 +31,13 @@ import {
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { useI18n } from "@/lib/i18n";
-import { getKprStatusLabel, getBankSubmissionStatusLabel } from "@/lib/label-helpers";
+import {
+  getBankSubmissionStatusLabel,
+  getCustomerDocumentTypeLabel,
+  getKprStatusLabel,
+} from "@/lib/label-helpers";
 import { KprMilestoneTracker } from "./kpr-milestone-tracker";
+import { KprSlaTimeline } from "./kpr-sla-timeline";
 
 interface Props {
   kpr: any;
@@ -465,6 +470,13 @@ export default function KprDetailViewSheet({
                 </div>
               )}
 
+              {/* 7. Timeline SLA — Req 15 */}
+              <KprSlaTimeline
+                kprProcessId={kpr.id}
+                legacySlaStartAt={kpr.slaStartAt}
+                legacySlaDeadlineAt={kpr.slaDeadlineAt}
+              />
+
             </TabsContent>
 
             {/* TAB CONTENT 2: SUBMISSIONS */}
@@ -558,16 +570,6 @@ export default function KprDetailViewSheet({
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                     {docsList.map((doc) => {
-                      const docLabels: Record<string, string> = {
-                        ktp: "Kartu Tanda Penduduk (KTP)",
-                        npwp: "Nomor Pokok Wajib Pajak (NPWP)",
-                        slip_gaji: "Slip Gaji / Penghasilan",
-                        kk: "Kartu Keluarga (KK)",
-                        spjb: "SPJB Konsumen",
-                        kpr_doc: "Dokumen KPR Lainnya",
-                        other: "Berkas Pendukung",
-                      };
-
                       return (
                         <div key={doc.id} className="p-3 bg-muted/30/60 border border-border rounded-2xl flex items-center justify-between text-xs transition-all hover:bg-muted/30">
                           <div className="flex items-center gap-3 min-w-0 flex-1 mr-2">
@@ -583,7 +585,7 @@ export default function KprDetailViewSheet({
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2">
                                 <p className="font-extrabold text-foreground text-[11px] truncate">
-                                  {docLabels[doc.documentType] || doc.documentType.toUpperCase()}
+                                  {getCustomerDocumentTypeLabel(doc.documentType)}
                                 </p>
                                 {doc.status === "verified" ? (
                                   <Badge className="bg-emerald-50 hover:bg-emerald-50 text-emerald-700 border border-emerald-200 text-[8px] font-black px-1.5 py-0.2 rounded shrink-0">

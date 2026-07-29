@@ -34,6 +34,7 @@ import CancelBookingDialog from "@/app/marketing/bookings/cancel-booking-dialog"
 import BookingPaymentProofForm from "./payment-proof-form";
 import { akadAction, completeAkadAction } from "./akad-action";
 import { formatRupiah, formatDate } from "@/lib/format-utils";
+import { getPaymentSchemeLabel, getPaymentStatusLabel } from "@/lib/label-helpers";
 import { CustomerDocumentsPanel } from "@/components/customer-documents-panel";
 import BookingAttachmentsList from "./attachments-list";
 import BastConsumerCard from "./bast-consumer-card";
@@ -266,6 +267,15 @@ export default async function BookingDetailPage({
   const cashSettlementPaymentWithoutProof = cashSettlementPayments.find(
     (payment) => payment.status !== "voided" && !payment.proofAttachmentId
   );
+  // BF/DP mengikuti pola Pelunasan Cash dan Termin: bila pencatatan payment
+  // sudah dibuat lebih dahulu, upload bukti harus menempel ke payment itu,
+  // bukan membuat PAY-AUTO kedua untuk invoice yang sama.
+  const bookingFeePaymentWithoutProof = bookingFeePayments.find(
+    (payment) => payment.status !== "voided" && !payment.proofAttachmentId
+  );
+  const dpPaymentWithoutProof = dpPayments.find(
+    (payment) => payment.status !== "voided" && !payment.proofAttachmentId
+  );
   const renderRecordedPayments = (recordedPayments: typeof cashSettlementPayments) => {
     if (recordedPayments.length === 0) return null;
 
@@ -275,14 +285,14 @@ export default async function BookingDetailPage({
           <div key={payment.id} className="flex items-center justify-between gap-3 p-3">
             <div className="min-w-0">
               <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Pembayaran tercatat</p>
-              <Link href={`/finance/payments/${payment.id}`} className="font-mono text-xs font-bold text-primary hover:underline">
+              <Link href={`/finance/payments/${payment.id}`} className="font-mono text-xs font-bold text-secondary-foreground hover:underline">
                 {payment.paymentNumber}
               </Link>
             </div>
             <div className="text-right shrink-0">
               <p className="font-mono text-xs font-bold text-foreground">{formatRupiah(payment.amount)}</p>
               <p className="text-[10px] text-muted-foreground">
-                {payment.status === "verified" ? "Terverifikasi" : payment.status === "pending" ? "Menunggu Verifikasi" : payment.status === "rejected" ? "Ditolak" : "Dibatalkan"}
+                {getPaymentStatusLabel(payment.status)}
               </p>
             </div>
           </div>
@@ -388,7 +398,7 @@ export default async function BookingDetailPage({
     <div className="flex flex-col gap-6">
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Link href="/marketing/bookings" className="flex items-center gap-1 hover:text-primary transition-colors font-medium">
+<Link href="/marketing/bookings" className="flex items-center gap-1 hover:text-secondary-foreground transition-colors font-medium">
           <ArrowLeft className="h-4 w-4" />
           {t("booking_detail.back_to_list")}
         </Link>
@@ -417,16 +427,16 @@ export default async function BookingDetailPage({
               </div>
               <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
                 <span className="flex items-center gap-1">
-                  <Building2 className="h-3.5 w-3.5 text-primary/70" />
+                  <Building2 className="h-3.5 w-3.5 text-secondary-foreground" />
                   {bookingData.projectName}
                 </span>
                 <span className="text-muted-foreground/70">•</span>
-                <span className="font-mono text-xs bg-secondary text-primary px-2 py-0.5 rounded font-bold">
+                <span className="font-mono text-xs bg-secondary text-secondary-foreground px-2 py-0.5 rounded font-bold">
                   {bookingData.unitCode}
                 </span>
                 <span className="text-muted-foreground/70">•</span>
                 <span className="flex items-center gap-1">
-                  <Calendar className="h-3.5 w-3.5 text-primary/70" />
+                  <Calendar className="h-3.5 w-3.5 text-secondary-foreground" />
                   {formatDate(bookingData.bookingDate)}
                 </span>
               </div>
@@ -438,7 +448,7 @@ export default async function BookingDetailPage({
             {(bookingData.status === "active" || bookingData.status === "akad" || bookingData.status === "completed") && (
               <a
                 href={`/marketing/bookings/${id}/print`}
-                className="flex items-center gap-2 px-3 py-2 rounded-xl border border-border bg-card text-muted-foreground hover:text-primary hover:bg-secondary/30 text-sm font-semibold transition-all shadow-sm h-9"
+                className="flex items-center gap-2 px-3 py-2 rounded-xl border border-border bg-card text-muted-foreground hover:text-secondary-foreground hover:bg-secondary/30 text-sm font-semibold transition-all shadow-sm h-9"
               >
                 <Printer className="h-4 w-4" />
                 {t("booking_detail.print_sttb")}
@@ -501,24 +511,24 @@ export default async function BookingDetailPage({
             {/* Konsumen Card */}
             <div className="bg-card border border-border rounded-2xl p-5 shadow-sage">
               <div className="flex items-center gap-2 mb-4">
-                <div className="h-8 w-8 rounded-xl bg-secondary text-primary flex items-center justify-center">
+                <div className="h-8 w-8 rounded-xl bg-secondary text-secondary-foreground flex items-center justify-center">
                   <User className="h-4 w-4" />
                 </div>
                 <h3 className="font-bold text-foreground text-sm">{t("booking_detail.consumer_title")}</h3>
               </div>
               <div className="space-y-2">
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-primary/70">{t("booking_detail.buyer_name")}</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-secondary-foreground">{t("booking_detail.buyer_name")}</p>
                   <p className="font-bold text-foreground">{bookingData.customerName || "-"}</p>
                 </div>
                 {bookingData.customerPhone && (
                   <div>
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-primary/70">{t("booking_detail.phone_number")}</p>
-                    <p className="font-mono text-primary font-semibold">{bookingData.customerPhone}</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-secondary-foreground">{t("booking_detail.phone_number")}</p>
+                  <p className="font-mono text-foreground font-semibold">{bookingData.customerPhone}</p>
                   </div>
                 )}
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-primary/70">{t("booking_detail.marketing_pic")}</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-secondary-foreground">{t("booking_detail.marketing_pic")}</p>
                   <p className="font-semibold text-foreground">{bookingData.marketingName || "-"}</p>
                 </div>
               </div>
@@ -527,39 +537,39 @@ export default async function BookingDetailPage({
             {/* Unit Card */}
             <div className="bg-card border border-border rounded-2xl p-5 shadow-sage">
               <div className="flex items-center gap-2 mb-4">
-                <div className="h-8 w-8 rounded-xl bg-secondary text-primary flex items-center justify-center">
+                <div className="h-8 w-8 rounded-xl bg-secondary text-secondary-foreground flex items-center justify-center">
                   <Building2 className="h-4 w-4" />
                 </div>
                 <h3 className="font-bold text-foreground text-sm">{t("booking_detail.unit_title")}</h3>
               </div>
               <div className="space-y-2">
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-primary/70">{t("booking_detail.unit_code")}</p>
-                  <p className="font-mono font-black text-primary text-lg">{bookingData.unitCode}</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-secondary-foreground">{t("booking_detail.unit_code")}</p>
+                  <p className="font-mono font-black text-secondary-foreground text-lg">{bookingData.unitCode}</p>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   {bookingData.landArea && (
                     <div>
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-primary/70">{t("booking_detail.land_area")}</p>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-secondary-foreground">{t("booking_detail.land_area")}</p>
                       <p className="font-mono font-semibold text-foreground">{bookingData.landArea} m²</p>
                     </div>
                   )}
                   {bookingData.buildingArea && (
                     <div>
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-primary/70">{t("booking_detail.building_area")}</p>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-secondary-foreground">{t("booking_detail.building_area")}</p>
                       <p className="font-mono font-semibold text-foreground">{bookingData.buildingArea} m²</p>
                     </div>
                   )}
                 </div>
                 {bookingData.price && (
                   <div>
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-primary/70">{t("booking_detail.unit_price")}</p>
-                    <p className="font-mono font-bold text-primary">{formatRupiah(bookingData.price)}</p>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-secondary-foreground">{t("booking_detail.unit_price")}</p>
+                    <p className="font-mono font-bold text-foreground">{formatRupiah(bookingData.price)}</p>
                   </div>
                 )}
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-primary/70">Status Penjualan</p>
-                  <span className="mt-0.5 inline-flex rounded-full border border-primary/20 bg-secondary/60 px-2 py-0.5 text-xs font-bold text-primary">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-secondary-foreground">Status Penjualan</p>
+                  <span className="mt-0.5 inline-flex rounded-full border border-primary/20 bg-secondary/60 px-2 py-0.5 text-xs font-bold text-secondary-foreground">
                     {nextStepReadiness.salesStatusLabel}
                   </span>
                 </div>
@@ -574,13 +584,13 @@ export default async function BookingDetailPage({
                   });
                   return (
                     <div>
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-primary/70">Status Fisik</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-secondary-foreground">Status Fisik</p>
                       <div className="flex items-center gap-1.5 mt-0.5">
                         <span
                           className="h-2 w-2 rounded-full shrink-0"
                           style={{ backgroundColor: businessState.isReadyStock ? "#4F6F52" : "#D9A514" }}
                         />
-                        <span className="text-xs font-bold px-2 py-0.5 rounded-full border bg-secondary/60 border-primary/20 text-primary">
+                        <span className="text-xs font-bold px-2 py-0.5 rounded-full border bg-secondary/60 border-primary/20 text-secondary-foreground">
                           {businessState.displayLabel}
                         </span>
                       </div>
@@ -594,7 +604,7 @@ export default async function BookingDetailPage({
           {/* Pembayaran */}
           <div id="rincian-pembayaran" className="bg-card border border-border rounded-2xl p-5 shadow-sage scroll-mt-6">
             <div className="flex items-center gap-2 mb-4">
-              <div className="h-8 w-8 rounded-xl bg-secondary text-primary flex items-center justify-center">
+              <div className="h-8 w-8 rounded-xl bg-secondary text-secondary-foreground flex items-center justify-center">
                 <DollarSign className="h-4 w-4" />
               </div>
               <h3 className="font-bold text-foreground text-sm">{t("booking_detail.payment_title")}</h3>
@@ -602,34 +612,34 @@ export default async function BookingDetailPage({
             <div className="space-y-3">
               <div className="flex justify-between items-center p-3 bg-muted/30 rounded-xl">
                 <div>
-                  <p className="text-sm font-semibold text-muted-foreground">{t("booking_detail.booking_fee")}</p>
+                  <p className="text-sm font-semibold text-foreground/80">{t("booking_detail.booking_fee")}</p>
                   <p className={`mt-0.5 flex items-center gap-1 text-[11px] font-semibold ${bfAttachments.length > 0 ? "text-emerald-700" : "text-rose-600"}`}>
                     {bfAttachments.length > 0 ? <CheckCircle className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
                     {bfAttachments.length > 0 ? "Bukti pembayaran terunggah" : "Bukti pembayaran belum diunggah"}
                   </p>
                 </div>
-                <span className="font-mono font-bold text-primary">{formatRupiah(bookingData.bookingFee)}</span>
+                <span className="font-mono font-bold text-foreground">{formatRupiah(bookingData.bookingFee)}</span>
               </div>
               <div className="flex justify-between items-center p-3 bg-muted/30 rounded-xl">
                 <div>
-                  <p className="text-sm font-semibold text-muted-foreground">{t("booking_detail.down_payment")}</p>
+                  <p className="text-sm font-semibold text-foreground/80">{t("booking_detail.down_payment")}</p>
                   <p className={`mt-0.5 flex items-center gap-1 text-[11px] font-semibold ${dpAttachments.length > 0 ? "text-emerald-700" : "text-rose-600"}`}>
                     {dpAttachments.length > 0 ? <CheckCircle className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
                     {dpAttachments.length > 0 ? "Bukti pembayaran terunggah" : "Bukti pembayaran belum diunggah"}
                   </p>
                 </div>
-                <span className="font-mono font-bold text-primary">{formatRupiah(bookingData.dpAmount)}</span>
+                <span className="font-mono font-bold text-foreground">{formatRupiah(bookingData.dpAmount)}</span>
               </div>
               {cashSettlementInvoice && (
                 <div className="flex justify-between items-center gap-3 p-3 bg-muted/30 rounded-xl">
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-muted-foreground">Pelunasan Cash</p>
+                    <p className="text-sm font-semibold text-foreground/80">Pelunasan Cash</p>
                     <p className={`mt-0.5 flex items-center gap-1 text-[11px] font-semibold ${cashSettlementAttachments.length > 0 ? "text-emerald-700" : "text-rose-600"}`}>
                       {cashSettlementAttachments.length > 0 ? <CheckCircle className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
                       {cashSettlementAttachments.length > 0 ? "Bukti pembayaran terunggah" : "Bukti pembayaran belum diunggah"}
                     </p>
                   </div>
-                  <span className="font-mono font-bold text-primary shrink-0">{formatRupiah(cashSettlementInvoice.amount)}</span>
+                  <span className="font-mono font-bold text-foreground shrink-0">{formatRupiah(cashSettlementInvoice.amount)}</span>
                 </div>
               )}
               <div className="flex justify-between items-center p-3 bg-muted/30 rounded-xl">
@@ -638,19 +648,19 @@ export default async function BookingDetailPage({
               </div>
               <div className="flex justify-between items-center p-3 bg-secondary/40 rounded-xl border border-primary/20">
                 <span className="text-sm font-bold text-foreground">Total Pembayaran Terverifikasi</span>
-                <span className="font-mono font-black text-primary text-base">
+                <span className="font-mono font-black text-foreground text-base">
                   {formatRupiah(totalVerifiedPayment)}
                 </span>
               </div>
               <div className="flex justify-between items-center p-3 rounded-xl">
-                <span className="text-sm font-semibold text-muted-foreground">Sisa Kewajiban</span>
+                <span className="text-sm font-semibold text-foreground/80">Sisa Kewajiban</span>
                 <span className="font-mono font-bold text-foreground">{formatRupiah(Math.max(0, totalInvoiceAmount - totalVerifiedPayment))}</span>
               </div>
               <div className="flex justify-between items-center p-3 rounded-xl">
-                <span className="text-sm font-semibold text-muted-foreground">{t("booking_detail.payment_scheme")}</span>
+                <span className="text-sm font-semibold text-foreground/80">{t("booking_detail.payment_scheme")}</span>
                 <div className="flex items-center gap-1.5">
                   <Badge variant="outline" className="font-bold text-muted-foreground border-border uppercase text-xs">
-                    {schemeMap[bookingData.paymentScheme] || bookingData.paymentScheme}
+                    {schemeMap[bookingData.paymentScheme] ?? getPaymentSchemeLabel(bookingData.paymentScheme)}
                   </Badge>
                   {bookingData.paymentScheme === "installment" && bookingData.termin && (
                     <Badge className="bg-primary hover:bg-primary text-white font-bold text-xs rounded-full px-2 py-0.5">
@@ -664,7 +674,7 @@ export default async function BookingDetailPage({
           <section className="rounded-2xl border border-primary/20 bg-gradient-to-br from-secondary/70 via-card to-card p-5 shadow-sage">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0">
-                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-primary/70">Tahap Berikutnya</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-secondary-foreground">Tahap Berikutnya</p>
                 <h2 className="mt-1 text-base font-bold text-foreground">{nextStepReadiness.title}</h2>
                 <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{nextStepReadiness.description}</p>
               </div>
@@ -799,7 +809,7 @@ export default async function BookingDetailPage({
 
           <div id="riwayat-status" className="bg-card border border-border rounded-2xl p-5 shadow-sage scroll-mt-6">
             <div className="flex items-center gap-2 mb-4">
-              <div className="h-8 w-8 rounded-xl bg-secondary text-primary flex items-center justify-center">
+              <div className="h-8 w-8 rounded-xl bg-secondary text-secondary-foreground flex items-center justify-center">
                 <Clock className="h-4 w-4" />
               </div>
               <h3 className="font-bold text-foreground text-sm">{t("booking_detail.history_title")}</h3>
@@ -810,7 +820,7 @@ export default async function BookingDetailPage({
             ) : (
               <div className="space-y-3">
                 {statusHistory.map((h, idx) => {
-                  let statusIcon = <CheckCircle className="h-3 w-3 text-primary" />;
+                  let statusIcon = <CheckCircle className="h-3 w-3 text-secondary-foreground" />;
                   let dotBg = "bg-primary/10 border-primary/50";
 
                   if (h.newStatus === "Doc Verified") {
@@ -835,10 +845,10 @@ export default async function BookingDetailPage({
                             <>
                               <span className="text-muted-foreground">{h.previousStatus}</span>
                               <span className="mx-1 text-muted-foreground/70">→</span>
-                              <span className="text-primary">{h.newStatus}</span>
+                              <span className="text-secondary-foreground">{h.newStatus}</span>
                             </>
                           ) : (
-                            <span className="text-primary">{h.newStatus}</span>
+                            <span className="text-secondary-foreground">{h.newStatus}</span>
                           )}
                         </p>
                         {h.notes && (
@@ -861,11 +871,11 @@ export default async function BookingDetailPage({
           {/* Bukti Pembayaran Booking Fee (BF) */}
           <div className="bg-card border border-border rounded-2xl p-5 shadow-sage space-y-4">
             <div className="flex items-center gap-2">
-              <div className="h-8 w-8 rounded-xl bg-secondary text-primary flex items-center justify-center">
+              <div className="h-8 w-8 rounded-xl bg-secondary text-secondary-foreground flex items-center justify-center">
                 <FilePlus className="h-4 w-4" />
               </div>
               <h3 className="font-bold text-foreground text-sm">Bukti Pembayaran Booking Fee (BF)</h3>
-              <span className="ml-auto text-xs bg-secondary text-primary px-2 py-0.5 rounded-full font-bold font-sans">
+              <span className="ml-auto text-xs bg-secondary text-secondary-foreground px-2 py-0.5 rounded-full font-bold font-sans">
                 {t("booking_detail.proof_count", { count: bfAttachments.length })}
               </span>
             </div>
@@ -879,18 +889,23 @@ export default async function BookingDetailPage({
             {renderRecordedPayments(bookingFeePayments)}
 
             {canUploadProof && bfAttachments.length === 0 && (
-              <BookingPaymentProofForm bookingId={id} paymentType="booking_fee" />
+              <BookingPaymentProofForm
+                bookingId={id}
+                paymentType="booking_fee"
+                existingPaymentId={bookingFeePaymentWithoutProof?.id}
+                invoiceId={bookingFeePaymentWithoutProof ? undefined : bookingFeeInvoice?.id}
+              />
             )}
           </div>
 
           {/* Bukti Pembayaran Uang Muka (DP) */}
           <div className="bg-card border border-border rounded-2xl p-5 shadow-sage space-y-4">
             <div className="flex items-center gap-2">
-              <div className="h-8 w-8 rounded-xl bg-secondary text-primary flex items-center justify-center">
+              <div className="h-8 w-8 rounded-xl bg-secondary text-secondary-foreground flex items-center justify-center">
                 <FilePlus className="h-4 w-4" />
               </div>
               <h3 className="font-bold text-foreground text-sm">Bukti Pembayaran Uang Muka (DP)</h3>
-              <span className="ml-auto text-xs bg-secondary text-primary px-2 py-0.5 rounded-full font-bold font-sans">
+              <span className="ml-auto text-xs bg-secondary text-secondary-foreground px-2 py-0.5 rounded-full font-bold font-sans">
                 {t("booking_detail.proof_count", { count: dpAttachments.length })}
               </span>
             </div>
@@ -904,7 +919,12 @@ export default async function BookingDetailPage({
             {renderRecordedPayments(dpPayments)}
 
             {canUploadProof && dpAttachments.length === 0 && (
-              <BookingPaymentProofForm bookingId={id} paymentType="dp" />
+              <BookingPaymentProofForm
+                bookingId={id}
+                paymentType="dp"
+                existingPaymentId={dpPaymentWithoutProof?.id}
+                invoiceId={dpPaymentWithoutProof ? undefined : dpInvoice?.id}
+              />
             )}
           </div>
 
@@ -912,7 +932,7 @@ export default async function BookingDetailPage({
           {cashSettlementInvoice && (
             <div id="bukti-pelunasan-cash" className="bg-card border border-border rounded-2xl p-5 shadow-sage space-y-4 scroll-mt-6">
               <div className="flex items-center gap-2">
-                <div className="h-8 w-8 rounded-xl bg-secondary text-primary flex items-center justify-center">
+                <div className="h-8 w-8 rounded-xl bg-secondary text-secondary-foreground flex items-center justify-center">
                   <FilePlus className="h-4 w-4" />
                 </div>
                 <div className="min-w-0">
@@ -921,7 +941,7 @@ export default async function BookingDetailPage({
                     {cashSettlementInvoice.scheduleLabel || "Pelunasan Cash"} · {formatRupiah(cashSettlementInvoice.amount)}
                   </p>
                 </div>
-                <span className="ml-auto text-xs bg-secondary text-primary px-2 py-0.5 rounded-full font-bold font-sans">
+                <span className="ml-auto text-xs bg-secondary text-secondary-foreground px-2 py-0.5 rounded-full font-bold font-sans">
                   {t("booking_detail.proof_count", { count: cashSettlementAttachments.length })}
                 </span>
               </div>
@@ -940,7 +960,7 @@ export default async function BookingDetailPage({
                         <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Pembayaran tercatat</p>
                         <Link
                           href={"/finance/payments/" + payment.id}
-                          className="font-mono text-xs font-bold text-primary hover:underline"
+                          className="font-mono text-xs font-bold text-secondary-foreground hover:underline"
                         >
                           {payment.paymentNumber}
                         </Link>
@@ -948,7 +968,7 @@ export default async function BookingDetailPage({
                       <div className="text-right shrink-0">
                         <p className="font-mono text-xs font-bold text-foreground">{formatRupiah(payment.amount)}</p>
                         <p className="text-[10px] text-muted-foreground">
-                          {payment.status === "verified" ? "Terverifikasi" : payment.status === "pending" ? "Menunggu Verifikasi" : payment.status === "rejected" ? "Ditolak" : "Dibatalkan"}
+                          {getPaymentStatusLabel(payment.status)}
                         </p>
                       </div>
                     </div>
@@ -976,7 +996,7 @@ export default async function BookingDetailPage({
           {installmentInvoices.length > 0 && (
             <div id="jadwal-termin" className="bg-card border border-border rounded-2xl p-5 shadow-sage space-y-4 scroll-mt-6">
               <div className="flex items-center gap-2">
-                <div className="h-8 w-8 rounded-xl bg-secondary text-primary flex items-center justify-center">
+                <div className="h-8 w-8 rounded-xl bg-secondary text-secondary-foreground flex items-center justify-center">
                   <FilePlus className="h-4 w-4" />
                 </div>
                 <div className="min-w-0">
@@ -1012,7 +1032,7 @@ export default async function BookingDetailPage({
                         </div>
                         <div className="text-right shrink-0">
                           <p className="font-mono text-xs font-bold text-foreground">{formatRupiah(termin.amount)}</p>
-                          <p className={`text-[10px] font-semibold ${isPaid ? "text-emerald-700" : isLocked ? "text-muted-foreground" : "text-primary"}`}>
+                          <p className={`text-[10px] font-semibold ${isPaid ? "text-emerald-700" : isLocked ? "text-muted-foreground" : "text-secondary-foreground"}`}>
                             {isPaid ? "Lunas" : isLocked ? "Terkunci" : termin.status === "partial" ? "Sebagian" : "Belum dibayar"}
                           </p>
                         </div>
@@ -1022,13 +1042,13 @@ export default async function BookingDetailPage({
                         <div className="rounded-lg border border-border bg-card divide-y divide-border">
                           {terminPayments.map((payment) => (
                             <div key={payment.id} className="flex items-center justify-between gap-3 p-2">
-                              <Link href={"/finance/payments/" + payment.id} className="font-mono text-[11px] font-bold text-primary hover:underline">
+                              <Link href={"/finance/payments/" + payment.id} className="font-mono text-[11px] font-bold text-secondary-foreground hover:underline">
                                 {payment.paymentNumber}
                               </Link>
                               <div className="text-right shrink-0">
                                 <p className="font-mono text-[11px] font-bold text-foreground">{formatRupiah(payment.amount)}</p>
                                 <p className="text-[9px] text-muted-foreground">
-                                  {payment.status === "verified" ? "Terverifikasi" : payment.status === "pending" ? "Menunggu Verifikasi" : payment.status === "rejected" ? "Ditolak" : "Dibatalkan"}
+                                  {getPaymentStatusLabel(payment.status)}
                                 </p>
                               </div>
                             </div>
@@ -1082,7 +1102,7 @@ export default async function BookingDetailPage({
           /* Riwayat status lama telah dipindahkan ke kolom utama. */
           <div className="bg-card border border-border rounded-2xl p-5 shadow-sage">
             <div className="flex items-center gap-2 mb-4">
-              <div className="h-8 w-8 rounded-xl bg-secondary text-primary flex items-center justify-center">
+              <div className="h-8 w-8 rounded-xl bg-secondary text-secondary-foreground flex items-center justify-center">
                 <Clock className="h-4 w-4" />
               </div>
               <h3 className="font-bold text-foreground text-sm">{t("booking_detail.history_title")}</h3>
@@ -1093,7 +1113,7 @@ export default async function BookingDetailPage({
             ) : (
               <div className="space-y-3">
                 {statusHistory.map((h, idx) => {
-                  let statusIcon = <CheckCircle className="h-3 w-3 text-primary" />;
+                  let statusIcon = <CheckCircle className="h-3 w-3 text-secondary-foreground" />;
                   let dotBg = "bg-primary/10 border-primary/50";
 
                   if (h.newStatus === "Doc Verified") {
@@ -1118,10 +1138,10 @@ export default async function BookingDetailPage({
                             <>
                               <span className="text-muted-foreground">{h.previousStatus}</span>
                               <span className="mx-1 text-muted-foreground/70">→</span>
-                              <span className="text-primary">{h.newStatus}</span>
+                              <span className="text-secondary-foreground">{h.newStatus}</span>
                             </>
                           ) : (
-                            <span className="text-primary">{h.newStatus}</span>
+                            <span className="text-secondary-foreground">{h.newStatus}</span>
                           )}
                         </p>
                         {h.notes && (

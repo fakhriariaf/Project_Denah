@@ -23,6 +23,7 @@ import { parseServerError } from "@/lib/error-parser";
 import { useI18n } from "@/lib/i18n";
 import { Translate } from "@/components/translate";
 import { toast } from "sonner";
+import { getLeadStatusLabel } from "@/lib/label-helpers";
 
 type FormValues = z.infer<typeof followupSchema>;
 
@@ -199,7 +200,7 @@ export default function AddFollowupDialog({ lead }: Props) {
               ))}
             </div>
             <p className="text-[10px] text-primary/70">
-              {t("followup.status_current")} <span className="font-semibold text-muted-foreground">{statusOptions.find(o => o.value === lead.status)?.label || lead.status}</span>
+              {t("followup.status_current")} <span className="font-semibold text-muted-foreground">{statusOptions.find(o => o.value === lead.status)?.label ?? getLeadStatusLabel(lead.status)}</span>
               {newStatus !== lead.status && (
                 <span className="ml-1 text-primary">{t("followup.status_change")} <strong>{statusOptions.find(o => o.value === newStatus)?.label}</strong></span>
               )}

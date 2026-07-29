@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { AlertCircle, Calendar, Clock, Loader2, CheckCircle2, RefreshCw, XCircle } from "lucide-react";
 import { reviewVendorComplaint } from "@/server/actions/production";
 import { useRouter } from "next/navigation";
+import { getComplaintCategoryLabel } from "@/lib/label-helpers";
 
 interface VendorComplaintReviewDialogProps {
   complaint: {
@@ -102,17 +103,6 @@ export function VendorComplaintReviewDialog({
     });
   };
 
-  const categoryLabels: Record<string, string> = {
-    material: "Kekurangan Material",
-    cuaca: "Cuaca Buruk",
-    tenaga_kerja: "Kekurangan Pekerja",
-    akses_lokasi: "Akses Lokasi Terhambat",
-    revisi_desain: "Revisi Gambar / Desain",
-    menunggu_instruksi: "Menunggu Instruksi",
-    kendala_teknis: "Kendala Teknis Lapangan",
-    lainnya: "Lain-lain",
-  };
-
   const handleReviewSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -189,7 +179,7 @@ export function VendorComplaintReviewDialog({
             <div className="flex justify-between items-center pb-2 border-b border-[#E4EAE1]/80">
               <span className="font-bold text-[#4F6F52]">{complaint.complaintNumber}</span>
               <span className="bg-[#E4EAE1] text-[#3A4F3D] px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wider">
-                {categoryLabels[complaint.category] || complaint.category}
+                {getComplaintCategoryLabel(complaint.category)}
               </span>
             </div>
             <div>

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
+import { isValidElement } from "react";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Link2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { cn } from "@/lib/utils";
@@ -13,7 +14,8 @@ import { cn } from "@/lib/utils";
  * section order and centralizes the Sage Green / light-theme presentation rules
  * so all five detail pages look and behave identically.
  *
- * Fixed section order (Req 2.1): Header → Summary cards → Detail metadata → Timeline.
+ * Fixed section order (Req 13.1): Header → Summary cards → Detail metadata →
+ * Dokumen Terkait (related documents) → Timeline.
  *
  * Design / requirements:
  * - Req 2.1: sections rendered top-to-bottom in a fixed order.
@@ -52,6 +54,25 @@ export function orDash(value: string | number | null | undefined): string {
   return trimmed === "" ? EM_DASH : trimmed;
 }
 
+/**
+ * Determines whether a ReactNode carries no renderable content. Used by the
+ * "Dokumen Terkait" section to decide between showing the caller-provided
+ * related documents and the explanatory empty state (Req 13.4): an empty
+ * related-documents section must show context, never a blank/crashing area.
+ *
+ * Treated as empty: null, undefined, booleans, empty/whitespace strings, and
+ * arrays whose entries are all empty. Any element or non-empty primitive is
+ * considered renderable content.
+ */
+function isEmptyRelatedContent(node: ReactNode): boolean {
+  if (node == null || typeof node === "boolean") return true;
+  if (typeof node === "string") return node.trim() === "";
+  if (typeof node === "number") return false;
+  if (Array.isArray(node)) return node.every(isEmptyRelatedContent);
+  if (isValidElement(node)) return false;
+  return false;
+}
+
 export interface FinanceDetailLayoutProps {
   /** Document number / name shown as the header title, rendered monospace (Req 2.2, 2.10). */
   docNumber: ReactNode;
@@ -77,8 +98,28 @@ export interface FinanceDetailLayoutProps {
   /** Detail metadata section content (Req 2.4). */
   details: ReactNode;
   /**
+   * Related documents section content (Req 13.1) — links/cards to bookings,
+   * units, customers, approvals, payments, or ledger transactions that are
+   * actually related to this document.
+   *
+   * Additive and opt-in for backward compatibility: when the prop is omitted
+   * (`undefined`) the section is not rendered at all, so existing callers that
+   * embed related documents inside `details` are unaffected. When the prop is
+   * provided but empty (`null`, `[]`, empty content), the section renders an
+   * explanatory empty state instead of a blank area (Req 13.4).
+   */
+  relatedDocuments?: ReactNode;
+  /** Optional heading override for the related documents section. */
+  relatedTitle?: string;
+  /**
+   * Optional empty-state content/message override for the related documents
+   * section. A string renders inside the default empty-state container; a
+   * ReactNode replaces the container entirely.
+   */
+  relatedEmptyState?: ReactNode;
+  /**
    * Timeline section — typically a `<FinanceTimeline .../>` element (Req 2.5).
-   * Rendered last, after the detail metadata.
+   * Rendered last, after the related documents.
    */
   timeline: ReactNode;
   className?: string;
@@ -95,9 +136,21 @@ export function FinanceDetailLayout({
   headerActions,
   summary,
   details,
+  relatedDocuments,
+  relatedTitle = "Dokumen Terkait",
+  relatedEmptyState,
   timeline,
   className,
 }: FinanceDetailLayoutProps) {
+  // Opt-in: only render the related documents section when the caller provides
+  // the prop. `undefined` (prop omitted) keeps legacy callers unchanged, while
+  // a provided-but-empty value renders the explanatory empty state (Req 13.4).
+  const showRelated = relatedDocuments !== undefined;
+  const relatedIsEmpty = isEmptyRelatedContent(relatedDocuments);
+  const relatedEmptyMessage =
+    typeof relatedEmptyState === "string"
+      ? relatedEmptyState
+      : "Tidak ada dokumen terkait untuk dokumen ini.";
   return (
     <div className={cn("space-y-6 p-6", className)}>
       {/* Header (Req 2.1 order #1, Req 2.2) */}
@@ -128,10 +181,39 @@ export function FinanceDetailLayout({
       {/* Summary cards (Req 2.1 order #2, Req 2.3) */}
       <section aria-label="Ringkasan">{summary}</section>
 
-      {/* Detail metadata (Req 2.1 order #3, Req 2.4) */}
+      {/* Detail metadata (Req 13.1 order #3, Req 2.4) */}
       <section aria-label="Detail">{details}</section>
 
-      {/* Timeline (Req 2.1 order #4, Req 2.5) */}
+      {/* Dokumen Terkait / related documents (Req 13.1 order #4, Req 13.4).
+          Opt-in section: an empty related-documents set shows context rather
+          than a blank/crashing area. */}
+      {showRelated && (
+        <section aria-label="Dokumen Terkait" className="space-y-3">
+          <h2 className="flex items-center gap-2 text-lg font-semibold text-foreground">
+            <Link2 className="h-5 w-5 text-primary/70" aria-hidden="true" />
+            {relatedTitle}
+          </h2>
+          {relatedIsEmpty ? (
+            isValidElement(relatedEmptyState) ? (
+              relatedEmptyState
+            ) : (
+              <div className="rounded-md border border-dashed border-border bg-[#F7F8F3] px-4 py-8 text-center">
+                <Link2 className="mx-auto mb-2 h-8 w-8 text-muted-foreground/40" aria-hidden="true" />
+                <p className="text-sm font-medium text-foreground">
+                  Tidak ada dokumen terkait
+                </p>
+                <p className="mx-auto mt-1 max-w-sm text-xs text-muted-foreground">
+                  {relatedEmptyMessage}
+                </p>
+              </div>
+            )
+          ) : (
+            relatedDocuments
+          )}
+        </section>
+      )}
+
+      {/* Timeline (Req 13.1 order #5, Req 2.5) */}
       <section aria-label="Timeline">{timeline}</section>
     </div>
   );

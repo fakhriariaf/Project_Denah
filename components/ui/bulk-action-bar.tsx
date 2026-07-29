@@ -8,8 +8,8 @@ import { Button } from "@/components/ui/button";
 export interface BulkActionBarProps {
   /** Number of currently selected items */
   selectedCount: number;
-  /** Callback when Export Excel is clicked */
-  onExport: () => void;
+  /** Callback when Export Excel is clicked — only shown when provided (role-gated by parent) */
+  onExport?: () => void;
   /** Callback when Delete is clicked — only shown when provided (role-gated by parent) */
   onDelete?: () => void;
   /** Whether a bulk operation is currently in progress */
@@ -20,8 +20,9 @@ export interface BulkActionBarProps {
 
 /**
  * Floating action bar displayed above the data table when items are selected.
- * Shows selected count, Export Excel button, and optionally a Delete button
- * (only rendered when `onDelete` is provided — role gating done by the parent).
+ * Shows selected count plus optional Export Excel and Delete buttons. Each is
+ * rendered only when its callback is provided, so role gating is done by the
+ * parent and always mirrors the server-side guard on the corresponding action.
  *
  * Displays a spinner and disables buttons while `isProcessing` is true.
  */
@@ -32,7 +33,9 @@ export function BulkActionBar({
   isProcessing,
   className,
 }: BulkActionBarProps) {
-  if (selectedCount === 0) return null;
+  // Nothing to offer: either no selection, or the current role has neither bulk
+  // action. Rendering a bar with only a counter would be dead UI.
+  if (selectedCount === 0 || (!onExport && !onDelete)) return null;
 
   return (
     <div
@@ -55,17 +58,19 @@ export function BulkActionBar({
         <Loader2 className="size-4 animate-spin text-[#4F6F52]" />
       )}
 
-      {/* Export Excel button */}
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={onExport}
-        disabled={isProcessing}
-        className="border-[#B7CDB3] text-[#4F6F52] hover:bg-[#DDE8D8] hover:text-[#3A5440]"
-      >
-        <Download data-icon="inline-start" className="size-3.5" />
-        Export Excel
-      </Button>
+      {/* Export Excel button — only shown when onExport is provided */}
+      {onExport && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onExport}
+          disabled={isProcessing}
+          className="border-[#B7CDB3] text-[#4F6F52] hover:bg-[#DDE8D8] hover:text-[#3A5440]"
+        >
+          <Download data-icon="inline-start" className="size-3.5" />
+          Export Excel
+        </Button>
+      )}
 
       {/* Delete button — only shown when onDelete is provided */}
       {onDelete && (

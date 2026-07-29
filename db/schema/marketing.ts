@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, doublePrecision, integer, index } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, doublePrecision, integer, boolean, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { user } from "./auth";
 import { projects, units, customers, financeAccounts } from "./master";
@@ -145,3 +145,71 @@ export const marketingTargets = pgTable("marketing_targets", {
   achievedAmount: doublePrecision("achieved_amount").default(0).notNull(),
   createdAt: defaultCreatedAt(),
 });
+
+
+// ─── KPR SLA Master Data (additive) ─────────────────────────────────────────
+
+export const kprSlaConfigs = pgTable("kpr_sla_configs", {
+  id: text("id").primaryKey(),
+  scope: text("scope").notNull().$type<"global" | "perumahan">(),
+  projectId: text("project_id").references(() => projects.id, { onDelete: "cascade" }),
+  // Hanya 5 tahap terukur. `akad`/`rejected`/`realisasi` tidak boleh punya konfigurasi SLA.
+  stage: text("stage").notNull()
+    .$type<"bi_checking" | "pemberkasan" | "proses_bank" | "offering" | "approved">(),
+  workingDays: integer("working_days").notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdBy: text("created_by").references(() => user.id),
+  updatedBy: text("updated_by").references(() => user.id),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (t) => ({
+  // Keunikan konfigurasi AKTIF per lingkup+tahap (Req 1.1/1.4/2.3/19.1)
+  activeGlobalUq: uniqueIndex("uq_kpr_sla_active_global")
+    .on(t.stage).where(sql`${t.isActive} = true AND ${t.scope} = 'global'`),
+  activePerumahanUq: uniqueIndex("uq_kpr_sla_active_perumahan")
+    .on(t.projectId, t.stage).where(sql`${t.isActive} = true AND ${t.scope} = 'perumahan'`),
+  // Resolusi cepat (Req 3, 20.8)
+  resolveIdx: index("idx_kpr_sla_resolve").on(t.projectId, t.stage, t.isActive),
+}));
+
+export const kprStageVisits = pgTable("kpr_stage_visits", {
+  id: text("id").primaryKey(),
+  kprProcessId: text("kpr_process_id")
+    .references(() => kprProcesses.id, { onDelete: "cascade" }).notNull(),
+  projectId: text("project_id")
+    .references(() => projects.id, { onDelete: "cascade" }).notNull(),
+  // Kunjungan hanya dibuka untuk tahap terukur.
+  stage: text("stage").notNull()
+    .$type<"bi_checking" | "pemberkasan" | "proses_bank" | "offering" | "approved">(),
+  visitSeq: integer("visit_seq").notNull(),
+  status: text("status").default("active").notNull().$type<"active" | "closed">(),
+  previousStage: text("previous_stage"),
+  nextStage: text("next_stage"),
+  enteredAt: timestamp("entered_at", { mode: "date" }).notNull(),
+  exitedAt: timestamp("exited_at", { mode: "date" }),
+
+  // ---- Snapshot immutable (Req 5.2/5.3) ----
+  targetWorkingDays: integer("target_working_days").notNull(),
+  slaSource: text("sla_source").notNull().$type<"perumahan" | "global" | "legacy">(),
+  configId: text("config_id").references(() => kprSlaConfigs.id, { onDelete: "set null" }),
+  slaStartAt: timestamp("sla_start_at", { mode: "date" }).notNull(),
+  slaDeadlineAt: timestamp("sla_deadline_at", { mode: "date" }).notNull(),
+
+  // ---- Hasil saat ditutup (Req 6.2/6.3/6.4) ----
+  slaResult: text("sla_result").$type<"selesai_tepat_waktu" | "selesai_terlambat">(),
+  transitionActorId: text("transition_actor_id").references(() => user.id),
+  revisionNotes: text("revision_notes"),
+  dataQuality: text("data_quality").default("normal").notNull()
+    .$type<"normal" | "historis_terbatas">(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+}, (t) => ({
+  // Satu kunjungan aktif per KPR (Req 5.7/19.4)
+  oneActiveUq: uniqueIndex("uq_kpr_stage_visit_active")
+    .on(t.kprProcessId).where(sql`${t.status} = 'active'`),
+  // Urutan kunjungan unik (Req 8.2/19.6)
+  seqUq: uniqueIndex("uq_kpr_stage_visit_seq").on(t.kprProcessId, t.visitSeq),
+  // Timeline query (kprProcessId, enteredAt)
+  timelineIdx: index("idx_kpr_stage_visit_timeline").on(t.kprProcessId, t.enteredAt),
+  // KPI query (projectId, status, stage)
+  kpiIdx: index("idx_kpr_stage_visit_kpi").on(t.projectId, t.status, t.stage),
+}));

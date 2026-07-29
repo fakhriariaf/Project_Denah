@@ -56,6 +56,7 @@ import {
 } from "@/server/actions/reports";
 import { exportToCsv } from "@/lib/export-utils";
 import { formatRupiah } from "@/lib/format-utils";
+import { getAccountTypeLabel, getPaymentSchemeLabel } from "@/lib/label-helpers";
 import {
   DynamicReportsBarChart,
   ChartErrorBoundary,
@@ -482,7 +483,7 @@ export default function ReportsShell({
                         <div key={acc.id} className="flex justify-between items-center p-3 bg-[#DDE8D8]/30 border border-[#8FAF9A]/20 rounded-xl hover:bg-[#DDE8D8]/50 transition-colors duration-150">
                           <div>
                             <p className="text-xs font-bold text-[#243028]">{acc.name}</p>
-                            <p className="text-[9px] text-[#8FAF9A] uppercase font-mono font-semibold tracking-wider mt-0.5">{acc.type}</p>
+                            <p className="text-[9px] text-[#8FAF9A] uppercase font-mono font-semibold tracking-wider mt-0.5">{getAccountTypeLabel(acc.type)}</p>
                           </div>
                           <span className="font-mono font-bold text-xs text-[#4F6F52] tabular-nums">
                             {formatRupiah(acc.openingBalance)}
@@ -795,7 +796,7 @@ export default function ReportsShell({
                           <TableCell className="text-right font-mono text-xs text-[#243028] tabular-nums py-3">
                             {formatRupiah(item.bookingFee)}
                           </TableCell>
-                          <TableCell className="text-xs text-[#66736A] font-semibold py-3">{item.paymentScheme}</TableCell>
+                          <TableCell className="text-xs text-[#66736A] font-semibold py-3">{getPaymentSchemeLabel(item.paymentScheme)}</TableCell>
                           <TableCell className="text-center py-3">
                             <Badge
                               className={

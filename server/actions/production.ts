@@ -20,8 +20,10 @@ import { attachments } from "@/db/schema/system";
 import { getCurrentUser, requireAuth, requireAnyRole, getSessionRole } from "@/server/permissions";
 import { eq, ne, and, desc, sql, sum, lt, isNotNull, or, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { writeAuditLog, safeWriteBlockedTransitionLog } from "./audit";
-import { createNotification, notifyUsersWithRoles } from "./notification";
+import { writeAuditLog, safeWriteBlockedTransitionLog } from "@/server/services/audit.service";
+import { createNotification, notifyUsersWithRoles } from "@/server/services/notification.service";
+import { runOverdueSpkScan } from "@/server/services/reminder.service";
+import { notifySpkCreated } from "@/server/services/spk-notification.service";
 import { applyRateLimit } from "@/server/middleware/apply-rate-limit";
 import { getCashConstructionReadiness } from "@/server/services/booking-construction-readiness";
 import { getSpkUnitEligibility } from "@/server/services/spk-unit-eligibility";
@@ -37,6 +39,8 @@ import {
   customerComplaintSchema,
   resolveCustomerComplaintSchema,
   spkUpdateSchema,
+  workItemUpdateSchema,
+  customerBastUploadSchema,
 } from "../validators/production";
 
 async function assertSpkProgressPermission(
@@ -385,7 +389,7 @@ export async function createSpk(data: unknown) {
   });
 
   // Notify Pengawas Lapangan and Vendor
-  await notifyNewSpkCreated(spkId, false);
+  await notifySpkCreated(spkId, false);
 
   revalidatePath("/production/spk");
   revalidatePath("/master/units");
@@ -1015,94 +1019,20 @@ export async function uploadProgressPhotoAttachment(
 // 3. AUTOMATED OVERDUE JOB ENGINE
 // ==========================================
 
+/**
+ * Manual trigger for the overdue-SPK scanner (Production > SPK tab button).
+ *
+ * RBAC hardening (P0): previously had NO guard while living in a "use server"
+ * module, so an anonymous caller could mutate SPK and unit statuses to
+ * "overdue" at will. Restricted to production-supervisory roles.
+ *
+ * The scan logic lives in `server/services/reminder.service.ts` so that
+ * `app/api/cron/overdue-scanner/route.ts` (authenticated via CRON_SECRET, no
+ * user session) can still run it without going through this role gate.
+ */
 export async function checkOverdueSpks() {
-  // Use getCurrentUser (non-redirecting) so this function works in both:
-  // - Admin manual trigger (has session → logs real user)
-  // - Cron job context (no session → logs as "system-cron")
-  const currentUser = await getCurrentUser();
-  const actorId = currentUser?.id ?? "system-cron";
-
-  const now = new Date();
-  const results = await db
-    .select({
-      spk: spks,
-      unit: units,
-    })
-    .from(spks)
-    .innerJoin(units, eq(spks.unitId, units.id))
-    .where(
-      and(
-        or(eq(spks.status, "active"), eq(spks.status, "proses_konstruksi")),
-        isNotNull(spks.targetEndDate),
-        lt(spks.targetEndDate, now),
-        lt(spks.progressPct, 100)
-      )
-    );
-
-  let updatedCount = 0;
-
-  for (const item of results) {
-    await db.transaction(async (tx) => {
-      // Update SPK status to overdue
-      await tx.update(spks).set({
-        status: "overdue",
-        updatedAt: now,
-      }).where(eq(spks.id, item.spk.id)).run();
-
-      const oldStatus = item.unit.status;
-      const isReadyStock = item.unit.isReadyStock || false;
-      const newStatus = isReadyStock ? oldStatus : "overdue";
-
-      // Update unit status to overdue (if not Ready Stock)
-      await tx.update(units).set({
-        status: newStatus,
-        updatedAt: now,
-      }).where(eq(units.id, item.unit.id)).run();
-
-      // Log unit history
-      if (newStatus !== oldStatus) {
-        await tx.insert(unitStatusHistories).values({
-          id: crypto.randomUUID(),
-          unitId: item.unit.id,
-          previousStatus: oldStatus,
-          newStatus: newStatus,
-          reason: `Target penyelesaian SPK ${item.spk.spkNumber} terlewati (${new Date(item.spk.targetEndDate).toLocaleDateString()}) dengan progress ${item.spk.progressPct}%`,
-          changedBy: actorId,
-          changedAt: now,
-        }).run();
-      }
-    });
-
-    // Write Audit Log outside transaction
-    await writeAuditLog({
-      action: "update",
-      module: "production",
-      entityId: item.spk.id,
-      entityType: "spk",
-      details: { spkNumber: item.spk.spkNumber, status: "overdue" },
-    });
-
-    // Notify about overdue SPK
-    try {
-      await notifyUsersWithRoles({
-        roleNames: ["Super Admin", "Direksi / Manager", "Pengawas Lapangan"],
-        type: "spk_overdue",
-        title: "Konstruksi Unit Overdue",
-        message: `Pekerjaan SPK ${item.spk.spkNumber} untuk unit kavling ${item.unit.code} mengalami keterlambatan (target: ${new Date(item.spk.targetEndDate).toLocaleDateString("id-ID")}).`,
-        entityId: item.spk.id,
-        entityType: "spk",
-      });
-    } catch (err) {
-      console.warn("Failed to trigger overdue notification for SPK:", item.spk.spkNumber, err);
-    }
-
-    updatedCount++;
-  }
-
-  revalidatePath("/production/spk");
-  revalidatePath("/master/units");
-  revalidatePath("/siteplan");
-  return { success: true, updatedCount };
+  await requireAnyRole(["Super Admin", "Admin Kantor", "Pengawas Lapangan"]);
+  return runOverdueSpkScan();
 }
 
 // ==========================================
@@ -1972,19 +1902,21 @@ export async function createWorkItem(data: {
   return { success: true, id };
 }
 
-export async function updateWorkItem(id: string, data: {
-  name?: string;
-  description?: string;
-  defaultWeightPct?: number;
-  status?: "active" | "inactive";
-}) {
+export async function updateWorkItem(id: string, data: unknown) {
   await requireAnyRole(["Super Admin", "Admin Kantor"]);
+
+  if (!id || typeof id !== "string") {
+    throw new Error("ID item pekerjaan tidak valid.");
+  }
+
+  // Runtime whitelist: never let a raw client object reach `.set()`.
+  const parsed = workItemUpdateSchema.parse(data);
 
   const existing = await db.select().from(workItems);
   const currentItem = existing.find(i => i.id === id);
   if (!currentItem) throw new Error("Item pekerjaan tidak ditemukan.");
 
-  const merged = { ...currentItem, ...data };
+  const merged = { ...currentItem, ...parsed };
   const newTotal = existing
     .map(i => i.id === id ? merged : i)
     .filter(i => i.status === "active")
@@ -1994,14 +1926,14 @@ export async function updateWorkItem(id: string, data: {
     throw new Error(`Total bobot work item aktif akan melebihi 100%. Setelah perubahan: ${newTotal}%.`);
   }
 
-  await db.update(workItems).set(data).where(eq(workItems.id, id));
+  await db.update(workItems).set(parsed).where(eq(workItems.id, id));
 
   await writeAuditLog({
     action: "update",
     module: "production",
     entityId: id,
     entityType: "work_item",
-    details: data,
+    details: parsed,
   });
 
   revalidatePath("/master/work-items");
@@ -2363,7 +2295,33 @@ export async function uploadCustomerBastFromProduction(
   customerId: string,
   data: { fileName: string; fileUrl: string; mimeType?: string; fileSize?: number }
 ) {
-  const user = await requireAuth();
+  // RBAC (P0 hardening): this writes a BAST konsumen document straight into the
+  // handover evidence trail, so it must match the delete/verify BAST guard.
+  // `requireAuth()` alone let any logged-in account (including vendor/viewer)
+  // attach arbitrary handover proof.
+  const user = await requireAnyRole([
+    "Super Admin",
+    "Admin Kantor",
+    "Pengawas Lapangan",
+  ]);
+
+  const parsedUpload = customerBastUploadSchema.parse({
+    unitId,
+    bookingId,
+    customerId,
+    ...data,
+  });
+  // Use the parsed (trimmed) values for every downstream lookup and insert so the
+  // raw client strings never reach the DB.
+  unitId = parsedUpload.unitId;
+  bookingId = parsedUpload.bookingId;
+  customerId = parsedUpload.customerId;
+  data = {
+    fileName: parsedUpload.fileName,
+    fileUrl: parsedUpload.fileUrl,
+    mimeType: parsedUpload.mimeType,
+    fileSize: parsedUpload.fileSize,
+  };
 
   const [booking] = await db.select().from(bookingsTable).where(eq(bookingsTable.id, bookingId)).limit(1);
   if (!booking) throw new Error("Booking tidak ditemukan.");
@@ -2502,58 +2460,14 @@ export async function deleteCustomerBastDocument(docId: string) {
 
 
 
-export async function notifyNewSpkCreated(spkId: string, isAuto = false) {
-  try {
-    const spkDetails = await db
-      .select({
-        spk: spks,
-        unit: units,
-        project: projects,
-      })
-      .from(spks)
-      .innerJoin(units, eq(spks.unitId, units.id))
-      .innerJoin(projects, eq(spks.projectId, projects.id))
-      .where(eq(spks.id, spkId))
-      .get();
-
-    if (!spkDetails) return;
-
-    const sourceText = isAuto ? "Otomatis" : "Manual";
-
-    // 1. Notify Pengawas Lapangan
-    await notifyUsersWithRoles({
-      roleNames: ["Pengawas Lapangan"],
-      type: "info",
-      title: `SPK Baru Diterbitkan (${sourceText})`,
-      message: `Surat Perintah Kerja ${spkDetails.spk.spkNumber} untuk pekerjaan "${spkDetails.spk.title}" di kavling ${spkDetails.unit.code} (${spkDetails.project.name}) telah diterbitkan.`,
-      entityId: spkId,
-      entityType: "spk",
-    });
-
-    // 2. Notify Vendor if they have a user account
-    if (spkDetails.spk.vendorId) {
-      const matchedVendorUser = await db
-        .select({ userId: vendorProfiles.userId })
-        .from(vendorProfiles)
-        .where(eq(vendorProfiles.vendorId, spkDetails.spk.vendorId))
-        .limit(1)
-        .all();
-
-      if (matchedVendorUser.length > 0) {
-        await createNotification({
-          userId: matchedVendorUser[0].userId,
-          type: "info",
-          title: `SPK Baru Ditugaskan (${sourceText})`,
-          message: `Anda mendapat tugas SPK baru ${spkDetails.spk.spkNumber} untuk pekerjaan "${spkDetails.spk.title}" di kavling ${spkDetails.unit.code} (${spkDetails.project.name}).`,
-          entityId: spkId,
-          entityType: "spk",
-        });
-      }
-    }
-  } catch (err) {
-    console.error("[Notification] Failed to notify on new SPK:", err);
-  }
-}
+/**
+ * SECURITY BOUNDARY (P0): the SPK notification fan-out used to be exported from
+ * this "use server" module as `notifyNewSpkCreated`, which made it a
+ * browser-callable RPC with no guard — any client could broadcast a forged
+ * "SPK baru" notification to every Pengawas Lapangan and the assigned vendor.
+ * It now lives in `server/services/spk-notification.service.ts` (no "use server")
+ * and is only reachable from guarded server flows.
+ */
 
 export async function completeVendorSpk(spkId: string) {
   const activeUser = await requireAuth();

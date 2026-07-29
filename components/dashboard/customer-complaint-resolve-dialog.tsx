@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { AlertCircle, Calendar, CheckCircle2, Loader2, Forward, User, Wrench, ShieldAlert } from "lucide-react";
 import { resolveCustomerComplaint } from "@/server/actions/production";
 import { useRouter } from "next/navigation";
+import { getComplaintCategoryLabel } from "@/lib/label-helpers";
 
 interface CustomerComplaintResolveDialogProps {
   complaint: {
@@ -67,17 +68,6 @@ export function CustomerComplaintResolveDialog({
   }, [open, complaint]);
 
   if (!complaint) return null;
-
-  const categoryLabels: Record<string, string> = {
-    bangunan: "Fisik Bangunan / Dinding / Atap",
-    serah_terima: "Proses Serah Terima (BAST)",
-    listrik_air: "Instalasi Listrik / Air Bersih",
-    legalitas: "Legalitas / SHM / PBB",
-    fasilitas: "Fasilitas Umum / Lingkungan",
-    pelayanan: "Pelayanan Staff / Marketing",
-    after_sales: "Garansi / After Sales Service",
-    lainnya: "Lain-lain",
-  };
 
   const handleResolveSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -163,7 +153,7 @@ export function CustomerComplaintResolveDialog({
             <div className="flex justify-between items-center pb-2 border-b border-[#E4EAE1]/80">
               <span className="font-bold text-[#4F6F52]">{complaint.complaintNumber}</span>
               <span className="bg-[#E4EAE1] text-[#3A4F3D] px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wider">
-                {categoryLabels[complaint.category] || complaint.category}
+                {getComplaintCategoryLabel(complaint.category)}
               </span>
             </div>
             <div className="grid grid-cols-2 gap-2 text-[11px]">

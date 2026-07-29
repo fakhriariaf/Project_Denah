@@ -3,6 +3,7 @@ import {
   transactions,
   transactionApprovals,
   financeActivityHistory,
+  invoices,
 } from "@/db/schema/finance";
 import { financeAccounts, financeCategories, projects } from "@/db/schema/master";
 import { attachments } from "@/db/schema/system";
@@ -33,6 +34,10 @@ import {
   CheckCircle2,
   AlertTriangle,
   ExternalLink,
+  BadgeCheck,
+  StickyNote,
+  CircleDollarSign,
+  Receipt,
 } from "lucide-react";
 import { formatDate } from "@/lib/format-utils";
 import {
@@ -44,6 +49,7 @@ import {
   FinanceDetailGrid,
   FinanceDetailField,
 } from "@/components/finance/finance-detail-layout";
+import { FinanceDocLink } from "@/components/finance/finance-doc-link";
 import { FinanceTimeline } from "@/components/finance/finance-timeline";
 import { RevisionButton } from "./revision-button";
 
@@ -206,6 +212,30 @@ export default async function ApprovalDetailPage({
     rejectionReason = rejectedRow?.reason ?? actionNotes ?? null;
   }
 
+  // --- Related documents (Req 8.2, 8.3, 13.1, 13.2, 13.3) ---
+  // Ledger transaction: an expense approval only becomes a final ledger entry
+  // once it is approved (Req 6.1). While approved, the SAME transactions.id row
+  // is the ledger transaction, so its detail route is route-safe. For any other
+  // status the ledger entry does not exist yet → render plain text, no link.
+  const ledgerTransactionId = isApproved ? transaction.id : null;
+
+  // Internal expense invoice (read-only, additive): the shadow invoice is linked
+  // via invoices.notes = `trxId:<transactions.id>`. When present it enriches the
+  // related documents; when absent nothing is rendered for it (no broken link).
+  let internalInvoiceId: string | null = null;
+  let internalInvoiceNumber: string | null = null;
+  {
+    const [internalInvoice] = await db
+      .select({ id: invoices.id, invoiceNumber: invoices.invoiceNumber })
+      .from(invoices)
+      .where(eq(invoices.notes, `trxId:${transaction.id}`))
+      .limit(1);
+    if (internalInvoice) {
+      internalInvoiceId = internalInvoice.id;
+      internalInvoiceNumber = internalInvoice.invoiceNumber;
+    }
+  }
+
   // Fetch account + expense-category options for the revision dialog selects
   // (only when a revision could actually be initiated).
   let accountOptions: Array<{ value: string; label: string }> = [];
@@ -232,6 +262,14 @@ export default async function ApprovalDetailPage({
   }
 
   const hasAttachment = Boolean(transaction.attachmentFileUrl);
+
+  // Catatan approval/penolakan untuk baris metadata (Req 8.1). Preferensi:
+  // alasan penolakan (rejected) → catatan aksi (approved) → approvalNotes mentah.
+  const metadataNotes = isRejected
+    ? rejectionReason
+    : isApproved
+      ? actionNotes
+      : transaction.approvalNotes;
 
   // --- Summary cards (Req 2.3, 8.1) ---
   const summary = (
@@ -398,14 +436,25 @@ export default async function ApprovalDetailPage({
                 icon={<User className="h-4 w-4" />}
                 value={transaction.requesterName}
               />
+              <FinanceDetailField
+                label="Status Persetujuan"
+                icon={<BadgeCheck className="h-4 w-4" />}
+              >
+                {getApprovalStatusBadge(transaction.approvalStatus)}
+              </FinanceDetailField>
             </div>
           </FinanceDetailGrid>
 
-          <div className="mt-6">
+          <div className="mt-6 space-y-3">
             <FinanceDetailField
               label="Deskripsi"
               icon={<AlignLeft className="h-4 w-4" />}
               value={transaction.description}
+            />
+            <FinanceDetailField
+              label="Catatan Approval / Penolakan"
+              icon={<StickyNote className="h-4 w-4" />}
+              value={metadataNotes}
             />
           </div>
         </CardContent>
@@ -442,6 +491,58 @@ export default async function ApprovalDetailPage({
     </div>
   );
 
+  // --- Dokumen Terkait (Req 8.2, 8.3, 13.1, 13.2, 13.3) ---
+  // Ledger transaction: Finance_Doc_Link bila approved (route aman), teks biasa
+  // monospace bila belum di-posting ke ledger. Invoice internal ditautkan bila
+  // shadow invoice tersedia. Section tetap opt-in dengan empty state jelas.
+  const relatedDocuments = (
+    <div className="space-y-3">
+      <Card className="border-border">
+        <CardContent className="flex flex-wrap items-start justify-between gap-3 py-4">
+          <div className="flex items-start gap-3">
+            <CircleDollarSign className="mt-0.5 h-5 w-5 text-primary/70" aria-hidden="true" />
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-muted-foreground">Transaksi Ledger</p>
+              {ledgerTransactionId ? (
+                <FinanceDocLink href={`/finance/transactions/${ledgerTransactionId}`}>
+                  {transaction.transactionNumber}
+                </FinanceDocLink>
+              ) : (
+                <>
+                  <span className="font-mono text-sm text-foreground">
+                    {transaction.transactionNumber}
+                  </span>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Belum tercatat di buku kas ledger. Transaksi final tersedia
+                    setelah pengajuan disetujui.
+                  </p>
+                </>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {internalInvoiceId && (
+        <Card className="border-border">
+          <CardContent className="flex flex-wrap items-start justify-between gap-3 py-4">
+            <div className="flex items-start gap-3">
+              <Receipt className="mt-0.5 h-5 w-5 text-primary/70" aria-hidden="true" />
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-muted-foreground">
+                  Invoice Pengeluaran Internal
+                </p>
+                <FinanceDocLink href={`/finance/invoices/${internalInvoiceId}`}>
+                  {internalInvoiceNumber ?? EM_DASH}
+                </FinanceDocLink>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+
   return (
     <FinanceDetailLayout
       docNumber={transaction.transactionNumber}
@@ -451,6 +552,8 @@ export default async function ApprovalDetailPage({
       backHref="/finance?tab=approvals"
       summary={summary}
       details={details}
+      relatedDocuments={relatedDocuments}
+      relatedEmptyState="Belum ada transaksi ledger atau invoice internal yang terkait dengan pengajuan ini."
       timeline={<FinanceTimeline entityType="approval" entityId={id} />}
     />
   );

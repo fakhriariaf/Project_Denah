@@ -102,6 +102,10 @@ export default async function BookingsPage({
     .reduce((acc, curr) => acc + curr.bookingFee + curr.dpAmount, 0);
 
   // RBAC Permissions
+  // Mirrors the `bulkExport` server guard (Super Admin / Admin Kantor / Marketing
+  // Manager) — booking exports carry customer PII.
+  const canBulkExport = sessionRoleInfo.isSuperAdmin || sessionRoleInfo.isAdminKantor ||
+                        sessionRoleInfo.isMarketingManager;
   const canCancel = sessionRoleInfo.isSuperAdmin || sessionRoleInfo.isAdminKantor || 
                     sessionRoleInfo.isMarketing || sessionRoleInfo.isMarketingManager;
   const canAdd = sessionRoleInfo.isSuperAdmin || sessionRoleInfo.isAdminKantor ||
@@ -246,6 +250,7 @@ export default async function BookingsPage({
           cancellationReason: b.cancellationReason,
         }))}
         canBulkDelete={sessionRoleInfo.isSuperAdmin || sessionRoleInfo.isAdminKantor}
+        canBulkExport={canBulkExport}
         canCancel={canCancel}
         sessionRoleInfo={{
           isMarketing: sessionRoleInfo.isMarketing,

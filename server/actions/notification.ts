@@ -2,107 +2,27 @@
 
 import { db } from "@/db";
 import { notifications } from "@/db/schema/system";
-import { user as userTable } from "@/db/schema/auth";
-import { roles as rolesTable } from "@/db/schema/access";
 import { getCurrentUser, getUserRoleDetails } from "@/server/permissions";
-import { eq, and, desc, inArray, sql, gte, lte } from "drizzle-orm";
+import { eq, and, desc, sql, gte, lte } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
-export type NotificationType = "approval_pending" | "kpr_sla" | "spk_overdue" | "progress_done" | "info" | "handover_waiting" | "handover_complete";
-
-export async function createNotification({
-  userId,
-  type,
-  title,
-  message,
-  entityId,
-  entityType,
-}: {
-  userId: string;
-  type: NotificationType;
-  title: string;
-  message: string;
-  entityId?: string;
-  entityType?: string;
-}) {
-  try {
-    const id = crypto.randomUUID();
-    await db.insert(notifications).values({
-      id,
-      userId,
-      type,
-      title,
-      message,
-      entityId: entityId || null,
-      entityType: entityType || null,
-      isRead: false,
-      createdAt: new Date(),
-    });
-    return { success: true, id };
-  } catch (err) {
-    console.error("[Notification] Failed to create notification:", err);
-    return { success: false, error: "Gagal membuat notifikasi" };
-  }
-}
+export type { NotificationType } from "@/server/services/notification.service";
 
 /**
- * Utility to notify multiple users who hold specific roles.
- * Very useful for broadcast actions (e.g. notify Direksi / Super Admin for approvals).
+ * SECURITY BOUNDARY (P0): notification WRITERS intentionally no longer live here.
+ *
+ * This file carries "use server", so every exported function is a browser-callable
+ * RPC endpoint. `createNotification` / `notifyUsersWithRoles` accept plain
+ * serialisable objects and had no guard, which let any client inject a forged
+ * notification into any userId — or broadcast an attacker-controlled message to
+ * every Super Admin / Direksi. Because it renders in the trusted in-app
+ * notification UI, that is a credible internal-phishing vector.
+ *
+ * They now live in `server/services/notification.service.ts` (no "use server").
+ *
+ * Everything below is user-facing and strictly scoped to the CURRENT session
+ * user — never to a caller-supplied userId.
  */
-export async function notifyUsersWithRoles({
-  roleNames,
-  type,
-  title,
-  message,
-  entityId,
-  entityType,
-}: {
-  roleNames: string[];
-  type: NotificationType;
-  title: string;
-  message: string;
-  entityId?: string;
-  entityType?: string;
-}) {
-  try {
-    // 1. Get the matching role IDs
-    const matchedRoles = await db
-      .select({ id: rolesTable.id })
-      .from(rolesTable)
-      .where(inArray(rolesTable.name, roleNames));
-
-    if (matchedRoles.length === 0) return { success: true, count: 0 };
-    const roleIds = matchedRoles.map((r) => r.id);
-
-    // 2. Fetch all active users having these role IDs
-    const targetUsers = await db
-      .select({ id: userTable.id })
-      .from(userTable)
-      .where(and(inArray(userTable.roleId, roleIds), eq(userTable.status, "active")));
-
-    if (targetUsers.length === 0) return { success: true, count: 0 };
-
-    const batchValues = targetUsers.map((targetUser) => ({
-      id: crypto.randomUUID(),
-      userId: targetUser.id,
-      type,
-      title,
-      message,
-      entityId: entityId || null,
-      entityType: entityType || null,
-      isRead: false,
-      createdAt: new Date(),
-    }));
-
-    if (batchValues.length === 0) return { success: true, count: 0 };
-
-    await db.insert(notifications).values(batchValues);
-    return { success: true, count: targetUsers.length };
-  } catch (err) {
-    console.error("[Notification] Failed to notify users with roles:", err);
-    return { success: false, count: 0 };
-  }
-}
 
 export async function getNotifications(isUnreadOnly = false, page = 1, pageSize = 50) {
   try {

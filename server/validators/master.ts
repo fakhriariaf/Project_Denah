@@ -24,7 +24,10 @@ export const unitSchema = z.object({
   landArea: z.coerce.number().min(0, "Luas tanah tidak valid"),
   buildingArea: z.coerce.number().min(0, "Luas bangunan tidak valid"),
   price: z.coerce.number().min(0, "Harga tidak valid"),
-  status: z.enum(["available", "belum_siap", "booking", "kpr_process", "payment_pending", "sold", "construction", "construction_done", "overdue", "cancelled"]).default("available"),
+  // P1 BUGFIX: enum must mirror db/schema/master.ts units.status. The two handover
+  // states were missing, so editing a unit that had already reached serah terima
+  // failed validation on its own current status.
+  status: z.enum(["available", "belum_siap", "booking", "kpr_process", "payment_pending", "sold", "construction", "construction_done", "overdue", "cancelled", "menunggu_serah_terima", "handover_complete"]).default("available"),
   isReadyStock: z.boolean().default(false),
   readyStockSource: z.enum(["construction_flow", "legacy_ready_stock", "manual_ready_stock"]).default("construction_flow"),
   readyStockVendorId: z.string().optional(),

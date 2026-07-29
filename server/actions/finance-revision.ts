@@ -44,8 +44,8 @@ import { requireAuth, getSessionRole } from "@/server/permissions";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { ZodError } from "zod";
-import { writeAuditLog } from "./audit";
-import { recordFinanceActivity } from "./finance";
+import { writeAuditLog } from "@/server/services/audit.service";
+import { recordFinanceActivity } from "@/server/services/finance-activity.service";
 import {
   paymentRevisionSchema,
   expenseApprovalRevisionSchema,

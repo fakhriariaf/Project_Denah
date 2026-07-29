@@ -181,3 +181,48 @@ export const resolveCustomerComplaintSchema = z.object({
   }
 });
 export type ResolveCustomerComplaintInput = z.infer<typeof resolveCustomerComplaintSchema>;
+
+/**
+ * Runtime whitelist for `updateWorkItem` (P0 hardening).
+ * The action previously spread the raw client object straight into
+ * `db.update(workItems).set(data)`, so a crafted RPC payload could write any
+ * column on the row. Only these four fields are editable.
+ */
+export const workItemUpdateSchema = z
+  .object({
+    name: z.string().trim().min(3, "Nama pekerjaan minimal 3 karakter").max(120, "Nama pekerjaan maksimal 120 karakter").optional(),
+    description: z.string().trim().max(500, "Deskripsi maksimal 500 karakter").optional(),
+    defaultWeightPct: z.coerce
+      .number()
+      .min(0, "Bobot tidak boleh negatif")
+      .max(100, "Bobot maksimal 100%")
+      .optional(),
+    status: z.enum(["active", "inactive"]).optional(),
+  })
+  // Reject unknown keys so no extra column can ride along into `.set()`.
+  .strict()
+  .refine((data) => Object.keys(data).length > 0, {
+    message: "Tidak ada perubahan yang dikirim.",
+  });
+export type WorkItemUpdateInput = z.infer<typeof workItemUpdateSchema>;
+
+/**
+ * Runtime validation for `uploadCustomerBastFromProduction` (P0 hardening).
+ * Keeps forged attachment metadata (empty names, absurd sizes, non-relative
+ * URLs) out of the handover evidence trail.
+ */
+export const customerBastUploadSchema = z.object({
+  unitId: z.string().trim().min(1, "Unit wajib dipilih"),
+  bookingId: z.string().trim().min(1, "Booking wajib dipilih"),
+  customerId: z.string().trim().min(1, "Konsumen wajib dipilih"),
+  fileName: z.string().trim().min(1, "Nama file wajib diisi").max(255, "Nama file maksimal 255 karakter"),
+  fileUrl: z.string().trim().min(1, "URL file wajib diisi").max(1024, "URL file maksimal 1024 karakter"),
+  mimeType: z.string().trim().max(128, "Tipe file tidak valid").optional(),
+  fileSize: z.coerce
+    .number()
+    .int("Ukuran file tidak valid")
+    .min(0, "Ukuran file tidak valid")
+    .max(50 * 1024 * 1024, "Ukuran file maksimal 50 MB")
+    .optional(),
+});
+export type CustomerBastUploadInput = z.infer<typeof customerBastUploadSchema>;

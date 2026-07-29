@@ -25,12 +25,18 @@ import { checkAndTransitionToConstruction } from "./marketing";
 import { getCashPemberkasanReadiness } from "@/server/services/booking-construction-readiness";
 import { attachments, notifications } from "@/db/schema/system";
 import { getCurrentUser, requireAuth, requireAnyRole, hasRole, getSessionRole } from "@/server/permissions";
-import { eq, and, desc, asc, sum, sql, inArray, lte, isNotNull, gte, count, ilike, or } from "drizzle-orm";
+import { eq, and, desc, asc, sum, sql, inArray, lte, isNotNull, gte, count, ilike, or, lt, gt } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { cachedQuery } from "@/lib/cache";
+import { computeInvoicePaymentSummary } from "@/lib/finance-invoice-summary";
 import { calculateOffset, validatePaginationParams, type PaginatedResult } from "@/lib/pagination";
-import { writeAuditLog } from "./audit";
-import { createNotification, notifyUsersWithRoles } from "./notification";
+import { writeAuditLog } from "@/server/services/audit.service";
+import { createNotification, notifyUsersWithRoles } from "@/server/services/notification.service";
+import {
+  recordFinanceActivity,
+  recordFinanceActivitySafe,
+} from "@/server/services/finance-activity.service";
+import { runPaymentReminderScan } from "@/server/services/reminder.service";
 import { applyRateLimit } from "@/server/middleware/apply-rate-limit";
 import { round2, computeOutstanding, computeInvoiceStatus, computeInvoiceSchedule, generateInvoiceSchedule } from "@/server/services/booking.service";
 import {
@@ -91,119 +97,23 @@ function toFinancePaginatedResponse<T>(result: PaginatedResult<T>): FinancePagin
 // ==========================================
 
 /**
- * The transaction handle passed by `db.transaction(async (tx) => { ... })`.
- * Derived from the actual `db.transaction` signature so it stays correct if the
- * driver changes, and so callers can pass their existing `tx` without importing
- * Drizzle's generic transaction types.
- */
-type FinanceTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
-
-/** Entity types supported by the finance activity timeline (Req 3.6). */
-export type FinanceActivityEntityType =
-  | "invoice"
-  | "payment"
-  | "transaction"
-  | "approval"
-  | "budget";
-
-/** Action values supported by the finance activity timeline (Req 3.7). */
-export type FinanceActivityAction =
-  | "created"
-  | "submitted"
-  | "approved"
-  | "verified"
-  | "rejected"
-  | "revised"
-  | "resubmitted"
-  | "cancelled"
-  | "reversed"
-  | "corrected"
-  | "updated"
-  | "activated"
-  | "closed"
-  | "paid_partial"
-  | "paid_full";
-
-/**
- * Input for {@link recordFinanceActivity}. `actorId` is always the acting user
- * (available because every finance mutation runs after `requireAuth`). Snapshots
- * are stored as JSON and may hold any editable-field subset of the entity.
- */
-export interface RecordFinanceActivityInput {
-  entityType: FinanceActivityEntityType;
-  entityId: string;
-  action: FinanceActivityAction;
-  actorId: string;
-  fromStatus?: string | null;
-  toStatus?: string | null;
-  reason?: string | null;
-  snapshotBefore?: unknown;
-  snapshotAfter?: unknown;
-}
-
-/**
- * Insert a single `finance_activity_history` row using the existing
- * `db.transaction` + `.run()` style (id via `crypto.randomUUID()`).
+ * SECURITY BOUNDARY (P0): finance-activity WRITERS intentionally no longer live here.
  *
- * Transaction-boundary rule (Req 3.9, 3.10):
- * For every STATUS-CHANGING mutation (verify, reject, resubmit, approve,
- * reverse, correct, create-in-tx) this helper MUST be called with the SAME `tx`
- * as the entity update. It performs no error swallowing: if the insert throws,
- * the exception propagates and the parent `db.transaction` rolls back, so there
- * is never a partial state where the entity changed but the timeline did not.
+ * This file carries "use server", so every exported function is a browser-callable
+ * RPC endpoint. `recordFinanceActivitySafe(input)` accepted a plain serialisable
+ * object with no guard, letting any client append forged rows (e.g. a fake
+ * "approved"/"verified" entry) to the finance activity timeline that finance
+ * relies on to reconstruct who changed what.
  *
- * The ONLY permitted history-only fallback that logs-and-swallows is
- * {@link recordFinanceActivitySafe} below, which is reserved for non-status,
- * best-effort events (e.g. reconstructing a legacy `created` event on first
- * detail-page view). It MUST NOT be used for status-changing mutations.
+ * They now live in `server/services/finance-activity.service.ts` (no "use server").
+ * Types are re-exported below so existing consumers keep compiling.
  */
-export async function recordFinanceActivity(
-  tx: FinanceTransaction,
-  input: RecordFinanceActivityInput,
-): Promise<void> {
-  await tx
-    .insert(financeActivityHistory)
-    .values({
-      id: crypto.randomUUID(),
-      entityType: input.entityType,
-      entityId: input.entityId,
-      action: input.action,
-      fromStatus: input.fromStatus ?? null,
-      toStatus: input.toStatus ?? null,
-      reason: input.reason ?? null,
-      snapshotBefore: input.snapshotBefore ?? null,
-      snapshotAfter: input.snapshotAfter ?? null,
-      actorId: input.actorId,
-    })
-    .run();
-}
-
-/**
- * History-only, NON-status best-effort recording (the single permitted fallback
- * documented by the transaction-boundary rule, Req 3.10 / Req 2.6 / Req 2.7).
- *
- * Use this ONLY for non-critical, history-only events that run OUTSIDE a status
- * mutation — for example deriving/backfilling a limited `created` event for a
- * legacy record when its detail page is first viewed. It opens its own tiny
- * transaction and logs-and-swallows any failure so that a timeline-recording
- * problem can never block detail-page rendering.
- *
- * NEVER call this from inside a status-changing mutation; those must use
- * {@link recordFinanceActivity} with the parent `tx` so failures roll back.
- */
-export async function recordFinanceActivitySafe(
-  input: RecordFinanceActivityInput,
-): Promise<void> {
-  try {
-    await db.transaction(async (tx) => {
-      await recordFinanceActivity(tx, input);
-    });
-  } catch (error) {
-    // Best-effort only: log and swallow. A history-only failure must not block
-    // detail-page rendering or any read path.
-    console.error("[finance] recordFinanceActivitySafe failed (swallowed):", error);
-  }
-}
+export type {
+  FinanceTransaction,
+  FinanceActivityEntityType,
+  FinanceActivityAction,
+  RecordFinanceActivityInput,
+} from "@/server/services/finance-activity.service";
 
 // ==========================================
 // UTILITY: Compute Real Account Balance
@@ -558,8 +468,24 @@ export async function getPayments(
   });
 }
 
+/**
+ * Records a customer payment / manual deposit.
+ *
+ * RBAC hardening (P0): previously `requireAuth()` only. The finance module is
+ * readable by 7 roles (FINANCE_MODULE_ROLES) including Marketing, Marketing
+ * Manager and Pengawas Lapangan, so plain `requireAuth()` let all of them write
+ * cash-ledger rows. Restricted to finance-operational roles.
+ *
+ * The marketing-side proof flow is unaffected: it goes through
+ * `uploadPaymentProof` / `attachExistingPaymentProof` in marketing.ts, which
+ * carry their own booking-scoped guards and do not call this action.
+ */
 export async function createPayment(data: unknown) {
-  const activeUser = await requireAuth();
+  const activeUser = await requireAnyRole([
+    "Super Admin",
+    "Admin Keuangan",
+    "Admin Kantor",
+  ]);
   applyRateLimit(activeUser.id);
   const parsed = paymentSchema.parse(data);
 
@@ -2331,6 +2257,120 @@ export async function createBudget(data: unknown) {
   return { success: true, budgetId };
 }
 
+export async function updateDraftBudget(budgetId: string, data: unknown) {
+  const activeUser = await requireAnyRole(["Super Admin", "Admin Keuangan", "Direksi / Manager"]);
+  const parsed = budgetSchema.parse(data);
+
+  const [budget] = await db.select().from(budgets).where(eq(budgets.id, budgetId)).limit(1);
+  if (!budget) throw new Error("Budget tidak ditemukan.");
+  if (budget.status !== "draft") {
+    throw new Error("Hanya budget berstatus draft yang dapat diedit.");
+  }
+
+  for (const line of parsed.lines) {
+    if (line.allocatedAmount < 0.01) {
+      throw new Error("Setiap alokasi budget line harus bernilai minimal Rp 0,01.");
+    }
+  }
+
+  const totalAllocated = parsed.lines.reduce((sum, line) => sum + line.allocatedAmount, 0);
+  if (totalAllocated > parsed.totalAmount) {
+    throw new Error(`Total alokasi budget line (Rp ${totalAllocated.toLocaleString("id-ID")}) melebihi total anggaran (Rp ${parsed.totalAmount.toLocaleString("id-ID")}).`);
+  }
+
+  await db.transaction(async (tx) => {
+    await tx
+      .update(budgets)
+      .set({
+        projectId: parsed.projectId,
+        name: parsed.name,
+        periodStart: parsed.periodStart,
+        periodEnd: parsed.periodEnd,
+        totalAmount: parsed.totalAmount,
+      })
+      .where(eq(budgets.id, budgetId));
+
+    await tx.delete(budgetLines).where(eq(budgetLines.budgetId, budgetId));
+
+    for (const line of parsed.lines) {
+      await tx.insert(budgetLines).values({
+        id: crypto.randomUUID(),
+        budgetId,
+        categoryId: line.categoryId,
+        allocatedAmount: line.allocatedAmount,
+        usedAmount: 0,
+        remainingAmount: line.allocatedAmount,
+      });
+    }
+
+    await recordFinanceActivity(tx, {
+      entityType: "budget",
+      entityId: budgetId,
+      action: "updated",
+      actorId: activeUser.id,
+      fromStatus: "draft",
+      toStatus: "draft",
+    });
+  });
+
+  try {
+    await writeAuditLog({
+      action: "update",
+      module: "finance",
+      entityId: budgetId,
+      entityType: "budget",
+      details: { name: parsed.name, totalAmount: parsed.totalAmount },
+    });
+  } catch (err) {
+    console.warn("[updateDraftBudget] Audit log gagal ditulis:", err);
+  }
+
+  revalidatePath("/finance");
+  revalidatePath("/finance/budgets");
+  return { success: true };
+}
+
+export async function deleteDraftBudget(budgetId: string) {
+  const activeUser = await requireAnyRole(["Super Admin", "Admin Keuangan", "Direksi / Manager"]);
+
+  const [budget] = await db.select().from(budgets).where(eq(budgets.id, budgetId)).limit(1);
+  if (!budget) throw new Error("Budget tidak ditemukan.");
+  if (budget.status !== "draft") {
+    throw new Error("Hanya budget berstatus draft yang dapat dihapus.");
+  }
+
+  await db.transaction(async (tx) => {
+    await tx.delete(budgetLines).where(eq(budgetLines.budgetId, budgetId));
+    await tx.delete(budgets).where(eq(budgets.id, budgetId));
+
+    await recordFinanceActivity(tx, {
+      entityType: "budget",
+      entityId: budgetId,
+      action: "cancelled",
+      actorId: activeUser.id,
+      fromStatus: "draft",
+      toStatus: "deleted",
+      reason: "Draft budget dihapus sebelum aktivasi",
+    });
+  });
+
+  try {
+    await writeAuditLog({
+      action: "delete",
+      module: "finance",
+      entityId: budgetId,
+      entityType: "budget",
+      details: { previousStatus: "draft", name: budget.name },
+    });
+  } catch (err) {
+    console.warn("[deleteDraftBudget] Audit log gagal ditulis:", err);
+  }
+
+  revalidatePath("/finance");
+  revalidatePath("/finance/budgets");
+  return { success: true };
+}
+
 export async function activateBudget(budgetId: string) {
   await requireAnyRole(["Super Admin", "Admin Keuangan", "Direksi / Manager"]);
 
@@ -2343,17 +2383,23 @@ export async function activateBudget(budgetId: string) {
 
   // 2. Check for overlapping active budget for same project (Req 8.2)
   // Overlap: startA < endB AND startB < endA (exclusive boundary)
-  const overlapping = await db.select({ id: budgets.id, name: budgets.name })
-    .from(budgets)
-    .where(and(
-      eq(budgets.projectId, budget.projectId),
-      eq(budgets.status, "active"),
-      // startA < endB
-      sql`${budgets.periodStart} < ${budget.periodEnd}`,
-      // startB < endA
-      sql`${budget.periodStart} < ${budgets.periodEnd}`
-    ))
-    .limit(1);
+  let overlapping: Array<{ id: string; name: string }> = [];
+  try {
+    overlapping = await db.select({ id: budgets.id, name: budgets.name })
+      .from(budgets)
+      .where(and(
+        eq(budgets.projectId, budget.projectId),
+        eq(budgets.status, "active"),
+        // startA < endB
+        lt(budgets.periodStart, budget.periodEnd),
+        // startB < endA
+        gt(budgets.periodEnd, budget.periodStart)
+      ))
+      .limit(1);
+  } catch (err) {
+    console.error("[activateBudget] Gagal memeriksa overlap periode budget:", err);
+    throw new Error("Gagal memeriksa overlap periode anggaran. Silakan coba lagi atau hubungi admin sistem.");
+  }
 
   if (overlapping.length > 0) {
     throw new Error(
@@ -2377,6 +2423,7 @@ export async function activateBudget(budgetId: string) {
     console.warn("[activateBudget] Audit log gagal ditulis:", err);
   }
 
+  revalidatePath("/finance");
   revalidatePath("/finance/budgets");
   return { success: true };
 }
@@ -2488,72 +2535,17 @@ export async function getFinancialReport(projectId: string) {
   };
 }
 
+/**
+ * Manual trigger for the overdue-invoice reminder scan (Settings page button).
+ *
+ * RBAC hardening (P0): previously `requireAuth()` only, so ANY authenticated
+ * user — including Viewer / Kontraktor — could kick off a full invoice scan and
+ * a broadcast to finance + management. Restricted to finance-operational roles.
+ * The scan itself lives in an internal service so it is not separately callable.
+ */
 export async function checkPaymentReminders() {
-  const now = new Date();
-
-  const overdueInvoices = await db
-    .select({
-      id: invoices.id,
-      invoiceNumber: invoices.invoiceNumber,
-      amount: invoices.amount,
-      dueDate: invoices.dueDate,
-      customerId: invoices.customerId,
-      customerName: customers.name,
-      assignedMarketingId: customers.assignedMarketingId,
-    })
-    .from(invoices)
-    .leftJoin(customers, eq(invoices.customerId, customers.id))
-    .where(
-      and(
-        inArray(invoices.status, ["unpaid", "partial"]),
-        isNotNull(invoices.dueDate),
-        lte(invoices.dueDate, now)
-      )
-    );
-
-  let notifiedCount = 0;
-
-  for (const inv of overdueInvoices) {
-    // Check if notification already sent for this invoice
-    const exists = await db
-      .select({ id: notifications.id })
-      .from(notifications)
-      .where(
-        and(
-          eq(notifications.entityId, inv.id),
-          eq(notifications.entityType, "payment_reminder")
-        )
-      )
-      .limit(1);
-
-    if (exists.length > 0) continue;
-
-    // 1. Notify the assigned marketing agent (if any)
-    if (inv.assignedMarketingId) {
-      await createNotification({
-        userId: inv.assignedMarketingId,
-        type: "info",
-        title: "Tagihan Konsumen Overdue",
-        message: `Tagihan ${inv.invoiceNumber} senilai Rp ${inv.amount.toLocaleString("id-ID")} untuk konsumen "${inv.customerName}" telah jatuh tempo pada ${new Date(inv.dueDate!).toLocaleDateString("id-ID")}.`,
-        entityId: inv.id,
-        entityType: "payment_reminder",
-      });
-    }
-
-    // 2. Notify Keuangan & Direksi
-    await notifyUsersWithRoles({
-      roleNames: ["Admin Keuangan", "Direksi / Manager", "Super Admin"],
-      type: "info",
-      title: "Invoice Overdue",
-      message: `Invoice ${inv.invoiceNumber} senilai Rp ${inv.amount.toLocaleString("id-ID")} untuk konsumen "${inv.customerName}" telah melewati batas tanggal jatuh tempo.`,
-      entityId: inv.id,
-      entityType: "payment_reminder",
-    });
-
-    notifiedCount++;
-  }
-
-  return { success: true, notifiedCount };
+  await requireAnyRole(["Super Admin", "Admin Keuangan", "Admin Kantor"]);
+  return runPaymentReminderScan();
 }
 
 export async function deleteInvoice(invoiceId: string) {
@@ -2733,6 +2725,7 @@ export async function getFinancePageData() {
     budgetsList,
     usersList,
     bookingProofAttachments,
+    budgetLinesList,
   ] = await Promise.all([
     cachedQuery(
       () => db.select().from(projects),
@@ -2813,7 +2806,7 @@ export async function getFinancePageData() {
       .leftJoin(attachments, eq(payments.proofAttachmentId, attachments.id))
       .orderBy(desc(payments.createdAt)),
 
-    // Ledger Transactions
+    // Ledger Transactions (includes reversal markers for ledger classification)
     db
       .select({
         id: transactions.id,
@@ -2835,6 +2828,10 @@ export async function getFinancePageData() {
         attachmentId: transactions.attachmentId,
         createdBy: transactions.createdBy,
         createdAt: transactions.createdAt,
+        // Additive: reversal markers for ledger tab classification (Req 6.2, 17.4)
+        reversalOfTransactionId: transactions.reversalOfTransactionId,
+        reversalOfPaymentId: transactions.reversalOfPaymentId,
+        reversalReason: transactions.reversalReason,
         projectName: projects.name,
         accountName: financeAccounts.name,
         categoryName: financeCategories.name,
@@ -2888,6 +2885,19 @@ export async function getFinancePageData() {
         ])
       )
       .orderBy(desc(attachments.createdAt)),
+
+    // Additive: Budget lines for all budgets (Req 9.3, 10.2, 17.4)
+    // Provides budgetLines.usedAmount and allocatedAmount for budget summary/detail
+    db
+      .select({
+        id: budgetLines.id,
+        budgetId: budgetLines.budgetId,
+        categoryId: budgetLines.categoryId,
+        allocatedAmount: budgetLines.allocatedAmount,
+        usedAmount: budgetLines.usedAmount,
+        remainingAmount: budgetLines.remainingAmount,
+      })
+      .from(budgetLines),
   ]);
 
   // A payment proof that is directly attached to a payment remains the source
@@ -2921,10 +2931,49 @@ export async function getFinancePageData() {
           )
         : undefined;
 
+    // Additive: Total payment verified per invoice & remaining balance (Req 5.2, 17.4)
+    // Used by payment selector to show sisa tagihan and by invoice tab for Sudah Dibayar column
+    const verifiedPaymentsForInvoice = paymentsList.filter(
+      (p) => p.invoiceId === invoice.id && p.status === "verified"
+    );
+    // A paid internal expense invoice can be settled by the approval flow and
+    // therefore legitimately have no verified payment row.
+    const paymentSummary = computeInvoicePaymentSummary(
+      invoice.amount,
+      verifiedPaymentsForInvoice,
+      { invoiceStatus: invoice.status },
+    );
+
+    // Additive: Invoice internal context (Req 2.4, 17.4)
+    // Only classify as internal if notes = "trxId:<id>" AND that id references an expense transaction
+    let relatedExpenseTransactionId: string | null = null;
+    let relatedApprovalId: string | null = null;
+
+    if (invoice.notes) {
+      const trxIdMatch = invoice.notes.match(/^trxId:(.+)$/);
+      if (trxIdMatch) {
+        const candidateId = trxIdMatch[1];
+        const matchedTrx = transactionsList.find(
+          (t) => t.id === candidateId && t.type === "expense"
+        );
+        if (matchedTrx) {
+          relatedExpenseTransactionId = matchedTrx.id;
+          // The approval for this expense transaction is the transaction itself
+          // (transactions with approvalStatus = approved are the approved expense)
+          relatedApprovalId = matchedTrx.id;
+        }
+      }
+    }
+
     return {
       ...invoice,
       bookingProofFileUrl: bookingProof?.fileUrl ?? null,
       bookingProofFileName: bookingProof?.fileName ?? null,
+      // Additive optional fields (Req 17.4, 17.5)
+      totalPaidVerified: paymentSummary.totalPaid,
+      remainingBalance: paymentSummary.remainingBalance,
+      relatedExpenseTransactionId,
+      relatedApprovalId,
     };
   });
 
@@ -2979,6 +3028,47 @@ export async function getFinancePageData() {
     currentBalance: balanceMap[acc.id] ?? acc.openingBalance ?? 0,
   }));
 
+  // Additive: Actual budget usage per budget per category (Req 9.3, 10.2, 17.4)
+  // Aggregates expense transactions with approvalStatus = "approved" grouped by
+  // projectId + categoryId within each budget's period. This provides "Realisasi Aktual"
+  // for Budget Summary and BudgetsTab independent of persisted budgetLines.usedAmount.
+  const budgetActualUsage: Array<{
+    budgetId: string;
+    categoryId: string;
+    actualAmount: number;
+  }> = [];
+
+  for (const budget of budgetsList) {
+    if (budget.status !== "active") continue;
+
+    // Get category IDs allocated in this budget
+    const budgetCategoryIds = budgetLinesList
+      .filter((bl) => bl.budgetId === budget.id)
+      .map((bl) => bl.categoryId);
+
+    if (budgetCategoryIds.length === 0) continue;
+
+    // Aggregate approved expense transactions matching this budget's project, categories, and period
+    for (const catId of budgetCategoryIds) {
+      const actualAmount = transactionsList
+        .filter((trx) =>
+          trx.type === "expense" &&
+          trx.approvalStatus === "approved" &&
+          trx.projectId === budget.projectId &&
+          trx.categoryId === catId &&
+          trx.transactionDate >= budget.periodStart &&
+          trx.transactionDate <= budget.periodEnd
+        )
+        .reduce((sum, trx) => sum + trx.amount, 0);
+
+      budgetActualUsage.push({
+        budgetId: budget.id,
+        categoryId: catId,
+        actualAmount,
+      });
+    }
+  }
+
   return {
     projects: projectsList,
     units: unitsList,
@@ -2989,5 +3079,8 @@ export async function getFinancePageData() {
     payments: paymentsList,
     transactions: enrichedTransactions,
     budgets: budgetsList,
+    // Additive fields for UI revamp (Req 17.4, 17.5)
+    budgetLines: budgetLinesList,
+    budgetActualUsage,
   };
 }

@@ -45,7 +45,7 @@ import { VendorComplaintReviewDialog } from "./vendor-complaint-review-dialog";
 import { CustomerComplaintResolveDialog } from "./customer-complaint-resolve-dialog";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { getComplaintStatusLabel } from "@/lib/label-helpers";
+import { getComplaintCategoryLabel, getComplaintStatusLabel, getSpkStatusLabel } from "@/lib/label-helpers";
 
 interface FieldSupervisorDashboardShellProps {
   data: {
@@ -293,7 +293,7 @@ export function FieldSupervisorDashboardShell({ data, userName }: FieldSuperviso
       case "cancelled":
         return <Badge variant="outline" className="text-gray-500 border-gray-300">Batal</Badge>;
       default:
-        return <Badge variant="outline">{status}</Badge>;
+        return <Badge variant="outline">{getSpkStatusLabel(status)}</Badge>;
     }
   };
 
@@ -554,16 +554,6 @@ export function FieldSupervisorDashboardShell({ data, userName }: FieldSuperviso
                     </div>
                   ) : (
                     vendorComplaints.map((c) => {
-                      const categoryLabels: Record<string, string> = {
-                        material: "Kekurangan Material",
-                        cuaca: "Cuaca Buruk",
-                        tenaga_kerja: "Kekurangan Pekerja",
-                        akses_lokasi: "Akses Lokasi Terhambat",
-                        revisi_desain: "Revisi Gambar / Desain",
-                        menunggu_instruksi: "Menunggu Instruksi",
-                        kendala_teknis: "Kendala Teknis Lapangan",
-                        lainnya: "Kendala Lain-Lain",
-                      };
                       return (
                         <div key={c.id} className="p-3.5 bg-white border border-[#D6DED2]/85 hover:border-[#8FAF9A]/60 rounded-2xl space-y-2.5 transition-all hover:shadow-md">
                           <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -576,7 +566,7 @@ export function FieldSupervisorDashboardShell({ data, userName }: FieldSuperviso
                           </div>
                           <div>
                             <h5 className="text-xs font-extrabold text-[#2C3E2D]">
-                              Kav. {c.unitCode} &bull; <span className="text-[#4F6F52]">{categoryLabels[c.category] || c.category}</span>
+                              Kav. {c.unitCode} &bull; <span className="text-[#4F6F52]">{getComplaintCategoryLabel(c.category)}</span>
                             </h5>
                             <p className="text-[11px] text-[#5C6E5D] leading-relaxed pt-0.5 font-semibold">SPK: {c.spkTitle}</p>
                             <p className="text-[11px] text-[#66736A] leading-relaxed pt-1.5 italic">"{c.description}"</p>
@@ -604,16 +594,6 @@ export function FieldSupervisorDashboardShell({ data, userName }: FieldSuperviso
                     </div>
                   ) : (
                     customerComplaints.map((c) => {
-                      const categoryLabels: Record<string, string> = {
-                        bangunan: "Fisik Bangunan / Plafon / Dinding",
-                        serah_terima: "BAST / Serah Terima",
-                        listrik_air: "Instalasi Air / Listrik",
-                        legalitas: "Legalitas Sertifikat / PBB",
-                        fasilitas: "Fasilitas Umum / Kawasan",
-                        pelayanan: "Pelayanan Staff",
-                        after_sales: "Garansi Pemeliharaan",
-                        lainnya: "Lain-lain",
-                      };
                       return (
                         <div key={c.id} className="p-3.5 bg-white border border-[#D6DED2]/85 hover:border-[#8FAF9A]/60 rounded-2xl space-y-2.5 transition-all hover:shadow-md">
                           <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -626,7 +606,7 @@ export function FieldSupervisorDashboardShell({ data, userName }: FieldSuperviso
                           </div>
                           <div>
                             <h5 className="text-xs font-extrabold text-[#2C3E2D]">
-                              Kav. {c.unitCode} &bull; <span className="text-[#A94A4A]">{categoryLabels[c.category] || c.category}</span>
+                              Kav. {c.unitCode} &bull; <span className="text-[#A94A4A]">{getComplaintCategoryLabel(c.category)}</span>
                             </h5>
                             <p className="text-[11px] text-[#66736A] leading-relaxed pt-1.5 italic">"{c.description}"</p>
                           </div>

@@ -12,7 +12,7 @@ import { deleteCustomer } from "@/server/actions/master";
 import { User, Phone, Mail, MapPin, Search, Layers, Clipboard, ShieldCheck, HelpCircle, Check, Info } from "lucide-react";
 import type { CustomerInput } from "@/server/validators/master";
 import { useI18n } from "@/lib/i18n";
-import { getLeadSourceLabel } from "@/lib/label-helpers";
+import { getCustomerStatusLabel, getLeadSourceLabel } from "@/lib/label-helpers";
 
 interface Customer {
   id: string;
@@ -72,7 +72,7 @@ export function CustomersShell({
     if (c.status === "booking") {
       return "Booking";
     }
-    return STATUS_MAP[c.status]?.label || c.status;
+    return STATUS_MAP[c.status]?.label ?? getCustomerStatusLabel(c.status);
   };
 
   const filteredCustomers = initialCustomers.filter((c) => {

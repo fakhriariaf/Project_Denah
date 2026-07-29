@@ -37,6 +37,7 @@ import { updateUserProjectAssignments } from "@/server/actions/project-users";
 import { useI18n } from "@/lib/i18n";
 import { ChangePasswordForm } from "@/components/dashboard/change-password-form";
 import { ResetPasswordForm } from "@/components/dashboard/reset-password-form";
+import { getAuditActionLabel, getAuditModuleLabel } from "@/lib/label-helpers";
 
 interface ProfileShellProps {
   data: {
@@ -975,10 +976,10 @@ export function ProfileShell({
                       <div className="space-y-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">
-                            {log.action.replace("_", " ")}
+                            {getAuditActionLabel(log.action)}
                           </span>
                           <Badge variant="outline" className="text-[9px] px-1.5 py-0 font-semibold tracking-wider font-mono">
-                            MODULE: {log.module.toUpperCase()}
+                            MODUL: {getAuditModuleLabel(log.module)}
                           </Badge>
                         </div>
                         {log.details && (

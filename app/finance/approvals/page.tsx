@@ -29,6 +29,8 @@ export default async function FinanceApprovalsPage() {
       payments={data.payments}
       transactions={data.transactions}
       budgets={data.budgets}
+      budgetLines={data.budgetLines}
+      budgetActualUsage={data.budgetActualUsage}
       defaultTab="approvals"
     />
   );

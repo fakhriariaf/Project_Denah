@@ -9,6 +9,7 @@ import { eq, count } from "drizzle-orm"
 import { MapPin, Layers, Building2 } from "lucide-react"
 import { Translate } from "@/components/translate"
 import { ProjectStatusGate } from "./project-status-gate"
+import { getProjectStatusLabel } from "@/lib/label-helpers"
 
 export default async function SiteplanPage() {
   await requireAuth()
@@ -116,7 +117,7 @@ export default async function SiteplanPage() {
                           : "bg-amber-50 text-amber-700 border-amber-200"
                       }`}
                     >
-                      {p.status === "active" ? "Aktif" : p.status === "completed" ? "Selesai" : "Non Aktif"}
+                      {getProjectStatusLabel(p.status)}
                     </Badge>
                   </div>
                 </CardHeader>

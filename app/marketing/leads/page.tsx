@@ -167,6 +167,10 @@ export default async function LeadsPage({
 
   // RBAC permissions for UI
   const canDelete = sessionRoleInfo.isSuperAdmin || sessionRoleInfo.isAdminKantor;
+  // Mirrors the `bulkExport` server guard (Super Admin / Admin Kantor / Marketing
+  // Manager) — lead exports carry customer PII.
+  const canBulkExport = sessionRoleInfo.isSuperAdmin || sessionRoleInfo.isAdminKantor ||
+                        sessionRoleInfo.isMarketingManager;
   const canEdit = sessionRoleInfo.isSuperAdmin || sessionRoleInfo.isAdminKantor || 
                   sessionRoleInfo.isMarketingManager || sessionRoleInfo.isMarketing;
   const canAdd = sessionRoleInfo.isSuperAdmin || sessionRoleInfo.isAdminKantor || 
@@ -355,6 +359,7 @@ export default async function LeadsPage({
           customerId: l.customerId,
         }))}
         canBulkDelete={canDelete}
+        canBulkExport={canBulkExport}
         totalFilteredItems={totalFilteredItems}
         totalLeads={totalLeads}
         mineFilter={mineFilter}

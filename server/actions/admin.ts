@@ -2,7 +2,7 @@
 
 import { db } from "@/db";
 import { requireRole } from "@/server/permissions";
-import { writeAuditLog } from "./audit";
+import { writeAuditLog } from "@/server/services/audit.service";
 import { revalidatePath } from "next/cache";
 
 // Master

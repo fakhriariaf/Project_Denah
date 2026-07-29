@@ -52,6 +52,11 @@ import AddBookingDialog from "@/app/marketing/bookings/add-booking-dialog";
 import { UnitForm } from "@/app/master/units/unit-form";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
+import {
+  getDocumentVerificationStatusLabel,
+  getKprStatusLabel,
+  getPaymentSchemeLabel,
+} from "@/lib/label-helpers";
 import { getSpkDetails, completeConstruction, getActiveSpkForUnit, uploadBastAttachment, getBastAttachmentForSpk } from "@/server/actions/production";
 import { startPhysicalConstructionManual } from "@/server/actions/marketing";
 import { updateUnitDefectList, deleteUnitAttachment } from "@/server/actions/master";
@@ -1629,7 +1634,7 @@ export function SiteplanViewer({
                   };
 
                   const currentKprStatus = kprProcess?.status || "bi_checking";
-                  const badgeInfo = kprStatusLabels[currentKprStatus] || { label: "BI Checking", className: "bg-indigo-50 text-indigo-700 border-indigo-200" };
+                  const badgeInfo = kprStatusLabels[currentKprStatus] || { label: getKprStatusLabel(currentKprStatus), className: "bg-indigo-50 text-indigo-700 border-indigo-200" };
 
                   return (
                     <div className="bg-white rounded-[2rem] p-4.5 border border-[#D6DED2] shadow-sage flex items-center justify-between transition-all hover:shadow-sage-lg mt-3 text-left">
@@ -1653,7 +1658,7 @@ export function SiteplanViewer({
                               ? "bg-emerald-50 text-emerald-700 border-emerald-200" 
                               : "bg-amber-50 text-amber-700 border-amber-200"
                           }`}>
-                            {kprProcess.documentStatus === "complete" ? "LENGKAP" : "BELUM LENGKAP"}
+                            {getDocumentVerificationStatusLabel(kprProcess.documentStatus).toUpperCase()}
                           </span>
                         </div>
                       )}
@@ -2023,7 +2028,7 @@ export function SiteplanViewer({
                         activeBooking.paymentScheme === "kpr" ? "KPR" :
                         activeBooking.paymentScheme === "installment" ? "Cash Bertahap" :
                         activeBooking.paymentScheme === "cash" ? "Cash Keras" :
-                        buyerScheme;
+                        getPaymentSchemeLabel(activeBooking.paymentScheme || buyerScheme);
 
                       const buyer = {
                         name: buyerName,

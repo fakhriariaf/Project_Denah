@@ -9,7 +9,7 @@ import { getCurrentUser, hasPermission } from "@/server/permissions";
 import { eq, and, ne, desc, or } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { writeAuditLog } from "./audit";
+import { writeAuditLog } from "@/server/services/audit.service";
 
 // 1. Zod Validation Schemas
 const basicProfileSchema = z.object({
@@ -381,11 +381,31 @@ export async function updateVendorProfile(targetUserId: string, data: unknown) {
   return { success: true };
 }
 
+/**
+ * Runtime guard for account status/role changes (P1 hardening).
+ * Previously the payload was trusted by TypeScript types only, so a crafted RPC
+ * call could write an arbitrary `status` string (or an empty roleId) directly
+ * into the user table and bypass every status check downstream.
+ */
+const accountStatusSchema = z.object({
+  targetUserId: z.string().trim().min(1, "ID pengguna tujuan wajib diisi").max(128),
+  status: z.enum(["active", "inactive", "suspended"]),
+  roleId: z.string().trim().min(1, "Role wajib dipilih").max(128),
+});
+
 // 6. Update Account Status & Role
 export async function updateAccountStatus(
   targetUserId: string,
   payload: { status: "active" | "inactive" | "suspended"; roleId: string }
 ) {
+  const parsedInput = accountStatusSchema.parse({
+    targetUserId,
+    status: payload?.status,
+    roleId: payload?.roleId,
+  });
+  targetUserId = parsedInput.targetUserId;
+  payload = { status: parsedInput.status, roleId: parsedInput.roleId };
+
   const currentUser = await getCurrentUser();
   if (!currentUser) throw new Error("Unauthorized");
 
@@ -398,6 +418,17 @@ export async function updateAccountStatus(
 
   if (targetUserId === currentUser.id) {
     throw new Error("Anda tidak dapat menonaktifkan atau mengubah role akun Anda sendiri.");
+  }
+
+  // Reject unknown roleId so the account cannot be left pointing at a role that
+  // does not exist (which would silently degrade it to the Viewer fallback).
+  const [targetRole] = await db
+    .select({ id: roles.id })
+    .from(roles)
+    .where(eq(roles.id, payload.roleId))
+    .limit(1);
+  if (!targetRole) {
+    throw new Error("Role tujuan tidak ditemukan.");
   }
 
   // Update
